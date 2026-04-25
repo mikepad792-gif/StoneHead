@@ -1,0 +1,88 @@
+[build]
+  publish = "build"
+  command = "npm run build"
+  functions = "api"
+
+# API route redirects -> Netlify Functions
+# Existing (Thread 1 & 2):
+[[redirects]]
+  from = "/api/auth/register"
+  to = "/.netlify/functions/auth-register"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/login"
+  to = "/.netlify/functions/auth-login"
+  status = 200
+
+[[redirects]]
+  from = "/api/chat/send"
+  to = "/.netlify/functions/chat-send"
+  status = 200
+
+[[redirects]]
+  from = "/api/profile/get"
+  to = "/.netlify/functions/profile-get"
+  status = 200
+
+[[redirects]]
+  from = "/api/profile/age-verify"
+  to = "/.netlify/functions/profile-age-verify"
+  status = 200
+
+[[redirects]]
+  from = "/api/usage/check"
+  to = "/.netlify/functions/usage-check"
+  status = 200
+
+# New (Thread 3):
+[[redirects]]
+  from = "/api/threads/list"
+  to = "/.netlify/functions/threads-list"
+  status = 200
+
+[[redirects]]
+  from = "/api/threads/create"
+  to = "/.netlify/functions/threads-create"
+  status = 200
+
+[[redirects]]
+  from = "/api/threads/messages"
+  to = "/.netlify/functions/threads-messages"
+  status = 200
+
+[[redirects]]
+  from = "/api/threads/toggle-data"
+  to = "/.netlify/functions/threads-toggle-data"
+  status = 200
+
+[[redirects]]
+  from = "/api/strains/search"
+  to = "/.netlify/functions/strains-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/strains/liked"
+  to = "/.netlify/functions/strains-liked"
+  status = 200
+
+[[redirects]]
+  from = "/api/strains/liked/update"
+  to = "/.netlify/functions/strains-liked-update"
+  status = 200
+
+[[redirects]]
+  from = "/api/subscription/generate-code"
+  to = "/.netlify/functions/subscription-generate-code"
+  status = 200
+
+[[redirects]]
+  from = "/api/subscription/callback"
+  to = "/.netlify/functions/subscription-callback"
+  status = 200
+
+# SPA fallback — serve index.html for all non-API routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
