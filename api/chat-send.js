@@ -32,7 +32,7 @@ import {
 // too smart — the system prompt is the soul, the model is the mouth.
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = "mistralai/mistral-small-3.1-24b-instruct"; // cheap, good enough for voice
-const AI_TEMPERATURE = 1.0; // higher temp = less predictable = more Stone Head
+const AI_TEMPERATURE = 0.75; // higher temp = less predictable = more Stone Head
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -205,7 +205,7 @@ export async function handler(event) {
         model: AI_MODEL,
         messages: aiMessages,
         temperature: AI_TEMPERATURE,
-        max_tokens: 300,
+        max_tokens: 120,
       }),
     });
 
