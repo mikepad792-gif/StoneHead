@@ -31,7 +31,7 @@ import {
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
 // too smart — the system prompt is the soul, the model is the mouth.
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = "mistralai/mistral-7b-instruct"; // cheap, good enough for voice
+const AI_MODEL = "mistralai/mistral-small-3.1-24b-instruct"; // cheap, good enough for voice
 const AI_TEMPERATURE = 1.0; // higher temp = less predictable = more Stone Head
 
 // ─── Limit Message ──────────────────────────────────────────────────
