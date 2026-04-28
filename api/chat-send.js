@@ -32,7 +32,7 @@ import {
 // too smart — the system prompt is the soul, the model is the mouth.
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:free";
-const AI_TEMPERATURE = 0.75; // higher temp = less predictable = more Stone Head
+const AI_TEMPERATURE = 0.75;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -249,6 +249,14 @@ export async function handler(event) {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", thread_id);
 
+    // ── Auto-generate thread title after first exchange ──────────────
+    // Non-blocking: fire-and-forget so the user doesn't wait.
+    if (history.length === 0) {
+      generateThreadTitle(thread_id, userContent, reply).catch((e) =>
+        console.error("Title generation failed (non-blocking):", e)
+      );
+    }
+
     // ── Increment usage counter ───────────────────────────────────────
     // Write-side daily reset: if new day, set to 1; otherwise increment
     const newCount = user.last_message_date !== today ? 1 : currentCount + 1;
@@ -277,5 +285,51 @@ export async function handler(event) {
   } catch (err) {
     console.error("chat/send error:", err);
     return errorResponse(500, "Internal server error");
+  }
+}
+
+// ── Thread Title Generator (background, non-blocking) ─────────────
+async function generateThreadTitle(threadId, userMessage, assistantReply) {
+  try {
+    const res = await fetch(AI_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://stoneheadai.com",
+        "X-Title": "StoneHead AI",
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize this conversation in 3-5 words as a short title. No quotes, no punctuation, no explanation. Just the title.",
+          },
+          { role: "user", content: userMessage },
+          { role: "assistant", content: assistantReply },
+        ],
+        max_tokens: 15,
+        temperature: 0.3,
+      }),
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    let title = data.choices?.[0]?.message?.content?.trim();
+    if (!title) return;
+
+    // Clean up: remove quotes, limit length
+    title = title.replace(/["']/g, "").slice(0, 60);
+
+    await supabaseAdmin
+      .from("threads")
+      .update({ title })
+      .eq("id", threadId);
+  } catch (e) {
+    // Non-critical — log and move on
+    console.error("Title gen error:", e.message);
   }
 }
