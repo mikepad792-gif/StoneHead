@@ -11,6 +11,7 @@
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["data/**"]
 
 # API route redirects -> Netlify Functions
 # Existing (Thread 1 & 2):
