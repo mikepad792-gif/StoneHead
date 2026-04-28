@@ -3,6 +3,15 @@
   command = "npm run build"
   functions = "api"
 
+[dev]
+  command = "npm start"
+  targetPort = 3000
+  port = 8888
+  autoLaunch = false
+
+[functions]
+  node_bundler = "esbuild"
+
 # API route redirects -> Netlify Functions
 # Existing (Thread 1 & 2):
 [[redirects]]
@@ -54,6 +63,16 @@
 [[redirects]]
   from = "/api/threads/toggle-data"
   to = "/.netlify/functions/threads-toggle-data"
+  status = 200
+
+[[redirects]]
+  from = "/api/threads/delete"
+  to = "/.netlify/functions/threads-delete"
+  status = 200
+
+[[redirects]]
+  from = "/api/threads/rename"
+  to = "/.netlify/functions/threads-rename"
   status = 200
 
 [[redirects]]
