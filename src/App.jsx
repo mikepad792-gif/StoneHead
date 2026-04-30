@@ -191,7 +191,7 @@ export default function App() {
               <button className="sh-menu-btn" onClick={() => setSidebarOpen((s) => !s)} aria-label="Menu">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect y="3" width="20" height="2" rx="1" fill="currentColor"/><rect y="9" width="20" height="2" rx="1" fill="currentColor"/><rect y="15" width="20" height="2" rx="1" fill="currentColor"/></svg>
               </button>
-              <div className="sh-header-brand"><h1 className="sh-logo-text">stonehead ai</h1></div>
+              <div className="sh-header-brand"><img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img" /></div>
               <div className="sh-header-right">
                 {activeThreadId && <DataToggle threadId={activeThreadId} currentState={threads.find((t) => t.id === activeThreadId)?.data_opt_in || false} />}
                 <button className="sh-avatar-btn" onClick={() => setShowProfile(true)} title="Profile">{user?.username?.[0]?.toUpperCase() || "?"}</button>
@@ -219,8 +219,8 @@ function AuthScreen() {
     <div className="sh-auth-screen"><div className="sh-auth-card">
       <div className="sh-auth-logo">
         <img src="/images/stonehead-clean.png" alt="Stone Head AI" className="sh-auth-mascot" />
-        <h1 className="sh-logo-text sh-logo-text--large">stonehead ai</h1>
-        <p className="sh-tagline">your stoner AI friend</p>
+        <img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img sh-logo-img--large" />
+        <p className="sh-tagline">Your Always Stone-D AI Friend</p>
       </div>
       <form onSubmit={handleSubmit} className="sh-auth-form">
         {authView === "register" && <input type="text" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} className="sh-input" autoComplete="username" />}
