@@ -261,9 +261,10 @@ function ChatWindow() {
             <div className="sh-welcome-mascot">
               <img src={activeTab === "plant" && user?.age_verified ? "/images/stonehead-smoke.png" : "/images/stonehead-clean.png"} alt="Stone Head" className="sh-mascot-img" />
             </div>
-            <div className="sh-welcome-bubble">
-              <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "yo what's good... let's talk about the plant."}</p>
-            </div>
+            <p className="sh-tagline">Your Always Stone-D AI Friend</p>
+<div className="sh-welcome-bubble">
+  <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "yo what's good... let's talk about the plant."}</p>
+</div>
             <SuggestionChips tab={activeTab} onChipClick={(t) => handleSendMessage(t)} />
           </div>
         )}
