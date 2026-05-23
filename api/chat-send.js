@@ -26,6 +26,7 @@ import {
   pullPhilosophy,
   formatPhilosophyContext,
 } from "../lib/philosophyPull.js";
+import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
@@ -162,12 +163,24 @@ export async function handler(event) {
     let content_augmented = null;
 
     if (tab === "plant") {
-      // Strain retrieval: keyword match against strain DB
+      // Strain retrieval: only fires when user mentions a strain by name
       const matchedStrains = searchStrains(userContent);
       const strainBlock = formatStrainContext(matchedStrains);
 
       if (strainBlock) {
         content_augmented = userContent + strainBlock;
+      }
+
+      // History retrieval: fires on inject_trigger matches
+      const matchedHistory = searchHistory(userContent);
+      const historyBlock = formatHistoryContext(matchedHistory);
+
+      if (historyBlock) {
+        if (content_augmented) {
+          content_augmented += historyBlock;
+        } else {
+          content_augmented = userContent + historyBlock;
+        }
       }
     }
 

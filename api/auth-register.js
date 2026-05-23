@@ -5,6 +5,7 @@
 //   email      — string
 //   password   — string
 //   username   — string
+//   user_state — string (optional, US state abbreviation e.g. "CA")
 //
 // Response fields (MASTER_TERMS.md):
 //   user_id       — string (uuid)
@@ -25,7 +26,7 @@ export async function handler(event) {
     return errorResponse(400, "Invalid JSON body");
   }
 
-  const { email, password, username } = body;
+  const { email, password, username, user_state } = body;
 
   // --- Validate required fields ---
   if (!email || typeof email !== "string") {
@@ -104,6 +105,7 @@ export async function handler(event) {
     age_verified: false,
     daily_message_count: 0,
     last_message_date: null,
+    user_state: user_state && typeof user_state === "string" ? user_state.trim() : null,
   });
 
   if (insertError) {
