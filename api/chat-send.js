@@ -36,6 +36,7 @@ import {
   formatSessionMemoryBlock,
   maybeWriteSessionMemory,
 } from "../lib/sessionMemory.js";
+import { maybeConsolidate } from "../lib/consolidateMemory.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
@@ -333,6 +334,14 @@ export async function handler(event) {
       .catch((e) =>
         console.error("session memory write failed (non-blocking):", e)
       );
+
+    // ── Memory consolidation (Phase 2.5, fire-and-forget, runs DARK) ──
+    // Re-derives core memories from the session log when enough fresh
+    // material has arrived. Writes core_memories rows; the /memory page's
+    // Core section stays flag-gated off until the output is validated.
+    maybeConsolidate({ userId: user_id }).catch((e) =>
+      console.error("consolidation failed (non-blocking):", e)
+    );
 
     // ── Conversational save/remember (plant tab, fire-and-forget) ────
     // If the user expressed intent to save a strain they like, fire the
