@@ -416,11 +416,58 @@ function ProfilePage() {
       </div>
       {profile?.liked_strains && profile.liked_strains.length > 0 && <div className="sh-profile-section"><h3>LIKED STRAINS</h3><StrainList strains={profile.liked_strains} /></div>}
       {profile?.liked_strains && profile.liked_strains.length === 0 && <div className="sh-profile-section"><h3>LIKED STRAINS</h3><p className="sh-empty-strains">none yet... tell Stone Head about strains you like</p></div>}
+      <MemorySection />
       <div className="sh-profile-actions">
         <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{user?.is_subscribed ? "manage subscription" : "subscribe"}</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
       </div>
     </div></div>
+  );
+}
+
+function MemorySection() {
+  const { addToast } = useApp();
+  const [memories, setMemories] = useState(null); // null = still loading
+  const [clearing, setClearing] = useState(false);
+  useEffect(() => { load(); }, []);
+  async function load() {
+    try { const data = await apiGet("/api/memories/get"); setMemories(data.memories || []); }
+    catch (e) { setMemories([]); }
+  }
+  async function clearOne(id) {
+    try { await apiPost("/api/memories/clear", { memory_id: id }); setMemories((m) => m.filter((x) => x.id !== id)); }
+    catch (e) { addToast("couldn't forget that one"); }
+  }
+  async function clearAll() {
+    setClearing(true);
+    try { await apiPost("/api/memories/clear", {}); setMemories([]); }
+    catch (e) { addToast("couldn't clear memories"); } finally { setClearing(false); }
+  }
+  if (memories === null) return null; // don't flash an empty state while loading
+  return (
+    <div className="sh-profile-section">
+      <div className="sh-memory-header">
+        <h3>WHAT STONE HEAD REMEMBERS</h3>
+        {memories.length > 0 && <button className="sh-memory-clear-all" onClick={clearAll} disabled={clearing}>{clearing ? "clearing..." : "clear all"}</button>}
+      </div>
+      {memories.length === 0 ? (
+        <p className="sh-empty-strains">nothing yet... the more you two talk, the more he'll hold onto</p>
+      ) : (
+        <div className="sh-memory-list">
+          {memories.map((m) => (
+            <div key={m.id} className="sh-memory-card">
+              <div className="sh-memory-meta">
+                <span className={`sh-memory-frame sh-memory-frame--${m.frame_tag}`}>{m.frame_tag}</span>
+                <span className="sh-memory-tab">{m.tab}</span>
+                <span className="sh-memory-time">{relativeTime(m.created_at)}</span>
+                <button className="sh-memory-clear" onClick={() => clearOne(m.id)} title="Forget this">✕</button>
+              </div>
+              <p className="sh-memory-summary">{m.summary}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

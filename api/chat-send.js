@@ -17,7 +17,7 @@
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { FREE_DAILY_LIMIT } from "../lib/constants.js";
+import { FREE_DAILY_LIMIT, DEFAULT_TITLES } from "../lib/constants.js";
 import { VIBE_PROMPT } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { searchStrains, formatStrainContext } from "../lib/strainSearch.js";
@@ -29,6 +29,13 @@ import {
 import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 import { detectSaveIntent } from "../lib/saveIntent.js";
 import { addLikedStrain } from "../lib/likedStrains.js";
+import { detectFrame, isProductSettled } from "../lib/frameDetect.js";
+import { fGate, canFireRumi } from "../lib/fGate.js";
+import {
+  fetchSessionMemories,
+  formatSessionMemoryBlock,
+  maybeWriteSessionMemory,
+} from "../lib/sessionMemory.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
@@ -154,58 +161,75 @@ export async function handler(event) {
 
     const history = (recentHistory || []).slice().reverse();
 
+    // ── Frame detection (Phase 2) ─────────────────────────────────────
+    // Detect the relational frame once, from the message + recent history.
+    // This drives frame-addressed injection (the F Gate) below: content
+    // fires when the relational moment is right, not when a keyword matches.
+    let userContent = message.trim();
+    let content_augmented = null;
+    const { frame, confidence } = detectFrame(userContent, history);
+
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
 
     if (tab === "plant") {
-      // Fetch user's liked strains for context injection
-      const { data: liked_strains } = await supabaseAdmin
-        .from("liked_strains")
-        .select("strain_name, strain_type, notes")
-        .eq("user_id", user_id);
-
-      systemPrompt = buildPlantPrompt(liked_strains || []);
+      // Liked strains are frame-gated: withhold where name-dropping a saved
+      // strain would be tone-deaf (e.g. a routine price check).
+      let liked_strains = [];
+      if (fGate("liked_strains", frame, confidence)) {
+        const { data } = await supabaseAdmin
+          .from("liked_strains")
+          .select("strain_name, strain_type, notes")
+          .eq("user_id", user_id);
+        liked_strains = data || [];
+      }
+      systemPrompt = buildPlantPrompt(liked_strains);
     } else {
       systemPrompt = VIBE_PROMPT;
     }
 
-    // ── Build user message (with augmentation for plant tab) ──────────
-    let userContent = message.trim();
-    let content_augmented = null;
+    // ── Session memory injection (Phase 2, all frames) ────────────────
+    // session_memories is unconditional in the F Gate — Stone Head should
+    // always carry what he remembers about this person.
+    const memories = await fetchSessionMemories(user_id);
+    const memBlock = formatSessionMemoryBlock(memories); // "" if none
+    systemPrompt = systemPrompt + memBlock;
 
+    // ── Build user message augmentation (plant tab, frame-gated) ──────
     if (tab === "plant") {
-      // Strain retrieval: only fires when user mentions a strain by name
-      const matchedStrains = searchStrains(userContent);
-      const strainBlock = formatStrainContext(matchedStrains);
-
-      if (strainBlock) {
-        content_augmented = userContent + strainBlock;
+      // Strain retrieval — only when the frame allows informative content.
+      if (fGate("strain_context", frame, confidence)) {
+        const matchedStrains = searchStrains(userContent);
+        const strainBlock = formatStrainContext(matchedStrains);
+        if (strainBlock) {
+          content_augmented = userContent + strainBlock;
+        }
       }
 
-      // History retrieval: fires on inject_trigger matches
-      const matchedHistory = searchHistory(userContent);
-      const historyBlock = formatHistoryContext(matchedHistory);
-
-      if (historyBlock) {
-        if (content_augmented) {
-          content_augmented += historyBlock;
-        } else {
-          content_augmented = userContent + historyBlock;
+      // History retrieval — gated the same way.
+      if (fGate("history", frame, confidence)) {
+        const matchedHistory = searchHistory(userContent);
+        const historyBlock = formatHistoryContext(matchedHistory);
+        if (historyBlock) {
+          content_augmented = (content_augmented || userContent) + historyBlock;
         }
       }
     }
 
-    // ── Philosophy pull (both tabs, periodic) ─────────────────────────
-    if (shouldPullPhilosophy(currentCount)) {
+    // ── Philosophy pull (frame-gated; cadence still applies) ──────────
+    // Frame gate is the primary control. Normal periodic philosophy fires
+    // only when the frame allows it AND the ~1-in-4 cadence hits. The deep
+    // "Rumi" beat (canFireRumi) lets a philosophy moment land outside the
+    // cadence on a high-confidence Challenge/Breakthrough with the product
+    // question settled — with the rule detector that's Challenge in practice;
+    // Breakthrough stays dormant until the Phase 3 classifier.
+    const philAllowed = fGate("philosophy", frame, confidence);
+    const rumiBeat = canFireRumi(frame, confidence, isProductSettled(userContent));
+    if ((philAllowed && shouldPullPhilosophy(currentCount)) || rumiBeat) {
       const quote = pullPhilosophy(userContent);
       const philBlock = formatPhilosophyContext(quote);
-
       if (philBlock) {
-        if (content_augmented) {
-          content_augmented += philBlock;
-        } else {
-          content_augmented = userContent + philBlock;
-        }
+        content_augmented = (content_augmented || userContent) + philBlock;
       }
     }
 
@@ -284,17 +308,31 @@ export async function handler(event) {
     // exchange; also retry for any thread still stuck on its default name
     // after a couple messages. The retry covers title-gen hiccups (the
     // original fire-and-forget had no fallback) AND backfills pre-existing
-    // "new vibe" threads on their next message.
-    const DEFAULT_TITLES = ["new vibe", "new plant chat", "new thread"];
+    // default-named threads on their next message.
+    const defaultsLower = DEFAULT_TITLES.map((t) => t.toLowerCase());
     const isDefaultTitle =
       !thread.title ||
-      DEFAULT_TITLES.includes(thread.title.trim().toLowerCase());
+      defaultsLower.includes(thread.title.trim().toLowerCase());
 
     if (history.length === 0 || (isDefaultTitle && history.length >= 2)) {
       generateThreadTitle(thread_id, userContent, reply).catch((e) =>
         console.error("Title generation failed (non-blocking):", e)
       );
     }
+
+    // ── Write session memory (Phase 2, fire-and-forget) ──────────────
+    // Compresses a deep enough thread into a frame-tagged summary. Trips
+    // at 8 messages (see sessionMemory.js); the full updated transcript is
+    // what the trigger counts, so pass history + this exchange.
+    const transcript = [
+      ...history,
+      { role: "user", content: userContent },
+      { role: "assistant", content: reply },
+    ];
+    maybeWriteSessionMemory({ threadId: thread_id, userId: user_id, tab, transcript })
+      .catch((e) =>
+        console.error("session memory write failed (non-blocking):", e)
+      );
 
     // ── Conversational save/remember (plant tab, fire-and-forget) ────
     // If the user expressed intent to save a strain they like, fire the
@@ -361,14 +399,16 @@ async function generateThreadTitle(threadId, userMessage, assistantReply) {
         model: AI_MODEL,
         messages: [
           {
+            // Mirrored from TITLE_SYSTEM_PROMPT in api/backfill-titles.js so
+            // live titles match the backfill's quality. Kept inline (not
+            // imported) so the one-off backfill endpoint can be deleted
+            // without breaking this path.
             role: "system",
             content:
-              "Give this conversation a 3-5 word TOPIC title, like a headline or a note's filename. " +
-              "Name the subject, not a sentence from the chat. " +
-              "No quotes, no punctuation, no greetings, no conversational fragments. " +
-              'Good: "Indica for sleep", "Weekend hiking strains", "Dealing with stress". ' +
-              'Bad: "Does that make sense", "Hey what is up". ' +
-              "Output only the title.",
+              "Create a 3-5 word topic title for this conversation. Use a short noun " +
+              "phrase that names the subject. Do NOT use a sentence, a question, or a " +
+              "fragment of what someone said. No quotes, no punctuation, no first person. " +
+              "Good: Northern Lights for sleep. Bad: If youre looking for. Bad: Does that make sense.",
           },
           { role: "user", content: userMessage },
           { role: "assistant", content: assistantReply },

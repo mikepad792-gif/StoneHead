@@ -101,6 +101,24 @@
   to = "/.netlify/functions/subscription-callback"
   status = 200
 
+# New (Phase 2 — session memory):
+[[redirects]]
+  from = "/api/memories/get"
+  to = "/.netlify/functions/memories-get"
+  status = 200
+
+[[redirects]]
+  from = "/api/memories/clear"
+  to = "/.netlify/functions/memories-clear"
+  status = 200
+
+# One-off title backfill (Phase 2 §0). Delete this redirect and
+# api/backfill-titles.js once the backlog is cleared (remaining: 0).
+[[redirects]]
+  from = "/api/backfill-titles"
+  to = "/.netlify/functions/backfill-titles"
+  status = 200
+
 # SPA fallback — serve index.html for all non-API routes
 [[redirects]]
   from = "/*"
