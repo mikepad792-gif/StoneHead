@@ -6,6 +6,7 @@
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { addLikedStrain } from "../lib/likedStrains.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -41,26 +42,9 @@ export async function handler(event) {
         return jsonResponse(400, { error: "strain_type must be 'indica', 'sativa', or 'hybrid'" });
       }
 
-      // Check if already liked (avoid duplicates)
-      const { data: existing } = await supabaseAdmin
-        .from("liked_strains")
-        .select("id")
-        .eq("user_id", user.user_id)
-        .ilike("strain_name", strain_name)
-        .maybeSingle();
-
-      if (!existing) {
-        const { error: insertErr } = await supabaseAdmin
-          .from("liked_strains")
-          .insert({
-            user_id: user.user_id,
-            strain_name,
-            strain_type,
-            notes: notes || null,
-          });
-
-        if (insertErr) throw insertErr;
-      }
+      // Insert (with dedupe) via the shared helper so the conversational
+      // path in chat-send.js stays in lockstep with this endpoint.
+      await addLikedStrain(user.user_id, strain_name, strain_type, notes);
     } else {
       // Remove
       const { error: deleteErr } = await supabaseAdmin

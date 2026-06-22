@@ -181,9 +181,40 @@ body {
   justify-content: center; padding: 30px 20px 40px; gap: 20px; flex: 1;
 }
 .sh-welcome-mascot { position: relative; }
+
+/* Hero stage: glow layer behind the mascot, silhouette-following shadow,
+   feathered bottom edge so the mascot reads as seated rather than pasted. */
+.sh-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sh-hero .glow {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: 75%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(86,194,74,0.75) 0%, transparent 68%);
+  filter: blur(6px);
+  pointer-events: none;
+  z-index: 0;
+}
+.sh-hero .mascot {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 22px 42px rgba(0,0,0,0.85));
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 16%);
+          mask-image: linear-gradient(to top, transparent 0%, #000 16%);
+}
+
 .sh-mascot-img {
-  width: 280px; height: 280px; object-fit: contain;
-  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
+  /* Viewport-aware so the full mascot is visible on open without scrolling
+     up, even on short screens. */
+  width: min(280px, 38vh); height: min(280px, 38vh); object-fit: contain;
   animation: mascotFloat 4s ease-in-out infinite;
 }
 @keyframes mascotFloat {

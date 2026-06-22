@@ -27,6 +27,8 @@ import {
   formatPhilosophyContext,
 } from "../lib/philosophyPull.js";
 import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
+import { detectSaveIntent } from "../lib/saveIntent.js";
+import { addLikedStrain } from "../lib/likedStrains.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
@@ -34,6 +36,9 @@ import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:free";
 const AI_TEMPERATURE = 0.75;
+// Max reply length for the main completion. Env-tunable like AI_MODEL.
+// 250 gives deep convos room to finish thoughts without truncating.
+const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 250;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -77,7 +82,7 @@ export async function handler(event) {
     // ── Verify thread ownership ───────────────────────────────────────
     const { data: thread, error: threadError } = await supabaseAdmin
       .from("threads")
-      .select("id, user_id, tab")
+      .select("id, user_id, tab, title")
       .eq("id", thread_id)
       .eq("user_id", user_id)
       .single();
@@ -132,16 +137,22 @@ export async function handler(event) {
       });
     }
 
-    // ── Load thread history ───────────────────────────────────────────
-    const { data: history, error: historyError } = await supabaseAdmin
+    // ── Load thread history (windowed to most recent 20) ──────────────
+    // Fetch newest-first with a hard limit so a long thread doesn't send
+    // the entire transcript every message, then reverse so the prompt
+    // still reads chronologically (oldest → newest).
+    const { data: recentHistory, error: historyError } = await supabaseAdmin
       .from("messages")
       .select("role, content")
       .eq("thread_id", thread_id)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (historyError) {
       return errorResponse(500, "Failed to load thread history");
     }
+
+    const history = (recentHistory || []).slice().reverse();
 
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
@@ -218,7 +229,13 @@ export async function handler(event) {
         model: AI_MODEL,
         messages: aiMessages,
         temperature: AI_TEMPERATURE,
-        max_tokens: 150,
+        max_tokens: MAX_TOKENS,
+        // Reduce within-response repetition / stock signature lines.
+        // NOTE: these only affect a single response, not across requests —
+        // the prompt instruction in prompts/plant.js is the cross-session
+        // fix. Some OpenRouter providers ignore unsupported params silently.
+        frequency_penalty: 0.4,
+        presence_penalty: 0.3,
       }),
     });
 
@@ -262,12 +279,40 @@ export async function handler(event) {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", thread_id);
 
-    // ── Auto-generate thread title after first exchange ──────────────
-    // Non-blocking: fire-and-forget so the user doesn't wait.
-    if (history.length === 0) {
+    // ── Auto-generate thread title (with lazy retry) ─────────────────
+    // Fire-and-forget so the user never waits. Generate on the first
+    // exchange; also retry for any thread still stuck on its default name
+    // after a couple messages. The retry covers title-gen hiccups (the
+    // original fire-and-forget had no fallback) AND backfills pre-existing
+    // "new vibe" threads on their next message.
+    const DEFAULT_TITLES = ["new vibe", "new plant chat", "new thread"];
+    const isDefaultTitle =
+      !thread.title ||
+      DEFAULT_TITLES.includes(thread.title.trim().toLowerCase());
+
+    if (history.length === 0 || (isDefaultTitle && history.length >= 2)) {
       generateThreadTitle(thread_id, userContent, reply).catch((e) =>
         console.error("Title generation failed (non-blocking):", e)
       );
+    }
+
+    // ── Conversational save/remember (plant tab, fire-and-forget) ────
+    // If the user expressed intent to save a strain they like, fire the
+    // write in the background so Stone Head's spoken "I'll remember that"
+    // and the profile's LIKED STRAINS actually agree. Cheap prefilter
+    // (no LLM); only a real strain-name match triggers a DB write.
+    if (tab === "plant") {
+      const intent = detectSaveIntent(userContent);
+      if (intent && intent.type === "liked_strain") {
+        addLikedStrain(
+          user_id,
+          intent.value.strain_name,
+          intent.value.strain_type,
+          null
+        ).catch((e) =>
+          console.error("Liked-strain save failed (non-blocking):", e.message)
+        );
+      }
     }
 
     // ── Increment usage counter ───────────────────────────────────────
@@ -318,7 +363,12 @@ async function generateThreadTitle(threadId, userMessage, assistantReply) {
           {
             role: "system",
             content:
-              "Summarize this conversation in 3-5 words as a short title. No quotes, no punctuation, no explanation. Just the title.",
+              "Give this conversation a 3-5 word TOPIC title, like a headline or a note's filename. " +
+              "Name the subject, not a sentence from the chat. " +
+              "No quotes, no punctuation, no greetings, no conversational fragments. " +
+              'Good: "Indica for sleep", "Weekend hiking strains", "Dealing with stress". ' +
+              'Bad: "Does that make sense", "Hey what is up". ' +
+              "Output only the title.",
           },
           { role: "user", content: userMessage },
           { role: "assistant", content: assistantReply },
