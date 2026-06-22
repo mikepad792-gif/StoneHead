@@ -45,6 +45,15 @@ function relativeTime(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// De-hyphenated display name for strains (dataset names are slug-style).
+function displayStrainName(name) {
+  return String(name || "").replace(/-+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Dark-launch flag for the Core (reflection) memory section. Flip to true
+// once the consolidation job's output has been eyeballed against real users.
+const SHOW_CORE = false;
+
 function ToastContainer({ toasts, removeToast }) {
   return (
     <div className="sh-toast-container">
@@ -60,6 +69,7 @@ export default function App() {
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("session_token") || null);
   const [authView, setAuthView] = useState("login");
   const [activeTab, setActiveTab] = useState("vibe");
+  const [view, setView] = useState("chat"); // "chat" | "memory"
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -166,7 +176,7 @@ export default function App() {
     catch (e) { addToast("couldn't update data setting"); }
   }
 
-  const ctx = { user, activeTab, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, handleNewThread, handleSelectThread, handleSendMessage, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate };
+  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, handleNewThread, handleSelectThread, handleSendMessage, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate };
 
   if (!sessionToken) return <AppContext.Provider value={ctx}><div className="sh-root"><AuthScreen /></div></AppContext.Provider>;
   if (appLoading) return (
@@ -193,12 +203,18 @@ export default function App() {
               </button>
               <div className="sh-header-brand"><img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img" /></div>
               <div className="sh-header-right">
-                {activeThreadId && <DataToggle threadId={activeThreadId} currentState={threads.find((t) => t.id === activeThreadId)?.data_opt_in || false} />}
+                {view !== "memory" && activeThreadId && <DataToggle threadId={activeThreadId} currentState={threads.find((t) => t.id === activeThreadId)?.data_opt_in || false} />}
                 <button className="sh-avatar-btn" onClick={() => setShowProfile(true)} title="Profile">{user?.username?.[0]?.toUpperCase() || "?"}</button>
               </div>
             </header>
-            <div className="sh-tab-bar"><TabSwitcher /></div>
-            <ChatWindow />
+            {view === "memory" ? (
+              <MemoryPage />
+            ) : (
+              <>
+                <div className="sh-tab-bar"><TabSwitcher /></div>
+                <ChatWindow />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -335,13 +351,19 @@ function SuggestionChips({ tab, onChipClick }) {
 }
 
 function ThreadSidebar() {
-  const { threads, activeThreadId, handleNewThread, handleSelectThread, handleDeleteThread, handleRenameThread, sidebarOpen } = useApp();
+  const { threads, activeThreadId, handleNewThread, handleSelectThread, handleDeleteThread, handleRenameThread, sidebarOpen, view, setView, setSidebarOpen } = useApp();
   const [editingId, setEditingId] = useState(null); const [editTitle, setEditTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   function startRename(t) { setEditingId(t.id); setEditTitle(t.title || ""); }
   function saveRename(id) { if (editTitle.trim()) handleRenameThread(id, editTitle.trim()); setEditingId(null); }
+  function goChat() { setView("chat"); setSidebarOpen(false); }
+  function goMemory() { setView("memory"); setSidebarOpen(false); }
   return (
     <aside className={`sh-sidebar ${sidebarOpen ? "sh-sidebar--open" : ""}`}>
+      <div className="sh-sidebar-nav">
+        <button className={`sh-nav-item ${view === "chat" ? "sh-nav-item--active" : ""}`} onClick={goChat}>💬 chat</button>
+        <button className={`sh-nav-item ${view === "memory" ? "sh-nav-item--active" : ""}`} onClick={goMemory}>🧠 memory</button>
+      </div>
       <div className="sh-sidebar-header"><span className="sh-sidebar-title">THREADS</span><button className="sh-new-thread-btn" onClick={handleNewThread}>+ new</button></div>
       <div className="sh-thread-list">
         {threads.length === 0 && <p className="sh-no-threads">no threads yet... start one</p>}
@@ -414,9 +436,7 @@ function ProfilePage() {
         <h2>{user?.username || "..."}</h2>
         <span className={`sh-sub-badge ${user?.is_subscribed ? "sh-sub-badge--active" : ""}`}>{user?.is_subscribed ? "subscribed" : "free tier"}</span>
       </div>
-      {profile?.liked_strains && profile.liked_strains.length > 0 && <div className="sh-profile-section"><h3>LIKED STRAINS</h3><StrainList strains={profile.liked_strains} /></div>}
-      {profile?.liked_strains && profile.liked_strains.length === 0 && <div className="sh-profile-section"><h3>LIKED STRAINS</h3><p className="sh-empty-strains">none yet... tell Stone Head about strains you like</p></div>}
-      <MemorySection />
+      <p className="sh-profile-memory-hint">your liked strains and what Stone Head remembers now live in <strong>memory</strong> (open the menu).</p>
       <div className="sh-profile-actions">
         <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{user?.is_subscribed ? "manage subscription" : "subscribe"}</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
@@ -425,13 +445,109 @@ function ProfilePage() {
   );
 }
 
-function MemorySection() {
+function MemoryPage() {
+  const { user, addToast } = useApp();
+  const [core, setCore] = useState(null); // { pinned, core } or null
+  useEffect(() => { loadCore(); }, []);
+  async function loadCore() {
+    try { const d = await apiGet("/api/core-memories/get"); setCore({ pinned: d.pinned || [], core: d.core || [] }); }
+    catch (e) { setCore({ pinned: [], core: [] }); }
+  }
+  async function togglePin(id, pinned) {
+    try { await apiPost("/api/memory/pin", { memory_id: id, pinned }); await loadCore(); }
+    catch (e) { addToast("couldn't update pin"); }
+  }
+  const pinned = core?.pinned || [];
+  const coreList = core?.core || [];
+  return (
+    <div className="sh-memory-page">
+      <div className="sh-memory-intro">
+        <h2>memory</h2>
+        <p className="sh-memory-tagline">here's what I've got on you{user?.username ? `, ${user.username}` : ""}. all yours — keep what matters, clear what doesn't.</p>
+      </div>
+
+      <MemoryGroup title="PINNED" subtitle="what you marked to keep" count={pinned.length} empty="pin a memory to keep it here.">
+        <div className="sh-memory-list">{pinned.map((m) => <CoreCard key={m.id} m={m} onTogglePin={togglePin} />)}</div>
+      </MemoryGroup>
+
+      {SHOW_CORE && (
+        <MemoryGroup title="CORE MEMORIES" subtitle="what Stone Head's reflection surfaced" count={coreList.length} empty="nothing yet — these grow as you talk.">
+          <div className="sh-memory-list">{coreList.map((m) => <CoreCard key={m.id} m={m} onTogglePin={togglePin} />)}</div>
+        </MemoryGroup>
+      )}
+
+      <LikedStrainsSection />
+
+      {!SHOW_CORE && <RecentSessionsSection />}
+    </div>
+  );
+}
+
+function MemoryGroup({ title, subtitle, count, empty, children, action }) {
+  return (
+    <div className="sh-mem-group">
+      <div className="sh-mem-group-head">
+        <div className="sh-mem-group-titles"><h3>{title}</h3>{subtitle && <span className="sh-mem-sub">{subtitle}</span>}</div>
+        {count > 0 && action}
+      </div>
+      {!count ? <p className="sh-empty-strains">{empty}</p> : children}
+    </div>
+  );
+}
+
+function CoreCard({ m, onTogglePin }) {
+  return (
+    <div className="sh-mem-card">
+      <p className="sh-mem-text">{m.text}</p>
+      {m.why_it_carries && <p className="sh-mem-why">{m.why_it_carries}</p>}
+      <button className="sh-mem-pin" onClick={() => onTogglePin(m.id, !m.pinned)}>{m.pinned ? "📌 unpin" : "📌 pin"}</button>
+    </div>
+  );
+}
+
+function LikedStrainsSection() {
   const { addToast } = useApp();
-  const [memories, setMemories] = useState(null); // null = still loading
+  const [strains, setStrains] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => { load(); }, []);
+  async function load() {
+    try { const d = await apiGet("/api/strains/liked"); setStrains(d.liked_strains || []); }
+    catch (e) { setStrains([]); }
+  }
+  async function remove(name) {
+    try { await apiPost("/api/strains/liked/update", { action: "remove", strain_name: name }); setStrains((s) => s.filter((x) => x.strain_name !== name)); }
+    catch (e) { addToast("couldn't remove that"); }
+  }
+  if (strains === null) return null;
+  const shown = expanded ? strains : strains.slice(0, 5);
+  return (
+    <MemoryGroup title="LIKED STRAINS" subtitle="strains you've saved" count={strains.length}
+      empty="none yet... tell Stone Head about strains you like"
+      action={strains.length > 5 && <button className="sh-seeall" onClick={() => setExpanded((e) => !e)}>{expanded ? "show less" : "see all"}</button>}>
+      <div className="sh-strain-list">
+        {shown.map((s, i) => (
+          <div key={s.strain_name + i} className="sh-strain-card">
+            <div className="sh-strain-header">
+              <span className="sh-strain-name">{displayStrainName(s.strain_name)}</span>
+              {s.strain_type && <span className={`sh-strain-type sh-strain-type--${s.strain_type}`}>{s.strain_type}</span>}
+            </div>
+            {s.notes && <p className="sh-strain-notes">{s.notes}</p>}
+            {expanded && <button className="sh-mem-remove" onClick={() => remove(s.strain_name)}>remove</button>}
+          </div>
+        ))}
+      </div>
+    </MemoryGroup>
+  );
+}
+
+function RecentSessionsSection() {
+  const { addToast } = useApp();
+  const [memories, setMemories] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const [clearing, setClearing] = useState(false);
   useEffect(() => { load(); }, []);
   async function load() {
-    try { const data = await apiGet("/api/memories/get"); setMemories(data.memories || []); }
+    try { const d = await apiGet("/api/memories/get"); setMemories(d.memories || []); }
     catch (e) { setMemories([]); }
   }
   async function clearOne(id) {
@@ -443,42 +559,31 @@ function MemorySection() {
     try { await apiPost("/api/memories/clear", {}); setMemories([]); }
     catch (e) { addToast("couldn't clear memories"); } finally { setClearing(false); }
   }
-  if (memories === null) return null; // don't flash an empty state while loading
+  if (memories === null) return null;
+  const shown = expanded ? memories : memories.slice(0, 3);
   return (
-    <div className="sh-profile-section">
-      <div className="sh-memory-header">
-        <h3>WHAT STONE HEAD REMEMBERS</h3>
-        {memories.length > 0 && <button className="sh-memory-clear-all" onClick={clearAll} disabled={clearing}>{clearing ? "clearing..." : "clear all"}</button>}
-      </div>
-      {memories.length === 0 ? (
-        <p className="sh-empty-strains">nothing yet... the more you two talk, the more he'll hold onto</p>
-      ) : (
-        <div className="sh-memory-list">
-          {memories.map((m) => (
-            <div key={m.id} className="sh-memory-card">
-              <div className="sh-memory-meta">
-                <span className={`sh-memory-frame sh-memory-frame--${m.frame_tag}`}>{m.frame_tag}</span>
-                <span className="sh-memory-tab">{m.tab}</span>
-                <span className="sh-memory-time">{relativeTime(m.created_at)}</span>
-                <button className="sh-memory-clear" onClick={() => clearOne(m.id)} title="Forget this">✕</button>
-              </div>
-              <p className="sh-memory-summary">{m.summary}</p>
-            </div>
-          ))}
+    <MemoryGroup title="RECENT SESSIONS" subtitle="what Stone Head took from your chats" count={memories.length}
+      empty="nothing yet... the more you two talk, the more he'll hold onto"
+      action={
+        <div className="sh-mem-actions">
+          {memories.length > 3 && <button className="sh-seeall" onClick={() => setExpanded((e) => !e)}>{expanded ? "show less" : "see all"}</button>}
+          {expanded && <button className="sh-memory-clear-all" onClick={clearAll} disabled={clearing}>{clearing ? "clearing..." : "clear all"}</button>}
         </div>
-      )}
-    </div>
-  );
-}
-
-function StrainList({ strains }) {
-  return (
-    <div className="sh-strain-list">{strains.map((s, i) => (
-      <div key={s.strain_name + i} className="sh-strain-card">
-        <div className="sh-strain-header"><span className="sh-strain-name">{s.strain_name}</span><span className={`sh-strain-type sh-strain-type--${s.strain_type}`}>{s.strain_type}</span></div>
-        {s.notes && <p className="sh-strain-notes">{s.notes}</p>}
+      }>
+      <div className="sh-memory-list">
+        {shown.map((m) => (
+          <div key={m.id} className="sh-memory-card">
+            <div className="sh-memory-meta">
+              <span className={`sh-memory-frame sh-memory-frame--${m.frame_tag}`}>{m.frame_tag}</span>
+              <span className="sh-memory-tab">{m.tab}</span>
+              <span className="sh-memory-time">{relativeTime(m.created_at)}</span>
+              {expanded && <button className="sh-memory-clear" onClick={() => clearOne(m.id)} title="Forget this">✕</button>}
+            </div>
+            <p className="sh-memory-summary">{m.summary}</p>
+          </div>
+        ))}
       </div>
-    ))}</div>
+    </MemoryGroup>
   );
 }
 

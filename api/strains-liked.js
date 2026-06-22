@@ -1,8 +1,9 @@
 // GET /api/strains/liked
+// Query: limit (optional) — e.g. ?limit=5 for the /memory page summary; omit for all
 // Response: { liked_strains: [{ strain_name, strain_type, notes, added_at }] }
 
 import { authenticateRequest } from "../lib/auth.js";
-import { supabaseAdmin } from "../lib/supabase.js";
+import { getTopStrains } from "../lib/likedStrains.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -23,15 +24,13 @@ export async function handler(event) {
       return jsonResponse(user.status || 401, { error: user.error });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("liked_strains")
-      .select("strain_name, strain_type, notes, added_at")
-      .eq("user_id", user.user_id)
-      .order("added_at", { ascending: false });
+    // 0 / absent → all; positive → that many most recent (the getTopStrains seam).
+    const raw = Number(event.queryStringParameters?.limit);
+    const limit = Number.isFinite(raw) && raw > 0 ? raw : 0;
 
-    if (error) throw error;
+    const liked_strains = await getTopStrains(user.user_id, limit);
 
-    return jsonResponse(200, { liked_strains: data || [] });
+    return jsonResponse(200, { liked_strains });
   } catch (err) {
     console.error("strains/liked error:", err);
     return jsonResponse(500, { error: "Failed to load liked strains" });
