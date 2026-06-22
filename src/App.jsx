@@ -247,7 +247,13 @@ function TabSwitcher() {
 function ChatWindow() {
   const { messages, activeTab, handleSendMessage, loading, usageRemaining, user } = useApp();
   const [input, setInput] = useState(""); const scrollRef = useRef(null); const textareaRef = useRef(null);
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, loading]);
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    // Empty/welcome thread: keep the hero pinned to the top so the full
+    // mascot is visible on open instead of auto-scrolling past it.
+    if (messages.length === 0) scrollRef.current.scrollTop = 0;
+    else scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, loading]);
   function handleSubmit(e) { if (e) e.preventDefault(); if (!input.trim() || loading) return; handleSendMessage(input.trim()); setInput(""); if (textareaRef.current) textareaRef.current.style.height = "auto"; }
   function handleKeyDown(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }
   function handleTextareaChange(e) { setInput(e.target.value); const el = e.target; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 130) + "px"; }
@@ -259,7 +265,10 @@ function ChatWindow() {
         {showSuggestions && (
           <div className="sh-welcome">
             <div className="sh-welcome-mascot">
-              <img src={activeTab === "plant" && user?.age_verified ? "/images/stonehead-smoke.png" : "/images/stonehead-clean.png"} alt="Stone Head" className="sh-mascot-img" />
+              <div className="sh-hero">
+                <div className="glow"></div>
+                <img src={activeTab === "plant" && user?.age_verified ? "/images/stonehead-smoke.png" : "/images/stonehead-clean.png"} alt="Stone Head" className="mascot sh-mascot-img" />
+              </div>
             </div>
             <p className="sh-tagline">Your Always Stone-D AI Friend</p>
 <div className="sh-welcome-bubble">
