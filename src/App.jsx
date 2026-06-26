@@ -478,7 +478,7 @@ function MemoryPage() {
 
       <LikedStrainsSection />
 
-      {!SHOW_CORE && <RecentSessionsSection />}
+      {!SHOW_CORE && <RecentSessionsSection onPinned={loadCore} />}
     </div>
   );
 }
@@ -540,7 +540,7 @@ function LikedStrainsSection() {
   );
 }
 
-function RecentSessionsSection() {
+function RecentSessionsSection({ onPinned }) {
   const { addToast } = useApp();
   const [memories, setMemories] = useState(null);
   const [expanded, setExpanded] = useState(false);
@@ -553,6 +553,10 @@ function RecentSessionsSection() {
   async function clearOne(id) {
     try { await apiPost("/api/memories/clear", { memory_id: id }); setMemories((m) => m.filter((x) => x.id !== id)); }
     catch (e) { addToast("couldn't forget that one"); }
+  }
+  async function pin(m) {
+    try { await apiPost("/api/memory/pin", { summary: m.summary, source_session_id: m.id }); addToast("pinned"); if (onPinned) onPinned(); }
+    catch (e) { addToast("couldn't pin that"); }
   }
   async function clearAll() {
     setClearing(true);
@@ -580,6 +584,7 @@ function RecentSessionsSection() {
               {expanded && <button className="sh-memory-clear" onClick={() => clearOne(m.id)} title="Forget this">✕</button>}
             </div>
             <p className="sh-memory-summary">{m.summary}</p>
+            <button className="sh-mem-pin" onClick={() => pin(m)}>📌 pin</button>
           </div>
         ))}
       </div>

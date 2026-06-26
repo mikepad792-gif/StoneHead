@@ -419,7 +419,12 @@ body {
 .sh-memory-clear-all:hover { color: var(--danger, #e06c6c); }
 .sh-memory-clear-all:disabled { opacity: 0.5; cursor: default; }
 .sh-memory-list { display: flex; flex-direction: column; gap: 8px; }
-.sh-memory-card { background: var(--bg-surface-raised); border-radius: var(--radius-sm); padding: 10px 12px; }
+.sh-memory-card {
+  background: var(--bg-surface-raised); border-radius: var(--radius-sm); padding: 10px 12px;
+  /* A card reads as a button, not a paragraph — kills the OS dictionary/
+     text-selection popup on long-press (A5). */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
 .sh-memory-meta { display: flex; align-items: center; gap: 8px; }
 .sh-memory-frame {
   font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; border-radius: 8px;
@@ -462,7 +467,10 @@ body {
 .sh-seeall { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 11px; color: var(--green-glow); }
 .sh-seeall:hover { text-decoration: underline; }
 .sh-mem-actions { display: flex; align-items: center; gap: 12px; }
-.sh-mem-card { background: var(--bg-surface-raised); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px; }
+.sh-mem-card {
+  background: var(--bg-surface-raised); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
 .sh-mem-text { font-size: 14px; color: var(--text-primary); line-height: 1.5; }
 .sh-mem-why { font-size: 12px; color: var(--text-muted); font-style: italic; margin-top: 6px; line-height: 1.4; }
 .sh-mem-pin { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 8px; padding: 0; transition: color 0.2s; }

@@ -2,9 +2,13 @@
 // StoneHead — Pin / unpin a core memory (Phase 2.5, promote-only v1)
 //
 // POST /api/memory/pin
-// Body: { memory_id, pinned }   pinned=true promotes to Pinned (reflection-
-//        immune); pinned=false drops it back to the pool for reflection.
-// Auth: authenticateRequest (Thread 1 pattern). Always scoped to user_id.
+// Two modes (both authenticated, always scoped to user_id):
+//   1. Toggle an existing core memory:   { memory_id, pinned }
+//      pinned=true → Pinned (reflection-immune); false → back to the pool.
+//   2. Promote a session memory to Pinned: { summary, source_session_id }
+//      Creates a user-sourced, pinned core_memory. This is how a user pins
+//      something at launch, before the (dark) consolidation job has produced
+//      any reflection core memories.
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
@@ -26,16 +30,37 @@ export async function handler(event) {
   } catch {
     return errorResponse(400, "Invalid JSON body");
   }
-  const { memory_id, pinned } = body;
-
-  if (!memory_id) {
-    return errorResponse(400, "memory_id is required");
-  }
-  if (typeof pinned !== "boolean") {
-    return errorResponse(400, "pinned must be a boolean");
-  }
+  const { memory_id, pinned, summary, source_session_id } = body;
 
   try {
+    // Mode 2 — promote a session memory into a pinned core memory.
+    if (summary && typeof summary === "string" && summary.trim()) {
+      const { data, error } = await supabaseAdmin
+        .from("core_memories")
+        .insert({
+          user_id,
+          text: summary.trim().slice(0, 400),
+          pinned: true,
+          source: "user",
+          source_session_ids: source_session_id ? [source_session_id] : [],
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        return errorResponse(500, "Failed to pin memory");
+      }
+      return jsonResponse(200, { memory_id: data.id, pinned: true, created: true });
+    }
+
+    // Mode 1 — toggle an existing core memory's pin.
+    if (!memory_id) {
+      return errorResponse(400, "memory_id or summary is required");
+    }
+    if (typeof pinned !== "boolean") {
+      return errorResponse(400, "pinned must be a boolean");
+    }
+
     const { error } = await supabaseAdmin
       .from("core_memories")
       .update({ pinned })

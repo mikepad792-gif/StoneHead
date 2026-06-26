@@ -29,6 +29,7 @@ import {
 import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 import { detectSaveIntent } from "../lib/saveIntent.js";
 import { addLikedStrain } from "../lib/likedStrains.js";
+import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
 import { detectFrame, isProductSettled } from "../lib/frameDetect.js";
 import { fGate, canFireRumi } from "../lib/fGate.js";
 import {
@@ -204,6 +205,13 @@ export async function handler(event) {
         const strainBlock = formatStrainContext(matchedStrains);
         if (strainBlock) {
           content_augmented = userContent + strainBlock;
+        }
+
+        // Extras (Part B): dab knowledge + slang origins. After strain
+        // context, gated the same way (informative content).
+        const extrasBlock = formatExtrasBlock(lookupExtras(userContent));
+        if (extrasBlock) {
+          content_augmented = (content_augmented || userContent) + extrasBlock;
         }
       }
 
