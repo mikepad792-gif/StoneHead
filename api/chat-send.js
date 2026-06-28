@@ -20,7 +20,7 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { FREE_DAILY_LIMIT, DEFAULT_TITLES } from "../lib/constants.js";
 import { VIBE_PROMPT } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
-import { searchStrains, formatStrainContext } from "../lib/strainSearch.js";
+import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
 import {
   shouldPullPhilosophy,
   pullPhilosophy,
@@ -47,7 +47,7 @@ const AI_MODEL = process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:f
 const AI_TEMPERATURE = 0.75;
 // Max reply length for the main completion. Env-tunable like AI_MODEL.
 // 250 gives deep convos room to finish thoughts without truncating.
-const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 250;
+const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 400;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -201,8 +201,20 @@ export async function handler(event) {
     if (tab === "plant") {
       // Strain retrieval — only when the frame allows informative content.
       if (fGate("strain_context", frame, confidence)) {
-        const matchedStrains = searchStrains(userContent);
-        const strainBlock = formatStrainContext(matchedStrains);
+        // Parse stated exclusions once (P0) and thread to BOTH retrieval and
+        // the context block, so the filter and the model agree.
+        const constraints = parseConstraints(userContent);
+        const matchedStrains = searchStrains(userContent, constraints);
+        let strainBlock = formatStrainContext(matchedStrains, constraints);
+
+        // P1: surface a gentle spelling correction ("cali mist" -> Kali Mist).
+        // Read-only — closest-match suggestion, never a silent swap.
+        const correction = suggestStrainCorrection(userContent);
+        if (correction) {
+          const sugg = correction.suggestion.replace(/-+/g, " ");
+          strainBlock += `\n\n[POSSIBLE MATCH — the user wrote "${correction.wrote}"; the closest known strain is "${sugg}". If relevant, gently confirm the spelling instead of assuming, and don't silently swap it.]`;
+        }
+
         if (strainBlock) {
           content_augmented = userContent + strainBlock;
         }
