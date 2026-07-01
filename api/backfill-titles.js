@@ -13,27 +13,15 @@
 // response reports `remaining`, so hit it again until remaining is 0. Delete
 // this file once the backlog is cleared.
 //
-// NOTE for Claude Code: mirror TITLE_SYSTEM_PROMPT below into the live
-// generateThreadTitle() in chat-send.js so new titles match this quality.
+// Title generation lives in lib/titleGen.js, shared with the live path in
+// chat-send.js — one prompt, one validator, one input shape for both.
 
 import { errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { stripModelTags } from "../lib/sanitize.js";
-
-const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL =
-  process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:free";
-
-// All default titles a thread can still be sitting on.
-const DEFAULT_TITLES = ["New Thread", "new vibe", "new plant chat"];
+import { generateTopicTitle } from "../lib/titleGen.js";
+import { DEFAULT_TITLES } from "../lib/constants.js";
 
 const BATCH = 12; // threads per invocation
-
-export const TITLE_SYSTEM_PROMPT =
-  "Create a 3-5 word topic title for this conversation. Use a short noun " +
-  "phrase that names the subject. Do NOT use a sentence, a question, or a " +
-  "fragment of what someone said. No quotes, no punctuation, no first person. " +
-  "Good: Northern Lights for sleep. Bad: If youre looking for. Bad: Does that make sense.";
 
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
@@ -103,44 +91,5 @@ export async function handler(event) {
   } catch (err) {
     console.error("backfill-titles error:", err);
     return errorResponse(500, "Internal server error");
-  }
-}
-
-async function generateTopicTitle(msgs) {
-  try {
-    const convo = msgs
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n")
-      .slice(0, 1500);
-
-    const res = await fetch(AI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://stoneheadai.com",
-        "X-Title": "StoneHead AI",
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: TITLE_SYSTEM_PROMPT },
-          { role: "user", content: convo },
-        ],
-        max_tokens: 15,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    let title = data.choices?.[0]?.message?.content;
-    // Backstop: strip any leaked tags/scaffolding before cleanup.
-    title = stripModelTags(title).replace(/["']/g, "").replace(/[.?!]+$/, "").slice(0, 60).trim();
-    return title || null;
-  } catch (e) {
-    console.error("generateTopicTitle error:", e.message);
-    return null;
   }
 }

@@ -17,7 +17,8 @@
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { FREE_DAILY_LIMIT, DEFAULT_TITLES } from "../lib/constants.js";
+import { FREE_DAILY_LIMIT, DEFAULT_TITLES, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
+import { generateTopicTitle } from "../lib/titleGen.js";
 import { VIBE_PROMPT } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
@@ -289,57 +290,21 @@ export async function handler(event) {
       { role: "user", content: content_augmented || userContent },
     ];
 
-    // ── Call AI endpoint ──────────────────────────────────────────────
-    const aiResponse = await fetch(AI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://stoneheadai.com",
-        "X-Title": "StoneHead AI",
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: aiMessages,
-        temperature: AI_TEMPERATURE,
-        max_tokens: MAX_TOKENS,
-        // Reduce within-response repetition / stock signature lines.
-        // NOTE: these only affect a single response, not across requests —
-        // the prompt instruction in prompts/plant.js is the cross-session
-        // fix. Some OpenRouter providers ignore unsupported params silently.
-        frequency_penalty: 0.4,
-        presence_penalty: 0.3,
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errBody = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errBody);
+    // ── Call AI endpoint (one retry on a blank return) ────────────────
+    // The in-character "I just blanked" line was masking flaky returns: an
+    // empty/all-scaffold completion went straight to the costume with no
+    // second attempt. Now every blank return is logged raw AND retried once
+    // before the fallback ships.
+    let attempt = await callChatModel(aiMessages);
+    if (!attempt.ok) {
+      console.error("AI API error:", attempt.status, attempt.errBody);
       return errorResponse(502, "AI service unavailable");
     }
 
-    const aiData = await aiResponse.json();
-    const choice = aiData.choices?.[0];
-    const finishReason = choice?.finish_reason || null;
-    // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
-    // tags) before it ever reaches storage or the user.
-    const rawContent = choice?.message?.content || "";
-    let reply = stripModelTags(rawContent);
-    if (!reply && rawContent.trim()) {
-      // Sanitizing emptied a non-empty response (e.g. the model put the whole
-      // answer inside a <think> block). Recover the words by dropping only the
-      // tag tokens — a slightly-raw answer beats a blank "I just blanked."
-      reply = rawContent
-        .replace(/<\/?[a-zA-Z][\w:.-]*(?:\s[^<>]*)?\/?>/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
+    let { reply, rawContent, finishReason, aiData } = attempt;
     if (!reply) {
-      // The blank fallback is a silent-failure sink — log the ACTUAL model
-      // return (finish_reason + raw preview) so we can tell empty from
-      // truncated-all-reasoning instead of guessing.
       console.error(
-        "chat blank-fallback:",
+        "chat blank return (retrying once):",
         JSON.stringify({
           tab,
           topic,
@@ -348,14 +313,43 @@ export async function handler(event) {
           raw_preview: rawContent.slice(0, 300),
         })
       );
-      reply = "...bro I just blanked. say that again?";
+      const retry = await callChatModel(aiMessages);
+      if (retry.ok && retry.reply) {
+        ({ reply, rawContent, finishReason, aiData } = retry);
+      } else if (retry.ok) {
+        console.error(
+          "chat blank-fallback (retry also blank):",
+          JSON.stringify({
+            tab,
+            topic,
+            finish_reason: retry.finishReason,
+            raw_len: retry.rawContent.length,
+            raw_preview: retry.rawContent.slice(0, 300),
+          })
+        );
+      } else {
+        console.error(
+          "chat blank-fallback (retry HTTP error):",
+          retry.status,
+          retry.errBody
+        );
+      }
+    }
+    if (!reply) {
+      reply = BLANK_REPLY_FALLBACK;
     } else if (finishReason === "length") {
       // Answer was cut mid-sentence ("You mean to…"): the model spent its
       // output budget on hidden reasoning/scaffold before the real reply.
-      // Logged (not user-visible) so MAX_TOKENS can be tuned against reality.
+      // Log the TAIL too, so the truncation traces to what actually got cut.
       console.warn(
         "chat truncated (finish_reason=length):",
-        JSON.stringify({ tab, topic, raw_len: rawContent.length, reply_len: reply.length })
+        JSON.stringify({
+          tab,
+          topic,
+          raw_len: rawContent.length,
+          reply_len: reply.length,
+          raw_tail: rawContent.slice(-120),
+        })
       );
     }
     const tokens_in = aiData.usage?.prompt_tokens || 0;
@@ -390,18 +384,25 @@ export async function handler(event) {
       .eq("id", thread_id);
 
     // ── Auto-generate thread title (with lazy retry) ─────────────────
-    // Fire-and-forget so the user never waits. Generate on the first
-    // exchange; also retry for any thread still stuck on its default name
-    // after a couple messages. The retry covers title-gen hiccups (the
-    // original fire-and-forget had no fallback) AND backfills pre-existing
-    // default-named threads on their next message.
+    // Fire-and-forget so the user never waits. Runs on EVERY message while
+    // the thread still wears a default name, and receives the actual
+    // conversation (recent history + this exchange), not just the last
+    // exchange — the old call fed the model two live chat turns to
+    // continue, which is how "<ds_safety>" and stray code became titles.
+    // Each retry now carries a fuller transcript, so a failed attempt
+    // doesn't freeze the default forever.
     const defaultsLower = DEFAULT_TITLES.map((t) => t.toLowerCase());
     const isDefaultTitle =
       !thread.title ||
       defaultsLower.includes(thread.title.trim().toLowerCase());
 
-    if (history.length === 0 || (isDefaultTitle && history.length >= 2)) {
-      generateThreadTitle(thread_id, userContent, reply).catch((e) =>
+    if (isDefaultTitle) {
+      const titleTranscript = [
+        ...history,
+        { role: "user", content: userContent },
+        { role: "assistant", content: reply },
+      ];
+      generateThreadTitle(thread_id, titleTranscript).catch((e) =>
         console.error("Title generation failed (non-blocking):", e)
       );
     }
@@ -436,6 +437,15 @@ export async function handler(event) {
     if (tab === "plant") {
       const intent = detectSaveIntent(userContent);
       if (intent && intent.type === "liked_strain") {
+        // Trace what the save actually received vs what it derived — this is
+        // the line that catches a sentence fragment before it hits the DB.
+        console.log(
+          "liked-strain save:",
+          JSON.stringify({
+            received: userContent.slice(0, 160),
+            saving: intent.value,
+          })
+        );
         addLikedStrain(
           user_id,
           intent.value.strain_name,
@@ -478,49 +488,64 @@ export async function handler(event) {
   }
 }
 
+// ── Chat completion call (shared by first attempt + blank retry) ───
+// Returns { ok:false, status, errBody } on HTTP failure, else
+// { ok:true, reply, rawContent, finishReason, aiData }. `reply` is the
+// sanitized text — "" when the return was blank/pure scaffold.
+async function callChatModel(aiMessages) {
+  const aiResponse = await fetch(AI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://stoneheadai.com",
+      "X-Title": "StoneHead AI",
+    },
+    body: JSON.stringify({
+      model: AI_MODEL,
+      messages: aiMessages,
+      temperature: AI_TEMPERATURE,
+      max_tokens: MAX_TOKENS,
+      // Reduce within-response repetition / stock signature lines.
+      // NOTE: these only affect a single response, not across requests —
+      // the prompt instruction in prompts/plant.js is the cross-session
+      // fix. Some OpenRouter providers ignore unsupported params silently.
+      frequency_penalty: 0.4,
+      presence_penalty: 0.3,
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errBody = await aiResponse.text();
+    return { ok: false, status: aiResponse.status, errBody };
+  }
+
+  const aiData = await aiResponse.json();
+  const choice = aiData.choices?.[0];
+  const finishReason = choice?.finish_reason || null;
+  // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
+  // tags) before it ever reaches storage or the user.
+  const rawContent = choice?.message?.content || "";
+  let reply = stripModelTags(rawContent);
+  if (!reply && rawContent.trim()) {
+    // Sanitizing emptied a non-empty response (e.g. the model put the whole
+    // answer inside a <think> block). Recover the words by dropping only the
+    // tag tokens — a slightly-raw answer beats a blank "I just blanked."
+    reply = rawContent
+      .replace(/<\/?[a-zA-Z][\w:.-]*(?:\s[^<>]*)?\/?>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return { ok: true, reply, rawContent, finishReason, aiData };
+}
+
 // ── Thread Title Generator (background, non-blocking) ─────────────
-async function generateThreadTitle(threadId, userMessage, assistantReply) {
+// Thin wrapper over lib/titleGen.js — the transcript goes in as DATA
+// (one serialized user message), never as live chat turns to continue.
+async function generateThreadTitle(threadId, transcript) {
   try {
-    const res = await fetch(AI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://stoneheadai.com",
-        "X-Title": "StoneHead AI",
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          {
-            // Mirrored from TITLE_SYSTEM_PROMPT in api/backfill-titles.js so
-            // live titles match the backfill's quality. Kept inline (not
-            // imported) so the one-off backfill endpoint can be deleted
-            // without breaking this path.
-            role: "system",
-            content:
-              "Name this conversation in 3-5 plain English words — a short noun phrase " +
-              "that names the subject. Output ONLY the title: no tags, no XML, no angle " +
-              "brackets, no preamble, no explanation, no quotes, no punctuation, no first " +
-              "person, not a sentence or a question. " +
-              "Good: Northern Lights for sleep. Bad: <ds_safety>. Bad: If youre looking for. " +
-              "Bad: Does that make sense.",
-          },
-          { role: "user", content: userMessage },
-          { role: "assistant", content: assistantReply },
-        ],
-        max_tokens: 15,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!res.ok) return;
-
-    const data = await res.json();
-    let title = data.choices?.[0]?.message?.content;
-    // Backstop: strip any leaked tags/scaffolding, then quotes + length.
-    title = stripModelTags(title).replace(/["']/g, "").slice(0, 60).trim();
-    if (!title) return; // nothing usable — leave the default rather than store junk
+    const title = await generateTopicTitle(transcript);
+    if (!title) return; // nothing usable — keep the default; lazy retry fires next message
 
     await supabaseAdmin
       .from("threads")
