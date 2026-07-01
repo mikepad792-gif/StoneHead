@@ -25,10 +25,12 @@ const VIBE_SUGGESTIONS = [
   { text: "what's the meaning of all this?", icon: "◎" },
 ];
 const PLANT_SUGGESTIONS = [
-  { text: "what's good for a chill night in?", icon: "🌙" },
-  { text: "recommend something creative", icon: "🎨" },
-  { text: "sativa or indica for a hike?", icon: "⛰" },
-  { text: "what pairs with pizza and a movie?", icon: "🍕" },
+  // §7: 2 strain + 2 grow, each phrased as a real user message. The grow chips
+  // teach what's newly possible (diagnosis + cultivation-about-a-strain).
+  { text: "what's good for a lazy Sunday?", icon: "🛋" },
+  { text: "something that won't make me anxious", icon: "🌿" },
+  { text: "my leaves are turning yellow, help", icon: "🍃" },
+  { text: "is Blue Dream hard to grow?", icon: "🌱" },
 ];
 
 function relativeTime(dateStr) {
@@ -288,7 +290,7 @@ function ChatWindow() {
             </div>
             <p className="sh-tagline">Your Always Stone-D AI Friend</p>
 <div className="sh-welcome-bubble">
-  <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "yo what's good... let's talk about the plant."}</p>
+  <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "yo what's good... let's talk about the plant. you can ask me about growing too, not just what to smoke."}</p>
 </div>
             <SuggestionChips tab={activeTab} onChipClick={(t) => handleSendMessage(t)} />
           </div>

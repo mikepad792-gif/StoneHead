@@ -1,0 +1,295 @@
+{
+  "eval": "cultivation-check",
+  "version": "1.0",
+  "top_k": 3,
+  "cluster_top_k": 4,
+  "description": "Symptom -> issue/cluster retrieval checks plus behavioral checks for the confusable clusters. Retrieval cases are data-testable via run_eval.py. Behavioral cases require the live model + Phase 1 cultivation prompt.",
+  "retrieval_cases": [
+    {
+      "id": "y1",
+      "query": "my bottom leaves are going yellow and a couple dropped off",
+      "expect_issue": "nitrogen-deficiency",
+      "note": "classic mobile-nutrient, lower-first"
+    },
+    {
+      "id": "y2",
+      "query": "yellow between the veins on the lower leaves but the veins are still green",
+      "expect_issue": "magnesium-deficiency",
+      "note": "interveinal on old leaves"
+    },
+    {
+      "id": "y3",
+      "query": "everything is yellowing and spotting even though I feed regularly and it keeps getting worse",
+      "expect_issue": "ph-lockout",
+      "note": "multiple issues + persists despite feeding"
+    },
+    {
+      "id": "y4",
+      "query": "leaves are yellowing near the end of flower and the buds look about done, should I worry",
+      "expect_issue": "natural-late-flower-fade",
+      "note": "reassurance"
+    },
+    {
+      "id": "y5",
+      "query": "lower leaves yellowing, is this a feeding problem or the pH",
+      "expect_cluster": [
+        "nitrogen-deficiency",
+        "ph-lockout",
+        "magnesium-deficiency"
+      ],
+      "note": "ambiguous yellowing -> surface cluster, ask"
+    },
+    {
+      "id": "d1",
+      "query": "my plant is drooping and I'm not sure why",
+      "expect_cluster": [
+        "overwatering",
+        "underwatering"
+      ],
+      "note": "bare droop -> over vs under look identical; must surface both and ask"
+    },
+    {
+      "id": "d2",
+      "query": "leaves drooping and the soil is still soggy and the pot feels heavy",
+      "expect_issue": "overwatering",
+      "note": "wet+heavy tell"
+    },
+    {
+      "id": "d3",
+      "query": "drooping and the pot feels really light and the medium is bone dry",
+      "expect_issue": "underwatering",
+      "note": "dry+light tell"
+    },
+    {
+      "id": "d4",
+      "query": "the roots are brown and slimy and it smells bad and it's wilting",
+      "expect_issue": "root-rot",
+      "note": "root signs"
+    },
+    {
+      "id": "d5",
+      "query": "leaves curling up at the edges like a taco when the tent gets hot",
+      "expect_issue": "heat-stress",
+      "note": "upward taco tied to heat"
+    },
+    {
+      "id": "m1",
+      "query": "silvery streaks on the leaves with tiny black specks next to them",
+      "expect_issue": "thrips",
+      "note": "silver + frass"
+    },
+    {
+      "id": "m2",
+      "query": "tiny pale dots all over the leaves and some fine webbing between branches",
+      "expect_issue": "spider-mites",
+      "note": "stippling + webbing"
+    },
+    {
+      "id": "m3",
+      "query": "tiny speckled marks and dots on my leaves, can't tell if it's bugs or a deficiency",
+      "expect_cluster": [
+        "thrips",
+        "spider-mites"
+      ],
+      "note": "ambiguous speckling -> pest cluster (dots=mites, specks=thrips)"
+    },
+    {
+      "id": "m4",
+      "query": "the air in my grow is really dry and leaf edges are crisping but my feeding and pH are dialed",
+      "expect_issue": "humidity-low",
+      "note": "false deficiency from low RH"
+    },
+    {
+      "id": "w1",
+      "query": "white powdery stuff on my leaves that looks like flour and wipes off",
+      "expect_issue": "powdery-mildew",
+      "note": "flat dust, wipes off"
+    },
+    {
+      "id": "w2",
+      "query": "white frosty sparkly crystals all over my buds, is this mold",
+      "expect_issue": "trichome-frost",
+      "note": "reassurance: sparkly stalk+head"
+    },
+    {
+      "id": "w3",
+      "query": "not sure if the white on my buds is mildew or the good sparkly stuff",
+      "expect_cluster": [
+        "powdery-mildew",
+        "trichome-frost"
+      ],
+      "note": "the panic case -> surface both"
+    },
+    {
+      "id": "f1",
+      "query": "I opened a bud and the inside is grey and mushy",
+      "expect_issue": "bud-rot",
+      "note": "inside-out grey rot; escalate"
+    },
+    {
+      "id": "f2",
+      "query": "my buds are growing spiky towers sticking up near the light",
+      "expect_issue": "foxtailing",
+      "note": "elongated calyx spires"
+    },
+    {
+      "id": "f3",
+      "query": "there are little yellow banana things poking out of my buds",
+      "expect_issue": "hermaphroditism",
+      "note": "nanners/stamens"
+    },
+    {
+      "id": "f4",
+      "query": "light has been getting into my tent during the dark period",
+      "expect_issue": "light-leak-flower",
+      "note": "dark-period leak"
+    },
+    {
+      "id": "n1",
+      "query": "burnt crispy brown tips on a bunch of leaves all over the plant",
+      "expect_issue": "nutrient-burn",
+      "note": "tip burn, whole plant"
+    },
+    {
+      "id": "n2",
+      "query": "dark green shiny leaves and the tips are clawing under like talons",
+      "expect_issue": "nitrogen-toxicity",
+      "note": "the claw"
+    },
+    {
+      "id": "n3",
+      "query": "brown spots on the new top leaves and the new growth is twisted and deformed",
+      "expect_issue": "calcium-deficiency",
+      "note": "immobile, new growth distorted"
+    },
+    {
+      "id": "n4",
+      "query": "the edges of my older lower leaves look scorched and burnt at the margins",
+      "expect_issue": "potassium-deficiency",
+      "note": "margin burn on old leaves"
+    },
+    {
+      "id": "n5",
+      "query": "my newest top leaves went bright pale yellow with greener veins",
+      "expect_issue": "iron-deficiency",
+      "note": "immobile interveinal on new growth"
+    },
+    {
+      "id": "e1",
+      "query": "my plant in veg is getting tall and stretchy with big gaps between the leaves",
+      "expect_issue": "insufficient-light",
+      "note": "leggy from low light"
+    },
+    {
+      "id": "e2",
+      "query": "my plant shot up and nearly doubled right after I flipped it to 12/12",
+      "expect_issue": "early-flower-stretch",
+      "note": "reassurance: normal flower stretch"
+    },
+    {
+      "id": "e3",
+      "query": "little black flies crawling around the surface of the soil and flying up when I water",
+      "expect_issue": "fungus-gnats",
+      "note": "flies at medium surface"
+    },
+    {
+      "id": "e4",
+      "query": "clusters of tiny bugs on my stems and new growth and the leaves are sticky",
+      "expect_issue": "aphids",
+      "note": "clusters + honeydew"
+    },
+    {
+      "id": "e5",
+      "query": "my seedling fell over and the stem is pinched and thin right at the soil line",
+      "expect_issue": "damping-off",
+      "note": "stem pinch at soil line"
+    },
+    {
+      "id": "e6",
+      "query": "my seeds just won't sprout, nothing is happening",
+      "expect_issue": "poor-germination",
+      "note": "failure to germinate"
+    },
+    {
+      "id": "e7",
+      "query": "my seedling is barely growing after a week, is it okay",
+      "expect_issue": "seedling-slowness",
+      "note": "reassurance: normal early sluggishness"
+    },
+    {
+      "id": "e8",
+      "query": "my plant drooped and wilted right after I repotted it into a bigger container",
+      "expect_issue": "transplant-shock",
+      "note": "droop right after transplant"
+    },
+    {
+      "id": "h1",
+      "query": "how do I know when to chop, are my buds ready to harvest",
+      "expect_issue": "when-to-harvest",
+      "note": "trichome reading"
+    },
+    {
+      "id": "h2",
+      "query": "my dried buds smell like hay and fresh cut grass and the smoke is harsh",
+      "expect_issue": "improper-curing",
+      "note": "hay smell from fast/bad dry"
+    }
+  ],
+  "behavioral_cases": [
+    {
+      "id": "b1",
+      "query": "my plant is drooping, what's wrong",
+      "cluster": "drooping",
+      "checks": [
+        "asks_before_committing",
+        "surfaces_over_vs_under",
+        "stays_in_voice"
+      ],
+      "note": "over/under water look identical; must ask about medium/pot weight before diagnosing"
+    },
+    {
+      "id": "b2",
+      "query": "there's white stuff on my buds, is it ruined",
+      "cluster": "white-stuff",
+      "checks": [
+        "asks_before_committing",
+        "considers_trichome_frost",
+        "stays_in_voice"
+      ],
+      "note": "must not 'diagnose' mold on a healthy frosty plant; lead with the loupe check"
+    },
+    {
+      "id": "b3",
+      "query": "lower leaves yellowing, should I add more nutes",
+      "cluster": "yellowing",
+      "checks": [
+        "asks_before_committing",
+        "checks_ph_before_dosing",
+        "stays_in_voice"
+      ],
+      "note": "must raise pH/lockout before telling them to feed more"
+    },
+    {
+      "id": "b4",
+      "query": "I found a couple silvery marks on some leaves",
+      "cluster": "marks-not-deficiency",
+      "checks": [
+        "asks_before_committing",
+        "distinguishes_thrips_vs_mites",
+        "stays_in_voice"
+      ],
+      "note": "should ask about frass/webbing under a loupe rather than guess the pest"
+    },
+    {
+      "id": "b5",
+      "query": "I think I have bud rot",
+      "cluster": "flower-crisis",
+      "checks": [
+        "gives_careful_answer",
+        "flags_serious_escalate",
+        "stays_in_voice"
+      ],
+      "note": "escalate=true: careful answer AND flag consumption safety / seriousness"
+    }
+  ]
+}
