@@ -53,8 +53,11 @@ const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL = process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:free";
 const AI_TEMPERATURE = 0.75;
 // Max reply length for the main completion. Env-tunable like AI_MODEL.
-// 250 gives deep convos room to finish thoughts without truncating.
-const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 400;
+// Headroom matters: this model sometimes front-loads hidden reasoning/scaffold
+// (<think>/<ds_safety>) that eats the budget and truncates the real answer
+// mid-sentence ("You mean to…"). 700 leaves room for reasoning + a full reply;
+// the prompt still enforces brevity, so this is a ceiling, not a target.
+const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 700;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -318,6 +321,7 @@ export async function handler(event) {
 
     const aiData = await aiResponse.json();
     const choice = aiData.choices?.[0];
+    const finishReason = choice?.finish_reason || null;
     // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
     // tags) before it ever reaches storage or the user.
     const rawContent = choice?.message?.content || "";
@@ -331,7 +335,30 @@ export async function handler(event) {
         .replace(/\s+/g, " ")
         .trim();
     }
-    if (!reply) reply = "...bro I just blanked. say that again?";
+    if (!reply) {
+      // The blank fallback is a silent-failure sink — log the ACTUAL model
+      // return (finish_reason + raw preview) so we can tell empty from
+      // truncated-all-reasoning instead of guessing.
+      console.error(
+        "chat blank-fallback:",
+        JSON.stringify({
+          tab,
+          topic,
+          finish_reason: finishReason,
+          raw_len: rawContent.length,
+          raw_preview: rawContent.slice(0, 300),
+        })
+      );
+      reply = "...bro I just blanked. say that again?";
+    } else if (finishReason === "length") {
+      // Answer was cut mid-sentence ("You mean to…"): the model spent its
+      // output budget on hidden reasoning/scaffold before the real reply.
+      // Logged (not user-visible) so MAX_TOKENS can be tuned against reality.
+      console.warn(
+        "chat truncated (finish_reason=length):",
+        JSON.stringify({ tab, topic, raw_len: rawContent.length, reply_len: reply.length })
+      );
+    }
     const tokens_in = aiData.usage?.prompt_tokens || 0;
     const tokens_out = aiData.usage?.completion_tokens || 0;
 
