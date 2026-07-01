@@ -319,10 +319,19 @@ export async function handler(event) {
     const aiData = await aiResponse.json();
     const choice = aiData.choices?.[0];
     // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
-    // tags) before it ever reaches storage or the user. Falls back if stripping
-    // empties the message (e.g. the model returned only a scaffold block).
-    const reply =
-      stripModelTags(choice?.message?.content) || "...bro I just blanked. say that again?";
+    // tags) before it ever reaches storage or the user.
+    const rawContent = choice?.message?.content || "";
+    let reply = stripModelTags(rawContent);
+    if (!reply && rawContent.trim()) {
+      // Sanitizing emptied a non-empty response (e.g. the model put the whole
+      // answer inside a <think> block). Recover the words by dropping only the
+      // tag tokens — a slightly-raw answer beats a blank "I just blanked."
+      reply = rawContent
+        .replace(/<\/?[a-zA-Z][\w:.-]*(?:\s[^<>]*)?\/?>/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    if (!reply) reply = "...bro I just blanked. say that again?";
     const tokens_in = aiData.usage?.prompt_tokens || 0;
     const tokens_out = aiData.usage?.completion_tokens || 0;
 
