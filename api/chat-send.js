@@ -44,6 +44,7 @@ import {
   maybeWriteSessionMemory,
 } from "../lib/sessionMemory.js";
 import { maybeConsolidate } from "../lib/consolidateMemory.js";
+import { stripModelTags } from "../lib/sanitize.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 // Cheapest viable model via OpenRouter. Stone Head doesn't need to be
@@ -317,7 +318,11 @@ export async function handler(event) {
 
     const aiData = await aiResponse.json();
     const choice = aiData.choices?.[0];
-    const reply = choice?.message?.content || "...bro I just blanked. say that again?";
+    // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
+    // tags) before it ever reaches storage or the user. Falls back if stripping
+    // empties the message (e.g. the model returned only a scaffold block).
+    const reply =
+      stripModelTags(choice?.message?.content) || "...bro I just blanked. say that again?";
     const tokens_in = aiData.usage?.prompt_tokens || 0;
     const tokens_out = aiData.usage?.completion_tokens || 0;
 
@@ -459,10 +464,12 @@ async function generateThreadTitle(threadId, userMessage, assistantReply) {
             // without breaking this path.
             role: "system",
             content:
-              "Create a 3-5 word topic title for this conversation. Use a short noun " +
-              "phrase that names the subject. Do NOT use a sentence, a question, or a " +
-              "fragment of what someone said. No quotes, no punctuation, no first person. " +
-              "Good: Northern Lights for sleep. Bad: If youre looking for. Bad: Does that make sense.",
+              "Name this conversation in 3-5 plain English words — a short noun phrase " +
+              "that names the subject. Output ONLY the title: no tags, no XML, no angle " +
+              "brackets, no preamble, no explanation, no quotes, no punctuation, no first " +
+              "person, not a sentence or a question. " +
+              "Good: Northern Lights for sleep. Bad: <ds_safety>. Bad: If youre looking for. " +
+              "Bad: Does that make sense.",
           },
           { role: "user", content: userMessage },
           { role: "assistant", content: assistantReply },
@@ -475,11 +482,10 @@ async function generateThreadTitle(threadId, userMessage, assistantReply) {
     if (!res.ok) return;
 
     const data = await res.json();
-    let title = data.choices?.[0]?.message?.content?.trim();
-    if (!title) return;
-
-    // Clean up: remove quotes, limit length
-    title = title.replace(/["']/g, "").slice(0, 60);
+    let title = data.choices?.[0]?.message?.content;
+    // Backstop: strip any leaked tags/scaffolding, then quotes + length.
+    title = stripModelTags(title).replace(/["']/g, "").slice(0, 60).trim();
+    if (!title) return; // nothing usable — leave the default rather than store junk
 
     await supabaseAdmin
       .from("threads")
