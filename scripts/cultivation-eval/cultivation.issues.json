@@ -1,0 +1,1999 @@
+{
+  "schema_version": "1.0",
+  "artifact": "stonehead-cultivation-reference",
+  "phase": 1,
+  "generated": "2026-07-01",
+  "description": "Curated, voice-neutral cultivation issue reference that grounds StoneHead's diagnostic answers. Differentiators are the payload. Facts favor university extension and GrowWeedEasy; researched/confirmed before authoring. Contains NO per-strain grow-trait data, NO photo/vision data, and NO live-data dependencies (all deferred to Phase 2/3).",
+  "field_notes": {
+    "confused_with": "issue ids this is commonly mistaken for; each has a matching differentiator",
+    "differentiators": "one {vs, tell} per confused_with id — the disambiguating observation",
+    "fix": "corrective DIRECTION only (no brand dosing); names what to check first",
+    "escalate": "true = give the careful answer AND flag it's serious (not 'refuse')",
+    "is_normal": "true = reassurance entry (a healthy plant people panic over)"
+  },
+  "priority_confusable_clusters": {
+    "yellowing": [
+      "nitrogen-deficiency",
+      "magnesium-deficiency",
+      "ph-lockout",
+      "natural-late-flower-fade",
+      "overwatering"
+    ],
+    "drooping": [
+      "overwatering",
+      "underwatering",
+      "heat-stress",
+      "root-rot"
+    ],
+    "marks-not-deficiency": [
+      "thrips",
+      "spider-mites",
+      "light-burn",
+      "humidity-low"
+    ],
+    "white-stuff": [
+      "powdery-mildew",
+      "trichome-frost",
+      "spider-mites"
+    ],
+    "flower-crisis": [
+      "bud-rot",
+      "foxtailing",
+      "light-leak-flower"
+    ]
+  },
+  "sources_index": [
+    "Colorado State University Extension",
+    "Cornell NRCCA",
+    "GrowWeedEasy",
+    "Oregon State University Extension",
+    "UC IPM",
+    "University of Delaware Extension",
+    "University of Maryland Extension",
+    "Utah State University Extension"
+  ],
+  "issue_count": 35,
+  "issues": [
+    {
+      "id": "nitrogen-deficiency",
+      "name": "Nitrogen Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "bottom leaves turning yellow",
+        "lower leaves yellowing and falling off",
+        "leaves going pale from the bottom up"
+      ],
+      "symptoms": [
+        "uniform yellowing (chlorosis) starting on lower/older leaves",
+        "yellowing progresses upward over time",
+        "older leaves may drop"
+      ],
+      "likely_causes": [
+        "genuinely under-feeding / nitrogen too low",
+        "soil base nutrients depleted in late veg",
+        "pH out of range blocking nitrogen uptake (lockout, not a true shortage)"
+      ],
+      "confused_with": [
+        "natural-late-flower-fade",
+        "ph-lockout",
+        "magnesium-deficiency",
+        "overwatering"
+      ],
+      "differentiators": [
+        {
+          "vs": "natural-late-flower-fade",
+          "tell": "Fade is expected in roughly the last 2 weeks of flower and sweeps the whole canopy as the plant cannibalizes itself; a true deficiency hits earlier and faster."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "If feeding is already adequate but it keeps spreading, suspect pH — check runoff/res pH BEFORE adding more nitrogen."
+        },
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Mg is interveinal (green veins, yellow between) usually mid-plant; N is uniform yellowing, low-and-upward."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering yellowing comes with droop and constantly-wet medium; N yellowing tracks feeding/age, not soil moisture."
+        }
+      ],
+      "clarifying_questions": [
+        "What week are you in?",
+        "What are you feeding and how often?",
+        "Soil or coco/hydro — and do you know your runoff/res pH?"
+      ],
+      "fix": "If genuinely under-fed and NOT in late flower, raise nitrogen toward label strength and recheck in a few days. Confirm pH is in range first so you're not chasing lockout. Don't overcorrect — nitrogen toxicity is its own problem.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "nitrogen-toxicity",
+      "name": "Nitrogen Toxicity / Overfeeding (\"The Claw\")",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "leaf tips clawing down",
+        "dark green leaves curling under",
+        "leaves look really dark and shiny and bent",
+        "tips pointing down like talons"
+      ],
+      "symptoms": [
+        "very dark green, glossy/waxy leaves",
+        "leaf tips bend and curl downward (\"claw\")",
+        "clawing most pronounced on upper growth"
+      ],
+      "likely_causes": [
+        "too much nitrogen / overall nutrients too strong",
+        "running a high-nitrogen veg formula into flower",
+        "salt buildup in the root zone"
+      ],
+      "confused_with": [
+        "nutrient-burn",
+        "overwatering",
+        "heat-stress"
+      ],
+      "differentiators": [
+        {
+          "vs": "nutrient-burn",
+          "tell": "Nute burn shows burnt/brown crispy leaf TIPS; N toxicity shows dark-green clawing without the burnt tip (they often appear together when feeding is too strong)."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering droops the WHOLE leaf downward from the stem and pairs with a wet medium; the claw is the leaf TIPS curling under on dark-green, firm leaves."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Heat curls leaf EDGES upward (tacoing); N toxicity curls leaf tips DOWNward."
+        }
+      ],
+      "clarifying_questions": [
+        "What strength are you feeding versus the label, and what's your runoff/res EC/PPM if you measure it?",
+        "Are the leaves dark green and glossy, and is it the tips or the whole leaf curling?"
+      ],
+      "fix": "Ease back nutrient strength (especially nitrogen) toward or below label, and flush the medium with pH-balanced water if salts have built up. Confirm pH so you're reading the plant correctly. Damaged leaves won't un-claw, but new growth should come in normal.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "phosphorus-deficiency",
+      "name": "Phosphorus Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "leaves turning dark with purple stems",
+        "lower leaves bluish-green with bronze spots",
+        "stems going red or purple",
+        "older leaves dark and dull"
+      ],
+      "symptoms": [
+        "older/lower leaves go dark bluish-green and dull",
+        "bronze/brown blotches on older leaves",
+        "petioles/stems may redden or purple"
+      ],
+      "likely_causes": [
+        "phosphorus genuinely low (more common in flower when demand rises)",
+        "pH out of range — P uptake is poor in cold or low/high pH (lockout)",
+        "cold root zone reducing P availability"
+      ],
+      "confused_with": [
+        "potassium-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "potassium-deficiency",
+          "tell": "K deficiency burns leaf MARGINS/tips of older leaves; P deficiency darkens the whole older leaf and adds bronze blotching, often with reddened stems."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "P is one of the first things locked out by cold or off pH — check medium temperature and runoff/res pH before adding more P."
+        }
+      ],
+      "clarifying_questions": [
+        "What week of flower are you in, and how cold does the root zone get at night?",
+        "What's your runoff/res pH?"
+      ],
+      "fix": "If pH and root-zone temperature are in range and it's still spreading, raise phosphorus toward label (bloom-stage feeds run higher P). Warm cold roots first — cold alone can cause this without any true shortage.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": "Reddish/purple stems and petioles can also be genetic or cold-driven rather than a true phosphorus shortage; treat stem color as a weak signal on its own."
+    },
+    {
+      "id": "potassium-deficiency",
+      "name": "Potassium Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "edges of older leaves turning brown and crispy",
+        "burnt-looking leaf margins on lower leaves",
+        "yellowing tips and edges down low",
+        "older leaves rusting at the edges"
+      ],
+      "symptoms": [
+        "yellowing then browning of MARGINS and tips on older/lower leaves",
+        "edges look scorched/crispy while leaf center stays greener",
+        "sometimes rusty spotting on older leaves"
+      ],
+      "likely_causes": [
+        "potassium genuinely low (demand rises in flower)",
+        "pH out of range limiting K uptake (lockout)",
+        "nutrient imbalance from heavy bloom boosters"
+      ],
+      "confused_with": [
+        "nutrient-burn",
+        "phosphorus-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "nutrient-burn",
+          "tell": "Both burn leaf edges/tips — but nute burn comes from OVER-feeding and hits the whole plant including upper/newer leaves; K deficiency is UNDER-supply and concentrates on OLDER/lower leaves."
+        },
+        {
+          "vs": "phosphorus-deficiency",
+          "tell": "K deficiency is edge/margin burn on older leaves; P deficiency darkens the whole older leaf with bronze blotching and reddened stems."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Check runoff/res pH before adding K — off pH mimics the same marginal burn."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the burnt edges only on the lower/older leaves, or all over the plant?",
+        "How strong are you feeding, and what's your runoff/res pH?"
+      ],
+      "fix": "If it's older leaves only and feeding is modest, nudge potassium toward label and recheck. Confirm pH first. If the whole plant including new growth is burning at the tips, treat it as overfeeding instead and back off.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "calcium-deficiency",
+      "name": "Calcium Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "new top leaves spotty and twisted",
+        "brown spots on the newer leaves",
+        "new growth curling and deformed",
+        "weak floppy stems on new growth"
+      ],
+      "symptoms": [
+        "small brown/rusty spots on NEW/upper leaves, often at edges",
+        "new growth distorted, curled, or hooked (\"parachuting\" tips)",
+        "weak stems; poor root development in bad cases"
+      ],
+      "likely_causes": [
+        "calcium low — common with soft/filtered/RO water",
+        "pH out of range blocking calcium uptake (lockout)",
+        "coco coir without added cal-mag"
+      ],
+      "confused_with": [
+        "magnesium-deficiency",
+        "iron-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Location is the tell: calcium hits NEW/upper growth (immobile); magnesium hits OLD/lower leaves (mobile) with interveinal yellowing."
+        },
+        {
+          "vs": "iron-deficiency",
+          "tell": "Both affect new growth — but iron is clean interveinal yellowing on new leaves, while calcium adds brown edge spotting and twisted/distorted new growth."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Calcium uptake is very pH-sensitive — check runoff/res pH before dosing cal-mag."
+        }
+      ],
+      "clarifying_questions": [
+        "Are you using RO, filtered, or soft water, or growing in coco?",
+        "Is it the newest top growth that's affected, and what's your pH?"
+      ],
+      "fix": "If on RO/soft water or in coco, add a cal-mag supplement toward label and correct pH (calcium locks out off-range). Old damaged leaves won't recover; new growth should come in clean within about a week.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": "Calcium and magnesium are frequently deficient together (hence 'cal-mag'); if symptoms appear on both new and old growth, treat them as a pair."
+    },
+    {
+      "id": "magnesium-deficiency",
+      "name": "Magnesium Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "yellow between the veins on lower leaves",
+        "green veins but yellow in between",
+        "rusty spots on the older leaves",
+        "lower leaves striping yellow"
+      ],
+      "symptoms": [
+        "interveinal chlorosis on OLDER/lower leaves (green veins, yellow between)",
+        "rusty/brown flecks on affected older leaves",
+        "leaf tips/edges may curl up; progresses upward if unfixed"
+      ],
+      "likely_causes": [
+        "magnesium low — common with soft/filtered/RO water",
+        "pH out of range blocking Mg uptake (lockout)",
+        "coco coir without added cal-mag"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "iron-deficiency",
+        "calcium-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "N is UNIFORM yellowing of older leaves; Mg keeps the veins green and yellows BETWEEN them (interveinal)."
+        },
+        {
+          "vs": "iron-deficiency",
+          "tell": "Same interveinal pattern, opposite location: Mg shows on OLD/lower leaves (mobile), iron on NEW/upper growth (immobile)."
+        },
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Mg is interveinal yellowing on old leaves; calcium is brown spotting and distorted growth on NEW leaves."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Check runoff/res pH first — low pH commonly drives an Mg-looking deficiency without a true shortage."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the yellowing between the veins on the LOWER leaves while veins stay green?",
+        "RO/soft water or coco — and what's your pH?"
+      ],
+      "fix": "Correct pH first, then add cal-mag (or Epsom salts / dolomite lime in soil) toward label if on RO/soft water or coco. Affected old leaves stay marked; new growth should green up. Don't overcorrect.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "iron-deficiency",
+      "name": "Iron Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "seedling",
+        "veg"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "new top growth bright yellow",
+        "newest leaves yellow with green veins",
+        "tops went pale/yellow almost white",
+        "upper new leaves yellowing between veins"
+      ],
+      "symptoms": [
+        "interveinal-to-uniform yellowing on the NEWEST/upper leaves",
+        "veins may stay greener than the surrounding tissue",
+        "new growth can look pale, almost bright/lime"
+      ],
+      "likely_causes": [
+        "pH too high (most common trigger — iron locks out above range)",
+        "overwatering / poor root function reducing iron uptake",
+        "iron genuinely low (less common; often a pH problem in disguise)"
+      ],
+      "confused_with": [
+        "magnesium-deficiency",
+        "calcium-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Location is the tell: iron is on the NEWEST/upper growth (immobile); Mg is on OLD/lower leaves (mobile)."
+        },
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Both hit new growth, but iron is clean interveinal/uniform yellowing; calcium adds brown edge spots and twisted new leaves."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Iron is the classic high-pH lockout — check pH FIRST; correcting pH usually fixes it without adding iron."
+        }
+      ],
+      "clarifying_questions": [
+        "Is it the very newest top growth that's pale/yellow?",
+        "What's your pH, and have you been watering heavily?"
+      ],
+      "fix": "Check and correct pH first — iron is overwhelmingly a high-pH lockout, not a true shortage. Let an overwatered medium dry back so roots can work. Only supplement iron (cal-mag includes a trace) if pH is dialed and it persists.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "nutrient-burn",
+      "name": "Nutrient Burn (Overfeeding / Burnt Tips)",
+      "category": "nutrient",
+      "stage": [
+        "seedling",
+        "veg",
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "burnt brown tips on the leaves",
+        "leaf tips going yellow then crispy",
+        "tips look burnt all over the plant",
+        "edges curling and browning"
+      ],
+      "symptoms": [
+        "leaf TIPS yellow then turn brown/tan and crispy",
+        "burn creeps inward along margins if it worsens",
+        "affects leaves across the whole plant, including newer growth; leaves can look dark green"
+      ],
+      "likely_causes": [
+        "nutrients mixed too strong / feeding too heavily",
+        "salt buildup in the root zone",
+        "\"hot\" soil or bloom boosters; pH off, causing accumulation"
+      ],
+      "confused_with": [
+        "nitrogen-toxicity",
+        "light-burn",
+        "potassium-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "Same root cause (too much food). Burn = crispy brown tips; N toxicity = dark-green downward clawing. They commonly show together."
+        },
+        {
+          "vs": "light-burn",
+          "tell": "Nute burn hits tips/edges across the plant; light burn bleaches/yellows the UPPER leaves closest to the lamp and tracks distance from the light, not feeding."
+        },
+        {
+          "vs": "potassium-deficiency",
+          "tell": "K deficiency is edge burn on OLDER leaves from UNDER-feeding; nute burn is OVER-feeding and hits new growth too."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Off pH causes salts to accumulate and burn even at normal doses — check pH/runoff EC before assuming the dose is too high."
+        }
+      ],
+      "clarifying_questions": [
+        "How strong are you feeding versus the label, and do you measure runoff/res EC/PPM?",
+        "Are the burnt tips all over the plant, or only on the older lower leaves?"
+      ],
+      "fix": "Flush the medium with pH-balanced water to clear salts, then resume feeding at reduced strength (start lower for autos/seedlings) and build up slowly. Burnt tips won't heal; the goal is clean new growth.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "ph-lockout",
+      "name": "pH Out of Range / Nutrient Lockout",
+      "category": "ph",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "multiple deficiencies at once",
+        "tried adding nutrients but it keeps getting worse",
+        "leaves doing weird stuff even though I feed",
+        "lots of different colors and spots showing up",
+        "could this be a pH problem",
+        "lower leaves yellowing, is it feeding or pH",
+        "is my pH off"
+      ],
+      "symptoms": [
+        "deficiency-style symptoms (yellowing, spotting, interveinal) despite adequate feeding",
+        "several deficiencies appearing together",
+        "symptoms persist or worsen after adding more nutrients"
+      ],
+      "likely_causes": [
+        "root-zone pH outside the uptake range (soil ~6.2-7.0; coco/hydro ~5.5-6.5)",
+        "salt buildup shifting medium pH over time",
+        "tap/source water pH not adjusted before feeding"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "magnesium-deficiency",
+        "calcium-deficiency",
+        "iron-deficiency",
+        "potassium-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "If feeding is already adequate and it keeps spreading, it's likely pH locking out N rather than a true shortage — adding more N won't help until pH is fixed."
+        },
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Low pH frequently mimics Mg deficiency; correcting pH resolves the 'Mg' look without dosing Mg."
+        },
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Calcium uptake is very pH-sensitive — an off pH reads as a calcium problem; check pH before adding cal-mag."
+        },
+        {
+          "vs": "iron-deficiency",
+          "tell": "Iron locks out at HIGH pH specifically — pale new tops with high pH is lockout, not a true iron shortage."
+        },
+        {
+          "vs": "potassium-deficiency",
+          "tell": "Off pH reproduces the same marginal burn; rule pH out before dosing K."
+        }
+      ],
+      "clarifying_questions": [
+        "What's the pH of your runoff (soil/coco) or reservoir (hydro)?",
+        "Soil, coco, or hydro — and are you pH-adjusting your water before feeding?"
+      ],
+      "fix": "Measure and correct pH into range for your medium BEFORE adding any nutrients (this is the single most important check behind the whole deficiency cluster). In soil/coco, flush with correctly pH'd water if salts have built up, then feed in range.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "University of Delaware Extension",
+        "Cornell NRCCA"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "overwatering",
+      "name": "Overwatering",
+      "category": "watering",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "plant drooping after I water",
+        "leaves droopy and the soil is still wet",
+        "droopy and the pot feels heavy",
+        "leaves curling down and looking sad"
+      ],
+      "symptoms": [
+        "drooping leaves that feel FIRM/swollen and curl down from the stem",
+        "medium stays wet; pot feels heavy long after watering",
+        "can yellow and stunt growth as roots suffocate"
+      ],
+      "likely_causes": [
+        "watering too OFTEN (not letting the medium dry back)",
+        "poor drainage / dense, water-holding medium",
+        "pot too big for the plant; cool, humid conditions slowing water use"
+      ],
+      "confused_with": [
+        "underwatering",
+        "nitrogen-deficiency",
+        "nitrogen-toxicity",
+        "root-rot",
+        "heat-stress"
+      ],
+      "differentiators": [
+        {
+          "vs": "underwatering",
+          "tell": "Check the medium: overwatering = WET and pot HEAVY, leaves firm/swollen; underwatering = DRY and pot LIGHT, leaves limp/papery. Droop alone can't tell them apart."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Overwatering yellowing comes WITH droop and a constantly-wet medium; N-def yellowing tracks feeding/age on a normally-watered plant."
+        },
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "The claw is leaf TIPS curling under on dark-green leaves; overwatering droops the WHOLE leaf and pairs with a wet medium."
+        },
+        {
+          "vs": "root-rot",
+          "tell": "Root rot is where chronic overwatering has gone — brown, soft, foul-smelling roots. Overwatering is the cause; root rot is the damage."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Heat curls leaf edges UP and eases when it cools; overwatering droop tracks a wet medium regardless of temperature."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the medium wet and the pot heavy right now, or dry and light?",
+        "How often are you watering, and does the pot have drainage holes?"
+      ],
+      "fix": "Let the medium dry back before watering again, and water on plant demand (pot weight) rather than a schedule. Improve drainage/airflow and match pot size to the plant. If roots are already brown and slimy, treat it as root rot.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "underwatering",
+      "name": "Underwatering",
+      "category": "watering",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "leaves drooping and the soil is bone dry",
+        "wilting and the pot feels really light",
+        "my plant is drooping and wilting",
+        "limp lifeless leaves",
+        "leaves perk up fast after I water"
+      ],
+      "symptoms": [
+        "drooping leaves that feel LIMP, thin, papery, brittle",
+        "medium dry and light; may crack or pull away from the pot",
+        "perks up within hours of watering"
+      ],
+      "likely_causes": [
+        "not watering enough / letting the medium go bone dry",
+        "medium gone hydrophobic (water runs down the sides, not into the root ball)",
+        "plant outgrew its pot and drinks faster than expected"
+      ],
+      "confused_with": [
+        "overwatering",
+        "heat-stress",
+        "nutrient-burn"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Check the medium: underwatering = DRY, pot LIGHT, leaves limp/papery; overwatering = WET, pot HEAVY, leaves firm/swollen."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Heat wilt curls edges up and recovers when it cools even with moisture present; underwatering recovers only after you actually water."
+        },
+        {
+          "vs": "nutrient-burn",
+          "tell": "Chronic dryness can crisp leaf edges like nute burn — but the medium is bone dry and the pot is light, versus a salt problem you'd see on a normally-watered plant."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the medium dry and the pot noticeably light?",
+        "When you water thoroughly, does it perk back up within a few hours?"
+      ],
+      "fix": "Water slowly and thoroughly until you get a little runoff, re-wetting a hydrophobic medium gradually (several passes). Then water on demand by pot weight. If the plant has outgrown its container, plan to up-pot.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "root-rot",
+      "name": "Root Rot",
+      "category": "watering",
+      "stage": [
+        "any"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "roots turning brown and slimy",
+        "smells bad in the res / rootzone",
+        "plant wilting even though roots are in water",
+        "brown mushy roots"
+      ],
+      "symptoms": [
+        "roots turn brown/tan, soft, slimy (healthy roots are white and firm)",
+        "foul, swampy smell from the medium or reservoir",
+        "wilting, yellowing, and stunting despite adequate water"
+      ],
+      "likely_causes": [
+        "oxygen-starved roots from chronic overwatering / poor drainage",
+        "warm, stagnant reservoir in hydro (low dissolved oxygen)",
+        "pathogens (e.g. Pythium) taking hold in wet, low-oxygen roots"
+      ],
+      "confused_with": [
+        "overwatering",
+        "underwatering",
+        "nitrogen-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering droop with still-white firm roots is recoverable by drying back; once roots are brown, soft, and smell, it has progressed to root rot."
+        },
+        {
+          "vs": "underwatering",
+          "tell": "In hydro, wilting while the roots sit IN water points to a root problem, not thirst — the opposite of underwatering."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Root rot yellowing comes with wilt and stinking brown roots; a plain N deficiency has healthy white roots."
+        }
+      ],
+      "clarifying_questions": [
+        "What color and texture are the roots — white and firm, or brown and slimy?",
+        "Is there a foul smell, and how warm is your reservoir or medium?"
+      ],
+      "fix": "This can kill the plant, so act promptly: improve oxygen to the roots (dry back an overwatered medium; cool and aerate a hydro reservoir), trim away mushy brown roots, and clean the system. Beneficial root inoculants can help re-establish healthy roots.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "heat-stress",
+      "name": "Heat Stress",
+      "category": "environment",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "leaves cupping/tacoing up at the edges",
+        "leaves curling up like a canoe",
+        "top leaves curling up near the light",
+        "plant droops when it's hot"
+      ],
+      "symptoms": [
+        "leaf edges curl/cup UPWARD (\"tacoing\"/\"canoeing\")",
+        "worst on leaves nearest the lamp or in the hottest spot",
+        "wilting during lights-on/heat; in flower can trigger foxtailing"
+      ],
+      "likely_causes": [
+        "canopy temperature too high (roughly >85-90 F / >30 C)",
+        "lamp too close / poor ventilation / hot tent",
+        "outdoor heat wave"
+      ],
+      "confused_with": [
+        "overwatering",
+        "underwatering",
+        "nutrient-burn",
+        "light-burn",
+        "nitrogen-toxicity"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Heat curls leaf EDGES up and eases as it cools; overwatering droops the whole leaf down and tracks a wet medium."
+        },
+        {
+          "vs": "underwatering",
+          "tell": "Heat tacoing can occur with a moist medium and recovers on cooling; underwatering needs actual watering to recover."
+        },
+        {
+          "vs": "nutrient-burn",
+          "tell": "Heat is upward edge-curl tied to temperature/lamp distance; nute burn is crispy brown tips tied to feeding strength."
+        },
+        {
+          "vs": "light-burn",
+          "tell": "They overlap near the lamp and often co-occur; heat = upward curl driven by temperature, light burn = bleaching driven by raw intensity/distance."
+        },
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "Direction is the tell: heat curls edges UP; the nitrogen claw curls leaf tips DOWN on dark-green leaves."
+        }
+      ],
+      "clarifying_questions": [
+        "What's the temperature at canopy height during lights-on?",
+        "Is it worst on the leaves closest to the light?"
+      ],
+      "fix": "Bring canopy temperature down: raise/dim the lamp, add airflow or exhaust, or cool the space. Outdoors, provide afternoon shade and water. In flower, easing heat also prevents heat-driven foxtailing.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "humidity-high",
+      "name": "Humidity Too High (Mold Risk)",
+      "category": "environment",
+      "stage": [
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "humidity is really high in my tent",
+        "worried about mold in flower",
+        "condensation and damp air",
+        "buds staying damp"
+      ],
+      "symptoms": [
+        "persistently high RH (condensation, slow drying, damp canopy)",
+        "soft, lush growth; poor transpiration",
+        "conditions that invite bud rot and powdery mildew, especially in dense late flower"
+      ],
+      "likely_causes": [
+        "RH too high for the stage (flowering wants lower RH than veg)",
+        "poor airflow/ventilation; overcrowded canopy",
+        "large day/night temperature swings causing condensation"
+      ],
+      "confused_with": [
+        "bud-rot",
+        "powdery-mildew"
+      ],
+      "differentiators": [
+        {
+          "vs": "bud-rot",
+          "tell": "High humidity is the CONDITION; bud rot is the resulting infection (grey rot from inside the bud). If it's just damp air with no rot yet, you're preventing, not treating."
+        },
+        {
+          "vs": "powdery-mildew",
+          "tell": "High humidity plus poor airflow ENABLES powdery mildew (white surface dust); the humidity itself is the risk factor, the mildew is the disease."
+        }
+      ],
+      "clarifying_questions": [
+        "What's your RH and what stage/week are you in?",
+        "How's your airflow and day-vs-night temperature difference?"
+      ],
+      "fix": "Lower RH for the stage (flowering runs drier than veg) with better ventilation, a dehumidifier, and canopy airflow; thin dense foliage and reduce temperature swings. This is mainly about preventing mold before it starts.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "humidity-low",
+      "name": "Humidity Too Low / False-Deficiency from Low RH",
+      "category": "environment",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "air is really dry in my grow",
+        "leaves clawing and crisping but feeding is fine",
+        "seedlings/clones struggling in dry air",
+        "looks like a deficiency but nothing helps"
+      ],
+      "symptoms": [
+        "leaf edges curl/crisp and plants look stressed despite correct feeding and pH",
+        "increased water use / faster dry-back",
+        "seedlings and clones struggle to establish in very dry air"
+      ],
+      "likely_causes": [
+        "RH too low for the stage (seedlings/veg want more humidity)",
+        "heat and strong airflow drying the canopy",
+        "arid climate / winter indoor heating"
+      ],
+      "confused_with": [
+        "nutrient-burn",
+        "calcium-deficiency",
+        "spider-mites"
+      ],
+      "differentiators": [
+        {
+          "vs": "nutrient-burn",
+          "tell": "If feeding strength and pH are correct but leaves still crisp, suspect low RH driving the plant to overdrink — raising humidity resolves the 'burn' without changing the feed."
+        },
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Very low RH slows transpiration-driven calcium movement and mimics a calcium problem; check RH before dosing cal-mag."
+        },
+        {
+          "vs": "spider-mites",
+          "tell": "Low RH doesn't just fake deficiencies, it also favors spider mites — rule out stippling/webbing under a loupe before blaming humidity alone."
+        }
+      ],
+      "clarifying_questions": [
+        "What's your RH for the current stage?",
+        "Are feeding strength and pH already dialed in?"
+      ],
+      "fix": "Raise RH toward the stage target (higher for seedlings/veg) with a humidifier, less aggressive airflow, or a humidity dome for young plants. Correct the environment before adding nutrients you don't actually need.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "light-burn",
+      "name": "Light Burn / Light Too Close",
+      "category": "light",
+      "stage": [
+        "veg",
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "top leaves yellowing near the light",
+        "leaves closest to the lamp bleaching white",
+        "tops going pale but bottoms are fine",
+        "bud leaves bleaching at the top"
+      ],
+      "symptoms": [
+        "yellowing/bleaching on the UPPER leaves and bud tops closest to the lamp",
+        "affected leaves often stay stiff and don't wilt",
+        "sharp cutoff by distance — lower/shaded growth stays green"
+      ],
+      "likely_causes": [
+        "lamp too close / intensity too high for the plant",
+        "high-power LED run near max without CO2",
+        "plant grew up into the light"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "nutrient-burn",
+        "heat-stress"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Direction is the tell: light burn yellows/bleaches the TOP nearest the lamp; N deficiency yellows from the BOTTOM up. Light-burned leaves also tend to stay firm rather than droop."
+        },
+        {
+          "vs": "nutrient-burn",
+          "tell": "Light burn tracks distance from the lamp (bleached tops); nute burn tracks feeding strength (crispy tips across the plant)."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "They often co-occur near the lamp — light burn is bleaching from raw intensity, heat stress is upward edge-curl from temperature. Check whether it's mainly color (light) or leaf shape/temperature (heat)."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the yellowing only on the leaves closest to the light while lower growth is fine?",
+        "How far is the lamp from the canopy, and what wattage/type?"
+      ],
+      "fix": "Raise the lamp or dim its intensity so the top canopy isn't overexposed (check the manufacturer's hang-height/PPFD guidance). Bleached leaves won't recover their color; the goal is to stop the spread on new growth.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "insufficient-light",
+      "name": "Insufficient Light (Stretchy / Airy)",
+      "category": "light",
+      "stage": [
+        "seedling",
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "plant getting tall and stretchy",
+        "long gaps between the leaves",
+        "seedling leggy and falling over",
+        "buds airy and loose"
+      ],
+      "symptoms": [
+        "long internodes / stretchy, leggy growth reaching for light",
+        "thin stems; pale, sparse foliage",
+        "loose, airy, low-density buds in flower"
+      ],
+      "likely_causes": [
+        "light too weak or too far from the canopy",
+        "too few hours of light",
+        "plants shaded / packed together"
+      ],
+      "confused_with": [
+        "early-flower-stretch",
+        "nitrogen-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "early-flower-stretch",
+          "tell": "A burst of stretch in the first ~2-3 weeks of flower is NORMAL; ongoing legginess with thin stems and wide leaf gaps in veg (or the whole plant reaching) points to too little light."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Insufficient light stretches the plant and thins growth; N deficiency yellows lower leaves without the exaggerated spacing."
+        }
+      ],
+      "clarifying_questions": [
+        "What light are you running and how far from the canopy?",
+        "Is the plant stretching evenly toward the light, or just yellowing?"
+      ],
+      "fix": "Increase usable light: move the lamp closer (within safe range), upgrade output, or extend the photoperiod for the stage. Support floppy stems and consider gentle training to even the canopy. Existing stretch stays; new growth tightens up.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "spider-mites",
+      "name": "Spider Mites",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "tiny spots all over the leaves",
+        "little white/yellow dots and some webbing",
+        "fine webs between the leaves and buds",
+        "tiny moving specks under the leaves"
+      ],
+      "symptoms": [
+        "uniform fine STIPPLING (tiny pale/yellow dots) across the leaf, spreading upward from lower leaves",
+        "fine WEBBING between leaves/branches as populations grow",
+        "tiny moving dots on leaf undersides; heavy leaves bronze and dry"
+      ],
+      "likely_causes": [
+        "arrived on clones, reused soil, or from outdoors/pets",
+        "hot, dry conditions accelerating reproduction (>80 F, <50% RH)",
+        "stressed plants and dusty foliage"
+      ],
+      "confused_with": [
+        "thrips",
+        "nitrogen-deficiency",
+        "humidity-low"
+      ],
+      "differentiators": [
+        {
+          "vs": "thrips",
+          "tell": "Mites = uniform stippling + eventual fine webbing, no black specks; thrips = irregular SILVERY streaks + black frass and NO webbing. Webbing is exclusive to mites."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Mite damage is countless tiny discrete dots (and dots move under a loupe); a deficiency is smooth areas of yellowing following leaf age, not speckling."
+        },
+        {
+          "vs": "humidity-low",
+          "tell": "Low RH favors mites, so confirm with a loupe: actual stippling + moving specks means mites, not just dry-air stress."
+        }
+      ],
+      "clarifying_questions": [
+        "Under a loupe on the leaf undersides, do you see tiny moving dots or fine webbing?",
+        "How hot and dry is your space, and did you recently add clones?"
+      ],
+      "fix": "Act fast — mites explode in hot, dry rooms and can overrun a grow. Lower temperature/raise RH to slow them, treat leaf undersides on a repeat schedule to catch newly hatched mites, and isolate affected plants. Heavy infestations are serious; predatory mites are an effective option indoors.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "Utah State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "thrips",
+      "name": "Thrips",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "silvery streaks on the leaves",
+        "shiny scratched-up patches like dried spit",
+        "tiny black specks on the leaves",
+        "little fast bugs on new growth"
+      ],
+      "symptoms": [
+        "irregular SILVERY/bronze streaks and patches (collapsed, air-filled cells)",
+        "tiny black FRASS specks near the feeding areas",
+        "slender fast-moving insects; damage favors new growth, buds, tender tissue; NO webbing"
+      ],
+      "likely_causes": [
+        "arrived on clones, soil, tools, or blew in outdoors",
+        "warm conditions and dense foliage",
+        "larvae on leaf undersides; pupae in the medium (why they keep returning)"
+      ],
+      "confused_with": [
+        "spider-mites",
+        "nitrogen-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "spider-mites",
+          "tell": "Thrips = irregular silvery streaks with black frass and no webbing; mites = uniform stippling with fine webbing and no frass."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Thrips damage is random shiny scarring with black specks concentrated on new growth; a deficiency is even yellowing tied to leaf age, no metallic sheen or frass."
+        }
+      ],
+      "clarifying_questions": [
+        "Are there tiny black specks (frass) near the silvery marks?",
+        "Is the damage on the newest growth, and do you see slender fast-moving insects under a loupe?"
+      ],
+      "fix": "Confirm with the silver-streak + black-frass combo, then treat on a repeat schedule (larvae keep hatching, and pupae hide in the medium). Blue sticky traps help monitor; predatory mites/insects work indoors. Scarred leaves stay marked — watch that NEW growth stays clean.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "University of Maryland Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "fungus-gnats",
+      "name": "Fungus Gnats",
+      "category": "pest",
+      "stage": [
+        "seedling",
+        "veg"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "little black flies around the soil",
+        "gnats flying up when I water",
+        "small flies crawling on the medium",
+        "seedlings stalling with flies around them"
+      ],
+      "symptoms": [
+        "small dark flies at the medium surface and around the pots",
+        "tiny larvae (clear/white with dark heads) in the top layer of wet medium",
+        "larvae feed on fine roots — seedlings/young plants stall or droop"
+      ],
+      "likely_causes": [
+        "consistently wet topsoil / overwatering",
+        "poor drainage and rich, damp organic medium",
+        "arrived in reused or contaminated soil"
+      ],
+      "confused_with": [
+        "overwatering",
+        "thrips",
+        "root-rot"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Gnats are a SYMPTOM of a chronically wet medium — the flies confirm the surface stays too wet. Fix the watering and you starve the gnats."
+        },
+        {
+          "vs": "thrips",
+          "tell": "Gnats fly around the SOIL and their larvae are in the medium; thrips damage is on LEAVES (silvery streaks + frass). Different location entirely."
+        },
+        {
+          "vs": "root-rot",
+          "tell": "Both hit roots in wet conditions, but gnats leave visible flies/larvae at the surface, while root rot is brown, slimy, foul-smelling roots."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the flies at the soil surface (gnats) or is the damage up on the leaves?",
+        "How wet does your topsoil stay between waterings?"
+      ],
+      "fix": "Let the top of the medium dry out between waterings — that alone breaks the cycle. Add yellow sticky traps for adults and a larvae-targeting treatment (e.g. BTi/'mosquito bits') for the soil; a dry topsoil layer or covering helps prevent re-laying.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "aphids",
+      "name": "Aphids",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "clusters of little bugs on the stems",
+        "sticky stuff on the leaves",
+        "tiny green/black bugs on new growth",
+        "ants running up the plant"
+      ],
+      "symptoms": [
+        "soft-bodied insects clustered on stems, growth tips, and leaf undersides",
+        "sticky honeydew on leaves (can grow black sooty mold)",
+        "curled/distorted new growth; white cast skins; ants 'farming' them"
+      ],
+      "likely_causes": [
+        "blew in or arrived on new plants",
+        "tender, over-fertilized (high-N) growth attracts them",
+        "outdoor exposure; ants protecting colonies"
+      ],
+      "confused_with": [
+        "spider-mites",
+        "thrips"
+      ],
+      "differentiators": [
+        {
+          "vs": "spider-mites",
+          "tell": "Aphids are visible bugs in clusters plus sticky honeydew; mites are near-microscopic with stippling and webbing, no stickiness."
+        },
+        {
+          "vs": "thrips",
+          "tell": "Aphids cluster and leave sticky honeydew; thrips leave dry silvery streaks with black frass and are slender/fast."
+        }
+      ],
+      "clarifying_questions": [
+        "Do you see clustered soft bugs and any sticky residue on the leaves?",
+        "Are there ants on the plant, and is it worst on new growth?"
+      ],
+      "fix": "Knock down populations by rinsing/wiping, then treat undersides and growth tips on a repeat schedule; control ants that protect them. Ladybugs/lacewings help outdoors. Easing high-nitrogen feeding makes growth less attractive.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "University of Maryland Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "powdery-mildew",
+      "name": "Powdery Mildew",
+      "category": "disease",
+      "stage": [
+        "any"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "white powder on the leaves",
+        "looks like flour or powdered sugar on top of the leaves",
+        "white patches spreading on the leaves",
+        "white dust that wipes off"
+      ],
+      "symptoms": [
+        "flat white/grey powdery coating on the leaf SURFACE (like flour)",
+        "starts as patches, spreads to cover leaves; favors poor airflow",
+        "wipes/rubs off (leaves a smear); can reach buds in bad cases"
+      ],
+      "likely_causes": [
+        "high or unstable humidity with poor air circulation",
+        "crowded canopy / stagnant air",
+        "spores introduced and given the right conditions"
+      ],
+      "confused_with": [
+        "trichome-frost",
+        "bud-rot",
+        "spider-mites"
+      ],
+      "differentiators": [
+        {
+          "vs": "trichome-frost",
+          "tell": "Under a loupe, mildew is a flat dust that lies ON the surface and wipes off; trichomes are 3D structures (a stalk with a bulbous head), sticky/sparkly, and don't rub away as powder. This is the reassurance/panic case — check before treating."
+        },
+        {
+          "vs": "bud-rot",
+          "tell": "Powdery mildew is a surface coating you can see from outside; bud rot grows from INSIDE the bud (grey, mushy core) and is found by breaking the cola open."
+        },
+        {
+          "vs": "spider-mites",
+          "tell": "Mildew is a powdery film; mite webbing is fine THREADS with tiny moving dots. Different texture, different cause."
+        }
+      ],
+      "clarifying_questions": [
+        "Does the white wipe off as a dust, or is it sparkly/sticky and structured under a loupe?",
+        "Is it on leaf surfaces (mildew) or inside the buds (rot), and how's your humidity/airflow?"
+      ],
+      "fix": "Treat it as a mold to control, not ignore. Improve airflow and lower humidity, remove badly affected leaves, and apply an appropriate mildew treatment early before it reaches buds. Mold on cannabis is a consumption concern, so don't smoke visibly mildewed flower.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "bud-rot",
+      "name": "Bud Rot / Botrytis (Grey Mold)",
+      "category": "disease",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "critical",
+      "is_normal": false,
+      "user_phrases": [
+        "inside of the bud is grey and mushy",
+        "bud rotting from the inside",
+        "leaves on the bud suddenly went brown/dead",
+        "fuzzy grey mold in the cola"
+      ],
+      "symptoms": [
+        "grey/brown fuzzy rot developing INSIDE dense buds, spreading outward",
+        "core goes mushy/slimy; a small leaf on the bud may yellow/die as an early tell",
+        "affected bud material crumbles to grey-brown; found by opening the cola"
+      ],
+      "likely_causes": [
+        "high humidity + poor airflow in dense late-flower buds",
+        "moisture trapped in thick colas; cool, damp conditions",
+        "rain/dew on outdoor buds"
+      ],
+      "confused_with": [
+        "powdery-mildew",
+        "natural-late-flower-fade",
+        "trichome-frost"
+      ],
+      "differentiators": [
+        {
+          "vs": "powdery-mildew",
+          "tell": "Bud rot is INSIDE the bud (grey mushy core, found by breaking it open); mildew is a white dust ON the surface. Rot destroys from within; mildew coats from without."
+        },
+        {
+          "vs": "natural-late-flower-fade",
+          "tell": "Fade is healthy yellowing of FAN leaves across the canopy; bud rot is a single small leaf on a bud dying while the bud beneath turns grey and soft. Check the bud interior."
+        },
+        {
+          "vs": "trichome-frost",
+          "tell": "Frost is sparkly, sticky, and uniform on healthy buds; rot is dull grey fuzz with mushy, discolored tissue. If it smells musty and crumbles, it's rot."
+        }
+      ],
+      "clarifying_questions": [
+        "When you gently open a suspect bud, is the inside grey/brown and mushy?",
+        "What week and what's your humidity/airflow (or recent rain, if outdoors)?"
+      ],
+      "fix": "This is serious and a consumption-safety issue — moldy cannabis should not be smoked. Remove affected buds immediately (cutting well past the rot into clean tissue), improve airflow and drop humidity, and check surrounding buds daily. In damp late flower, weigh harvesting sooner to avoid losing more.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "damping-off",
+      "name": "Damping Off (Seedlings)",
+      "category": "disease",
+      "stage": [
+        "seedling"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "seedling fell over and the stem pinched at the base",
+        "seedling stem went thin and dark at the soil line",
+        "sprout keeled over and died",
+        "seedlings flopping over"
+      ],
+      "symptoms": [
+        "stem pinches/thins and darkens right at the soil line",
+        "seedling topples over and collapses, often suddenly",
+        "usually fatal once the stem has pinched"
+      ],
+      "likely_causes": [
+        "overly wet medium + poor airflow (fungal)",
+        "high humidity and cool, soggy conditions",
+        "contaminated medium; overwatering young seedlings"
+      ],
+      "confused_with": [
+        "overwatering",
+        "seedling-slowness",
+        "root-rot"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Overwatered seedlings droop but the stem stays intact; damping off shows a pinched, thinned, darkened stem AT the soil line and the seedling falls over."
+        },
+        {
+          "vs": "seedling-slowness",
+          "tell": "Slow-but-healthy seedlings have a firm stem and green cotyledons; damping off is a collapsing stem — sudden death, not slow progress."
+        },
+        {
+          "vs": "root-rot",
+          "tell": "Damping off is a fungal collapse at the stem base of a seedling; root rot is brown, slimy roots and can hit plants at any age."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the stem pinched/thin and dark right at the soil line?",
+        "How wet is the medium and how humid/cool is the space?"
+      ],
+      "fix": "Damping off is usually fatal for the affected seedling — focus on protecting the rest: ease off water so the surface dries, improve airflow, avoid soggy cool conditions, and start in a clean, well-draining medium. Don't overwater the survivors.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "hermaphroditism",
+      "name": "Hermaphroditism / \"Nanners\"",
+      "category": "physiological",
+      "stage": [
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "yellow banana things in my buds",
+        "little pollen sacs showing up",
+        "female plant growing male parts",
+        "worried my buds are going to seed"
+      ],
+      "symptoms": [
+        "yellow/green elongated \"bananas\" (stamens) emerging from within female buds",
+        "or round, ball/grape-like pollen sacs at the nodes among the flowers",
+        "risk of self-pollination and seeded buds; lowers potency/yield"
+      ],
+      "likely_causes": [
+        "stress (light leak in the dark period, heat, big temperature swings, major plant problems)",
+        "light burn / lamp too close",
+        "genetic instability (some strains herm readily)"
+      ],
+      "confused_with": [
+        "light-leak-flower"
+      ],
+      "differentiators": [
+        {
+          "vs": "light-leak-flower",
+          "tell": "Nanners/pollen sacs are the SYMPTOM; a light leak in the dark period is one of the most common CAUSES. Seeing the male parts means finding and killing the stressor (often a light leak) matters now."
+        }
+      ],
+      "clarifying_questions": [
+        "Are you seeing elongated yellow 'bananas' in the buds, or round ball-like sacs at the nodes?",
+        "Any light reaching the tent during dark, recent heat spikes, or other stress?"
+      ],
+      "fix": "Inspect daily and act fast — nanners release pollen immediately and can seed a whole room. Remove the male parts with tweezers (mist first to neutralize pollen) or isolate/remove the plant if it's widespread, then fix the stressor (check for light leaks first). Note: nanners are elongated stamens; don't confuse normal white pistils with male parts.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "foxtailing",
+      "name": "Foxtailing",
+      "category": "physiological",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "buds growing weird towers on top",
+        "spiky new growth sticking out of the buds",
+        "buds look like fox tails",
+        "elongated pointy bud growth"
+      ],
+      "symptoms": [
+        "calyxes stack into elongated spires/towers instead of filling into round buds",
+        "stress type: appears on the TOP buds nearest the light/heat, often with leaf tacoing or bleaching",
+        "genetic type: appears uniformly across the whole plant, gradually, on an otherwise healthy plant"
+      ],
+      "likely_causes": [
+        "heat stress (canopy roughly >85-90 F / >30 C)",
+        "light too intense / lamp too close",
+        "genetics (some sativa/heirloom lines foxtail naturally)"
+      ],
+      "confused_with": [
+        "heat-stress",
+        "light-burn"
+      ],
+      "differentiators": [
+        {
+          "vs": "heat-stress",
+          "tell": "If foxtails appear only on the TOP buds near the heat and come with upward leaf-curl, it's stress-driven; correcting temperature is the fix. Whole-plant, uniform foxtailing on a healthy plant is genetic and harmless."
+        },
+        {
+          "vs": "light-burn",
+          "tell": "Stress foxtailing often rides along with bleaching on the top colas (light too close); genetic foxtailing has no bleaching or other stress signs."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the foxtailing only on the top buds nearest the light, or evenly across the whole plant?",
+        "Any bleaching or leaf tacoing up top, and what's your canopy temperature/lamp distance?"
+      ],
+      "fix": "Decide genetic vs stress first. Genetic (uniform, healthy plant): nothing to fix. Stress (top-only + heat/light signs): lower canopy temperature and/or raise/dim the lamp. Existing foxtails stay; the goal is to stop new stress growth.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Some breeders intentionally select for foxtailing, so the trait alone isn't necessarily a problem; the genetic-vs-stress read (uniform/healthy vs top-only/stressed) is what matters."
+    },
+    {
+      "id": "light-leak-flower",
+      "name": "Light Leak in Flower",
+      "category": "physiological",
+      "stage": [
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "light getting into my tent during dark",
+        "worried about a light leak in flower",
+        "buds throwing single leaves / looking weird after a light leak",
+        "timer glitched and lights came on at night"
+      ],
+      "symptoms": [
+        "photoperiod plants exposed to light during the dark period",
+        "can trigger hermaphroditism (nanners/pollen sacs) and seeded buds",
+        "can cause re-vegging signs (single-blade leaves, airy/odd new growth) and general stress"
+      ],
+      "likely_causes": [
+        "tent zippers, vents, or equipment LEDs leaking light into the dark period",
+        "timer failure / lights on at the wrong time",
+        "outdoor plants near streetlights or ambient light"
+      ],
+      "confused_with": [
+        "hermaphroditism",
+        "insufficient-light"
+      ],
+      "differentiators": [
+        {
+          "vs": "hermaphroditism",
+          "tell": "Light leak is the CAUSE; herm (nanners/sacs) is one of its downstream effects. If you find nanners, checking for a dark-period light leak is the first diagnostic step."
+        },
+        {
+          "vs": "insufficient-light",
+          "tell": "Insufficient light causes stretchy, airy growth from too LITTLE light overall; a light leak is UNWANTED light during the dark period causing herm/re-veg — opposite problems."
+        }
+      ],
+      "clarifying_questions": [
+        "Is any light reaching the plants during their dark period (zipper gaps, vents, equipment LEDs, a timer glitch)?",
+        "Are you seeing nanners/pollen sacs or odd single-blade re-veg growth?"
+      ],
+      "fix": "Make the dark period truly dark: seal tent gaps, cover or remove stray equipment LEDs, and verify the timer. Photoperiod plants need uninterrupted darkness in flower. Then check for any herm/re-veg the leak already triggered and manage that separately.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "transplant-shock",
+      "name": "Transplant Shock",
+      "category": "physiological",
+      "stage": [
+        "seedling",
+        "veg"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "plant drooping right after I repotted it",
+        "wilted and sad after transplant",
+        "stalled out after moving to a bigger pot",
+        "looks rough a day after up-potting"
+      ],
+      "symptoms": [
+        "wilting/drooping and a growth pause in the day or two AFTER transplanting",
+        "temporary; typically recovers within a few days if roots weren't badly damaged",
+        "worse if roots were torn or the plant was root-bound"
+      ],
+      "likely_causes": [
+        "root disturbance during transplant",
+        "up-potting a root-bound plant (roots circling/matted)",
+        "big environmental change at the same time (light/temperature)"
+      ],
+      "confused_with": [
+        "overwatering",
+        "underwatering",
+        "heat-stress"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Timing is the tell — shock appears right after a transplant and recovers on its own; overwatering droop tracks a persistently wet medium unrelated to repotting."
+        },
+        {
+          "vs": "underwatering",
+          "tell": "Shock recovers within days without a moisture problem; underwatering only recovers after you actually water a dry, light pot."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Shock is tied to the recent transplant; heat stress tracks temperature/lamp distance and eases when it cools."
+        }
+      ],
+      "clarifying_questions": [
+        "Did you just transplant, and was the plant root-bound or were roots disturbed?",
+        "Is the medium moisture reasonable (not soaked, not bone dry)?"
+      ],
+      "fix": "Usually just needs time and stable, gentle conditions: keep the medium appropriately moist (not soaked), avoid stacking other stressors, and let it settle for a few days. Transplant carefully next time and up-pot before the plant gets root-bound.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "poor-germination",
+      "name": "Seeds Won't Germinate / Poor Germination",
+      "category": "germination",
+      "stage": [
+        "seedling"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "seeds aren't sprouting",
+        "seed cracked but nothing is happening",
+        "taproot came out but it stalled",
+        "none of my seeds popped"
+      ],
+      "symptoms": [
+        "seeds fail to crack/sprout within the expected few days",
+        "taproot emerges but stalls or rots",
+        "sprout fails to push up and open its cotyledons"
+      ],
+      "likely_causes": [
+        "medium too wet (rot) or too dry (taproot dries out)",
+        "temperature too cold or too hot for germination (want warm, ~70-80 F)",
+        "planted too deep, seed handled/taproot touched, or old/low-viability seeds"
+      ],
+      "confused_with": [
+        "damping-off",
+        "seedling-slowness"
+      ],
+      "differentiators": [
+        {
+          "vs": "damping-off",
+          "tell": "Poor germination is failure to sprout in the first place; damping off is a seedling that DID sprout then collapsed at a pinched stem base."
+        },
+        {
+          "vs": "seedling-slowness",
+          "tell": "If it has already sprouted and is just growing slowly, that's often normal early sluggishness, not a germination failure."
+        }
+      ],
+      "clarifying_questions": [
+        "How long has it been, and how warm and how moist is the medium?",
+        "How deep did you plant, and are the seeds fresh or older?"
+      ],
+      "fix": "Aim for consistently warm, lightly-moist-not-soggy conditions and shallow planting (roughly a knuckle deep); avoid touching the taproot. Give it a few days of patience. Old seeds germinate slower and less reliably. Don't let the medium swing to bone dry or waterlogged.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "natural-late-flower-fade",
+      "name": "Natural Late-Flower Fade",
+      "category": "stage-normal",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "leaves yellowing near harvest",
+        "plant fading at the end",
+        "should I be worried leaves are dying in late flower",
+        "fan leaves going yellow as buds finish"
+      ],
+      "symptoms": [
+        "whole-canopy yellowing in the final ~2 weeks",
+        "fan leaves fade and drop as buds finish"
+      ],
+      "likely_causes": [
+        "normal senescence — the plant pulling stored nutrients into the buds"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "bud-rot"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "If it's the last couple weeks and buds look done/ripening, this is normal and even desirable; a problem would have started earlier and faster."
+        },
+        {
+          "vs": "bud-rot",
+          "tell": "Fade is healthy yellowing of FAN leaves across the canopy; if instead a single small leaf ON a bud dies while the bud goes grey/mushy inside, that's rot, not fade — open the bud to check."
+        }
+      ],
+      "clarifying_questions": [
+        "What week of flower are you in?",
+        "How do the trichomes look — clear, cloudy, amber?"
+      ],
+      "fix": "Usually nothing — this is the plant finishing. Some growers lean into it (a light flush). Watch trichomes for harvest timing rather than the leaves.",
+      "escalate": false,
+      "reassurance": "This is normal at the end of flower — the plant is moving stored nutrients into the buds. It's not a deficiency to fix.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "trichome-frost",
+      "name": "Trichome Frost (Mistaken for Mold/Mildew)",
+      "category": "stage-normal",
+      "stage": [
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "white frosty stuff on my buds",
+        "is this mold or trichomes",
+        "sparkly white crystals on the buds",
+        "white coating on the buds, should I worry"
+      ],
+      "symptoms": [
+        "frosty, sparkly, crystalline coating on buds and sugar leaves",
+        "under a loupe: tiny stalks topped with bulbous, glistening heads",
+        "sticky/resinous; strain-specific aroma; uniform across healthy buds"
+      ],
+      "likely_causes": [
+        "normal, desirable resin production — trichomes are where cannabinoids/terpenes are made"
+      ],
+      "confused_with": [
+        "powdery-mildew",
+        "bud-rot"
+      ],
+      "differentiators": [
+        {
+          "vs": "powdery-mildew",
+          "tell": "Trichomes are 3D structures (stalk + bulbous head), sparkly and sticky, and don't wipe off as powder; mildew is a flat, dull, flour-like dust that lies on the surface and rubs off."
+        },
+        {
+          "vs": "bud-rot",
+          "tell": "Frost is on the OUTSIDE, sparkly and healthy; rot is grey, dull, and mushy on the INSIDE of the bud. If it's crystalline and sticky, it's trichomes."
+        }
+      ],
+      "clarifying_questions": [
+        "Under a loupe, is it sparkly with tiny stalk-and-head structures (and sticky), or a flat dull dust that wipes off?",
+        "Is the coating even and sparkly, or dull/powdery in patches?"
+      ],
+      "fix": "Nothing to fix — frosty trichomes are a sign of a healthy, resinous, maturing plant. Use a loupe to read their color (clear/cloudy/amber) for harvest timing.",
+      "escalate": false,
+      "reassurance": "That frosty, sparkly coating is almost certainly trichomes — the resin glands you WANT. Trichomes have a stalk-and-head shape and are sticky; mildew is a flat dust that wipes off. If it's crystalline and sticky, you're looking at good, healthy buds.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "early-flower-stretch",
+      "name": "Early-Flower Stretch (Normal vs Light Problem)",
+      "category": "stage-normal",
+      "stage": [
+        "early-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "plant shooting up fast after flip to 12/12",
+        "stretching a lot in early flower",
+        "is this stretch normal or a problem",
+        "plant doubled in height after switching to flower"
+      ],
+      "symptoms": [
+        "rapid vertical growth in roughly the first 2-3 weeks after flipping to flower",
+        "plant can nearly double or triple in height",
+        "even, vigorous growth with healthy leaves (not thin/leggy from reaching)"
+      ],
+      "likely_causes": [
+        "normal flowering stretch — plants elongate before settling into bud production"
+      ],
+      "confused_with": [
+        "insufficient-light"
+      ],
+      "differentiators": [
+        {
+          "vs": "insufficient-light",
+          "tell": "Normal stretch is vigorous, even growth in the first ~2-3 weeks of flower on a healthy plant; too-little-light stretch is thin, leggy, pale growth reaching toward the lamp and it keeps going instead of settling."
+        }
+      ],
+      "clarifying_questions": [
+        "How long ago did you flip to 12/12?",
+        "Is the growth vigorous and healthy, or thin and reaching toward the light?"
+      ],
+      "fix": "Usually nothing — plan for the height (this is expected). Manage it with light distance and optional gentle training. If growth is thin and leggy rather than vigorous, treat it as a light issue instead.",
+      "escalate": false,
+      "reassurance": "A big height burst in the first couple weeks of flower is normal — plants stretch before they bulk up buds. As long as growth is vigorous and healthy, you're fine; just leave headroom under the light.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "seedling-slowness",
+      "name": "Seedling Slowness (Normal Early Sluggishness)",
+      "category": "stage-normal",
+      "stage": [
+        "seedling"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "my seedling isn't doing much",
+        "seedling seems stuck / growing so slow",
+        "is my seedling okay, it's barely moving",
+        "first week and hardly any growth"
+      ],
+      "symptoms": [
+        "little visible top growth in the first week or two while roots establish",
+        "healthy green cotyledons/first leaves and a firm stem",
+        "growth accelerates once the root system develops"
+      ],
+      "likely_causes": [
+        "normal early establishment — seedlings invest in roots before top growth"
+      ],
+      "confused_with": [
+        "overwatering",
+        "damping-off"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "A slow-but-healthy seedling has a moist-not-soaked medium and firm green growth; an overwatered seedling droops and sits in a constantly-wet medium."
+        },
+        {
+          "vs": "damping-off",
+          "tell": "Slowness is a healthy, firm-stemmed seedling just taking its time; damping off is a collapsing seedling with a pinched, darkened stem at the soil line."
+        }
+      ],
+      "clarifying_questions": [
+        "How does the stem and the first set of leaves look — firm and green?",
+        "How wet is the medium, and how much light is it getting?"
+      ],
+      "fix": "Usually nothing — early seedlings grow slowly while rooting in. Avoid the urge to overwater or overfeed (the most common way to actually hurt them). Give appropriate light and gentle conditions, and it'll pick up.",
+      "escalate": false,
+      "reassurance": "Slow early growth is normal — seedlings put energy into roots first, so the top can look stalled for a week or two. If the stem is firm and the leaves are green, you're fine. Don't overwater or overfeed trying to speed it up.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "when-to-harvest",
+      "name": "When to Harvest (Trichome Reading)",
+      "category": "harvest-cure",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": false,
+      "user_phrases": [
+        "when should I harvest",
+        "are my buds ready to chop",
+        "how do I read trichomes for harvest",
+        "clear vs cloudy vs amber, when do I cut"
+      ],
+      "symptoms": [
+        "deciding harvest timing by trichome color under magnification (buds, not sugar leaves)",
+        "secondary cue: pistils/hairs darkening and curling in",
+        "top colas ripen faster than lower buds"
+      ],
+      "likely_causes": [
+        "trichome maturity: clear = immature; cloudy/milky = peak THC; amber = THC degrading to CBN"
+      ],
+      "confused_with": [
+        "natural-late-flower-fade"
+      ],
+      "differentiators": [
+        {
+          "vs": "natural-late-flower-fade",
+          "tell": "Fading fan leaves are a rough signal that the end is near, but they don't pinpoint the window — read the trichome heads on the buds under magnification for the actual call."
+        }
+      ],
+      "clarifying_questions": [
+        "Do you have a loupe or phone microscope, and what color are most trichome HEADS on the buds — clear, cloudy, or amber?",
+        "What effect are you after — more heady/uplifting or more relaxing/sedative?"
+      ],
+      "fix": "Use 30x+ magnification on the buds (not sugar leaves). Mostly clear = wait. For a balanced result, many harvest when heads are mostly cloudy/milky with some amber; earlier/more-cloudy leans heady, later/more-amber leans sedative. Sample top vs lower canopy, since tops finish first.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "The exact cloudy-to-amber target is a matter of preference and varies by strain (some never make much amber, some go purple). Treat percentage 'rules' as guidelines and fall back on bud appearance for unusual genetics."
+    },
+    {
+      "id": "improper-curing",
+      "name": "Improper Drying/Curing (Hay Smell, Harshness, Jar Mold)",
+      "category": "harvest-cure",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "my buds smell like hay/fresh cut grass",
+        "harsh smoke after drying",
+        "buds dried too fast and smell like grass",
+        "smells like ammonia when I open the jar"
+      ],
+      "symptoms": [
+        "hay/fresh-cut-grass smell and harsh smoke (chlorophyll didn't break down)",
+        "over-dry, crispy buds from drying too fast/hot",
+        "in the jar: ammonia smell = too wet (mold risk); persistent hay smell = too dry / stalled cure"
+      ],
+      "likely_causes": [
+        "drying too fast or too hot (fan aimed at buds, warm/dry space)",
+        "jarring too wet, or not burping — traps moisture (ammonia, mold)",
+        "curing skipped or cut short; poor storage afterward"
+      ],
+      "confused_with": [
+        "bud-rot"
+      ],
+      "differentiators": [
+        {
+          "vs": "bud-rot",
+          "tell": "A hay/grass smell is a chlorophyll/curing problem, not mold. But a musty smell with visible grey/white fuzz inside jarred buds is actual mold — that's a consumption-safety issue, not just a bad cure."
+        }
+      ],
+      "clarifying_questions": [
+        "Did the buds dry fast (a few days) or slowly (a week or so), and at what temperature/RH?",
+        "When you open the jar, is it a grassy hay smell (too dry) or a sharp ammonia smell (too wet)?"
+      ],
+      "fix": "Dry slow and cool (roughly 60-70 F, ~50-60% RH, gentle indirect airflow) until small stems snap rather than bend. Then cure in sealed jars around 58-62% RH, burping daily for the first week or two. Ammonia in the jar means too wet — vent/dry the buds back to avoid mold. A stalled hay smell (too dry) can sometimes be eased with a humidity pack, but terpenes lost to over-drying don't return.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "Colorado State University Extension"
+      ],
+      "confidence_note": "Whether a pre-harvest 'flush' improves smoothness is genuinely debated among growers; the drying/curing method above matters more to hay smell than flushing does."
+    }
+  ]
+}

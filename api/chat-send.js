@@ -30,7 +30,13 @@ import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 import { detectSaveIntent } from "../lib/saveIntent.js";
 import { addLikedStrain } from "../lib/likedStrains.js";
 import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
-import { detectFrame, isProductSettled } from "../lib/frameDetect.js";
+import { detectFrame, isProductSettled, classifyTopic } from "../lib/frameDetect.js";
+import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
+import {
+  CULTIVATION_MODE_PROMPT,
+  CONSUMPTION_SAFETY_PROMPT,
+  AMBIGUOUS_CLARIFIER_PROMPT,
+} from "../prompts/cultivation.js";
 import { fGate, canFireRumi } from "../lib/fGate.js";
 import {
   fetchSessionMemories,
@@ -173,6 +179,7 @@ export async function handler(event) {
 
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
+    let topic = "STRAIN"; // plant-tab topic route (Cultivation Phase 1)
 
     if (tab === "plant") {
       // Liked strains are frame-gated: withhold where name-dropping a saved
@@ -186,6 +193,17 @@ export async function handler(event) {
         liked_strains = data || [];
       }
       systemPrompt = buildPlantPrompt(liked_strains);
+
+      // Topic routing (silent — never surfaced as a mode switch). A strain
+      // name is only checked when a grow cue is present, to catch the
+      // cultivation-about-a-strain fork ("is Blue Dream hard to grow?").
+      const growCueQuick = /\b(grow|growing|flower|yield|seedling|clone|harvest|nute|nutrient|soil|coco|hydro|leaf|leaves|droop|yellow|wilt|curl|mold|mildew|rot|pest|mite|thrip|gnat|aphid|root|water|trichome|deficien|lockout|foxtail|hermie)\b/i.test(userContent);
+      const hasStrainName = growCueQuick ? searchStrains(userContent).length > 0 : false;
+      topic = classifyTopic(userContent, hasStrainName);
+
+      if (topic === "CULTIVATION") systemPrompt += "\n\n" + CULTIVATION_MODE_PROMPT;
+      else if (topic === "CONSUMPTION-SAFETY") systemPrompt += "\n\n" + CONSUMPTION_SAFETY_PROMPT;
+      else if (topic === "AMBIGUOUS") systemPrompt += "\n\n" + AMBIGUOUS_CLARIFIER_PROMPT;
     } else {
       systemPrompt = VIBE_PROMPT;
     }
@@ -197,8 +215,15 @@ export async function handler(event) {
     const memBlock = formatSessionMemoryBlock(memories); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
-    // ── Build user message augmentation (plant tab, frame-gated) ──────
-    if (tab === "plant") {
+    // ── Build user message augmentation (plant tab) ──────────────────
+    if (tab === "plant" && topic === "CULTIVATION") {
+      // Cultivation reference is injected regardless of the relational frame:
+      // someone with a maybe-dying plant needs the facts even in a
+      // friction/grounding moment. The clarifying cluster comes from the
+      // matched issue's curated confused_with, not a noisy neighbor list.
+      const cultBlock = buildCultivationContext(retrieveCultivation(userContent));
+      if (cultBlock) content_augmented = userContent + cultBlock;
+    } else if (tab === "plant" && topic === "STRAIN") {
       // Strain retrieval — only when the frame allows informative content.
       if (fGate("strain_context", frame, confidence)) {
         // Parse stated exclusions once (P0) and thread to BOTH retrieval and
