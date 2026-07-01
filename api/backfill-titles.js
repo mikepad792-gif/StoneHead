@@ -18,6 +18,7 @@
 
 import { errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { stripModelTags } from "../lib/sanitize.js";
 
 const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const AI_MODEL =
@@ -134,10 +135,9 @@ async function generateTopicTitle(msgs) {
     if (!res.ok) return null;
 
     const data = await res.json();
-    let title = data.choices?.[0]?.message?.content?.trim();
-    if (!title) return null;
-
-    title = title.replace(/["']/g, "").replace(/[.?!]+$/, "").slice(0, 60);
+    let title = data.choices?.[0]?.message?.content;
+    // Backstop: strip any leaked tags/scaffolding before cleanup.
+    title = stripModelTags(title).replace(/["']/g, "").replace(/[.?!]+$/, "").slice(0, 60).trim();
     return title || null;
   } catch (e) {
     console.error("generateTopicTitle error:", e.message);
