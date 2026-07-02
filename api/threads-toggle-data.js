@@ -18,13 +18,20 @@ export async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed" });
   }
 
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return jsonResponse(400, { error: "Invalid JSON body" });
+  }
+
   try {
     const user = await authenticateRequest(event);
     if (user.error) {
       return jsonResponse(user.status || 401, { error: user.error });
     }
 
-    const { thread_id, data_opt_in } = JSON.parse(event.body);
+    const { thread_id, data_opt_in } = body;
 
     if (!thread_id) {
       return jsonResponse(400, { error: "thread_id is required" });

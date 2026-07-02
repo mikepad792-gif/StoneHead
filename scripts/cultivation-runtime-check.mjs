@@ -18,16 +18,11 @@
 // Run BOTH checks before deploy: run_eval.py validates the data's match
 // surface; this validates the production selection logic.
 //
-// Note: lib/cultivationSearch.js reads data via `__dirname` (provided by
-// esbuild in the Netlify bundle). Under plain Node ESM that global is absent,
-// so we shim it to the lib directory before importing — same pattern as
-// retrieval-check.mjs.
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-globalThis.__dirname = path.join(scriptsDir, "..", "lib");
 
 const { retrieveCultivation } = await import("../lib/cultivationSearch.js");
 

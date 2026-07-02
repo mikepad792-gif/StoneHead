@@ -4,15 +4,7 @@
 // Asserts on the three canonical messages from the live diagnosis.
 // DO NOT alter the message text — it is the exact text that was diagnosed.
 //
-// Note: lib/strainSearch.js reads data via `__dirname` (provided by esbuild in
-// the Netlify bundle). Under plain Node ESM that global is absent, so we shim it
-// to the lib directory before importing, then dynamic-import the real module.
 import assert from "node:assert";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-globalThis.__dirname = path.join(scriptsDir, "..", "lib");
 
 const { searchStrains, parseConstraints, suggestStrainCorrection } = await import("../lib/strainSearch.js");
 

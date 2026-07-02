@@ -637,18 +637,36 @@ function RecentSessionsSection({ onPinned }) {
 }
 
 function SubscriptionPage() {
-  const { setShowSubscription } = useApp();
+  const { setShowSubscription, loadProfile, addToast } = useApp();
   const [code, setCode] = useState(null); const [expiresAt, setExpiresAt] = useState(null);
   const [paymentUrl, setPaymentUrl] = useState(null); const [generating, setGenerating] = useState(false); const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
   async function generateCode() {
     setGenerating(true);
     try { const data = await apiPost("/api/subscription/generate-code", {}); setCode(data.payment_code); setExpiresAt(data.expires_at); setPaymentUrl(data.payment_url); }
     catch (e) {} finally { setGenerating(false); }
   }
   function copyCode() { if (code) { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); } }
+  // Payment happens on an external page — nothing pushes the new state back
+  // into this client, so refresh on close (when a code was generated this
+  // session) and offer an explicit "I paid" refresh.
+  function handleClose() {
+    if (code) loadProfile();
+    setShowSubscription(false);
+  }
+  async function checkPaid() {
+    setChecking(true);
+    try {
+      const p = await apiGet("/api/profile/get");
+      await loadProfile();
+      if (p.is_subscribed) { setShowSubscription(false); addToast("you're in — no more daily cap"); }
+      else { addToast("not seeing it yet... give it a sec and try again"); }
+    } catch (e) { addToast("couldn't check — try again"); }
+    finally { setChecking(false); }
+  }
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-subscription">
-      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowSubscription(false)}>×</button></div>
+      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={handleClose}>×</button></div>
       <h2>subscribe to Stone Head</h2>
       <p className="sh-sub-price">$8/month — what you see is what you pay</p>
       <p className="sh-sub-desc">unlimited messages, no daily cap. just you and Stone Head, as long as you want.</p>
@@ -661,6 +679,7 @@ function SubscriptionPage() {
           {expiresAt && <p className="sh-code-expires">expires {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
           {paymentUrl && <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="sh-btn-primary sh-payment-link">go to payment page</a>}
           <p className="sh-code-instructions">copy the code, head to the payment page, enter it with your payment info. your account activates automatically.</p>
+          <button className="sh-btn-secondary" onClick={checkPaid} disabled={checking}>{checking ? "checking..." : "I paid — refresh my account"}</button>
         </div>
       )}
     </div></div>

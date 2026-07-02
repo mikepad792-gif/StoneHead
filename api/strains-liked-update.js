@@ -21,13 +21,20 @@ export async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed" });
   }
 
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return jsonResponse(400, { error: "Invalid JSON body" });
+  }
+
   try {
     const user = await authenticateRequest(event);
     if (user.error) {
       return jsonResponse(user.status || 401, { error: user.error });
     }
 
-    const { action, strain_name, strain_type, notes } = JSON.parse(event.body);
+    const { action, strain_name, strain_type, notes } = body;
 
     if (!action || !["add", "remove"].includes(action)) {
       return jsonResponse(400, { error: "action must be 'add' or 'remove'" });

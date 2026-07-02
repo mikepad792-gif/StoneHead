@@ -8,15 +8,7 @@
 //   - the thread titler accepting non-titles (scaffold, code lines,
 //     conversational fragments) and freezing threads on garbage
 //
-// Note: lib/strainSearch.js reads data via `__dirname` (provided by esbuild in
-// the Netlify bundle). Under plain Node ESM that global is absent, so we shim it
-// to the lib directory before importing, then dynamic-import the real modules.
 import assert from "node:assert";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-globalThis.__dirname = path.join(scriptsDir, "..", "lib");
 
 // lib/likedStrains.js imports the supabase client, which insists on env vars
 // at import time. The functions under test never touch the network — dummies
