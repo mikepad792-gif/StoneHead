@@ -150,7 +150,9 @@ export default function App() {
     try { const data = await apiGet("/api/threads/list", { tab: activeTab }); setThreads(data.threads || []); } catch (e) {}
   }
   async function loadMessages(threadId) {
-    try { const data = await apiGet("/api/threads/messages", { thread_id: threadId }); setMessages(data.messages || []); }
+    // Filter out blank rows — an older deploy stored whitespace-only model
+    // returns, and an empty bubble carries no information worth rendering.
+    try { const data = await apiGet("/api/threads/messages", { thread_id: threadId }); setMessages((data.messages || []).filter((m) => m.content && m.content.trim())); }
     catch (e) { addToast("couldn't load messages"); }
   }
   async function checkUsage() {
@@ -207,6 +209,9 @@ export default function App() {
     setLoading(true);
     try {
       const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab: activeTab });
+      // A blank/whitespace reply must never render as an empty bubble — treat
+      // it as a failed send so the user gets the error bubble + retry button.
+      if (!data.reply || !String(data.reply).trim()) throw new Error("empty reply");
       setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString() }]);
       if (data.usage_remaining !== null && data.usage_remaining !== undefined) setUsageRemaining(data.usage_remaining);
       setTimeout(() => loadThreads(), 2000);
