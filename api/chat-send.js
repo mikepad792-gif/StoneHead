@@ -453,6 +453,11 @@ async function callChatModel(aiMessages) {
       messages: aiMessages,
       temperature: AI_TEMPERATURE,
       max_tokens: MAX_TOKENS,
+      // Kill reasoning at the source: the hidden <think>/<ds_safety>
+      // scaffold was eating the output budget (truncation, blank replies)
+      // before the real answer. The sanitizer stays as a backstop for
+      // providers that ignore this.
+      reasoning: { enabled: false },
       // Reduce within-response repetition / stock signature lines.
       // NOTE: these only affect a single response, not across requests —
       // the prompt instruction in prompts/plant.js is the cross-session
