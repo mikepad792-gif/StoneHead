@@ -22,6 +22,7 @@
 // -----------------------------------------------------------------------------
 
 import { supabaseAdmin } from "../lib/supabase.js";
+import { safeEqual } from "../lib/auth.js";
 
 // Duration of a subscription in days. Flagged design decision — see
 // THREAD_4_NOTES.md. Change here if product wants a different period.
@@ -62,7 +63,7 @@ export async function handler(event) {
   const provided =
     event.headers?.["x-callback-secret"] ||
     event.headers?.["X-Callback-Secret"];
-  if (!provided || provided !== expected) {
+  if (!safeEqual(provided, expected)) {
     return err(401, "Invalid callback secret");
   }
 

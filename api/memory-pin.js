@@ -35,6 +35,28 @@ export async function handler(event) {
   try {
     // Mode 2 — promote a session memory into a pinned core memory.
     if (summary && typeof summary === "string" && summary.trim()) {
+      // Cap pinned rows — they're permanent (reflection-immune) and feed the
+      // consolidation prompt, so unbounded inserts are both storage and
+      // prompt-stuffing surface.
+      const { count: pinnedCount } = await supabaseAdmin
+        .from("core_memories")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user_id)
+        .eq("pinned", true);
+      if ((pinnedCount || 0) >= 50) {
+        return errorResponse(400, "pin limit reached (50)");
+      }
+
+      // source_session_id must be a UUID or the insert throws a DB error
+      // (→ 500). A bad id isn't worth rejecting the pin over — the text is
+      // the payload — so just drop the traceability link.
+      const UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const sourceIds =
+        typeof source_session_id === "string" && UUID_RE.test(source_session_id)
+          ? [source_session_id]
+          : [];
+
       const { data, error } = await supabaseAdmin
         .from("core_memories")
         .insert({
@@ -42,7 +64,7 @@ export async function handler(event) {
           text: summary.trim().slice(0, 400),
           pinned: true,
           source: "user",
-          source_session_ids: source_session_id ? [source_session_id] : [],
+          source_session_ids: sourceIds,
         })
         .select("id")
         .single();

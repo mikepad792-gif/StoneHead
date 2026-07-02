@@ -4,7 +4,31 @@ const API_BASE = "";
 const AppContext = createContext(null);
 function useApp() { return useContext(AppContext); }
 
-async function apiCall(endpoint, options = {}) {
+// Single-flight session refresh: N parallel 401s trigger ONE refresh
+// round-trip; everyone awaits the same promise. Supabase rotates refresh
+// tokens, so both tokens are re-stored on success.
+let refreshing = null;
+async function refreshSession() {
+  const refresh_token = localStorage.getItem("refresh_token");
+  if (!refresh_token) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    let parsed;
+    if (typeof data.body === "string") { try { parsed = JSON.parse(data.body); } catch { parsed = data; } } else { parsed = data; }
+    if (!parsed.session_token || !parsed.refresh_token) return false;
+    localStorage.setItem("session_token", parsed.session_token);
+    localStorage.setItem("refresh_token", parsed.refresh_token);
+    return true;
+  } catch { return false; }
+}
+
+async function apiCall(endpoint, options = {}, isRetry = false) {
   const token = localStorage.getItem("session_token");
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -12,6 +36,21 @@ async function apiCall(endpoint, options = {}) {
   const data = await res.json();
   let parsed;
   if (typeof data.body === "string") { try { parsed = JSON.parse(data.body); } catch { parsed = data; } } else { parsed = data; }
+  // Expired session: one transparent refresh + one retry, then give up.
+  // Auth endpoints are exempt (a login 401 means wrong password, not an
+  // expired session) and never loop: the retry passes isRetry=true.
+  if (res.status === 401 && !endpoint.startsWith("/api/auth/")) {
+    if (!isRetry && localStorage.getItem("refresh_token")) {
+      if (!refreshing) refreshing = refreshSession().finally(() => { refreshing = null; });
+      const refreshed = await refreshing;
+      if (refreshed) return apiCall(endpoint, options, true);
+    }
+    // Refresh failed or the retry 401'd again — clear both tokens and throw;
+    // loadProfile's catch path lands the user back on AuthScreen.
+    localStorage.removeItem("session_token");
+    localStorage.removeItem("refresh_token");
+    throw new Error(parsed.error || "session expired");
+  }
   if (parsed.error) throw new Error(parsed.error);
   return parsed;
 }
@@ -120,17 +159,20 @@ export default function App() {
   async function handleLogin(email, password) {
     const data = await apiPost("/api/auth/login", { email, password });
     localStorage.setItem("session_token", data.session_token);
+    if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
     setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified });
   }
   async function handleRegister(email, password, username) {
     const data = await apiPost("/api/auth/register", { email, password, username });
     localStorage.setItem("session_token", data.session_token);
+    if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
     setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false });
   }
   function handleLogout() {
-    localStorage.removeItem("session_token"); setSessionToken(null); setUser(null); setProfile(null);
+    localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
+    setSessionToken(null); setUser(null); setProfile(null);
     setThreads([]); setMessages([]); setActiveThreadId(null);
   }
   async function handleSwitchTab(tab) {
@@ -309,7 +351,7 @@ function ChatWindow() {
       <div className="sh-input-bar">
         {showUsage && <div className="sh-usage-badge">{usageRemaining > 0 ? `${usageRemaining} left today` : "tapped out for today"}</div>}
         <div className="sh-input-form">
-          <textarea ref={textareaRef} value={input} onChange={handleTextareaChange} onKeyDown={handleKeyDown}
+          <textarea ref={textareaRef} value={input} onChange={handleTextareaChange} onKeyDown={handleKeyDown} maxLength={4000}
             placeholder={activeTab === "vibe" ? "say something..." : "ask about a strain..."} className="sh-chat-input" disabled={loading} rows={1} />
           <button type="button" className={`sh-send-btn ${input.trim() && !loading ? "sh-send-btn--active" : ""}`}
             onClick={handleSubmit} disabled={!input.trim() || loading}>
@@ -595,18 +637,36 @@ function RecentSessionsSection({ onPinned }) {
 }
 
 function SubscriptionPage() {
-  const { setShowSubscription } = useApp();
+  const { setShowSubscription, loadProfile, addToast } = useApp();
   const [code, setCode] = useState(null); const [expiresAt, setExpiresAt] = useState(null);
   const [paymentUrl, setPaymentUrl] = useState(null); const [generating, setGenerating] = useState(false); const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
   async function generateCode() {
     setGenerating(true);
     try { const data = await apiPost("/api/subscription/generate-code", {}); setCode(data.payment_code); setExpiresAt(data.expires_at); setPaymentUrl(data.payment_url); }
     catch (e) {} finally { setGenerating(false); }
   }
   function copyCode() { if (code) { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); } }
+  // Payment happens on an external page — nothing pushes the new state back
+  // into this client, so refresh on close (when a code was generated this
+  // session) and offer an explicit "I paid" refresh.
+  function handleClose() {
+    if (code) loadProfile();
+    setShowSubscription(false);
+  }
+  async function checkPaid() {
+    setChecking(true);
+    try {
+      const p = await apiGet("/api/profile/get");
+      await loadProfile();
+      if (p.is_subscribed) { setShowSubscription(false); addToast("you're in — no more daily cap"); }
+      else { addToast("not seeing it yet... give it a sec and try again"); }
+    } catch (e) { addToast("couldn't check — try again"); }
+    finally { setChecking(false); }
+  }
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-subscription">
-      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowSubscription(false)}>×</button></div>
+      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={handleClose}>×</button></div>
       <h2>subscribe to Stone Head</h2>
       <p className="sh-sub-price">$8/month — what you see is what you pay</p>
       <p className="sh-sub-desc">unlimited messages, no daily cap. just you and Stone Head, as long as you want.</p>
@@ -619,6 +679,7 @@ function SubscriptionPage() {
           {expiresAt && <p className="sh-code-expires">expires {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
           {paymentUrl && <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="sh-btn-primary sh-payment-link">go to payment page</a>}
           <p className="sh-code-instructions">copy the code, head to the payment page, enter it with your payment info. your account activates automatically.</p>
+          <button className="sh-btn-secondary" onClick={checkPaid} disabled={checking}>{checking ? "checking..." : "I paid — refresh my account"}</button>
         </div>
       )}
     </div></div>

@@ -6,7 +6,7 @@
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { addLikedStrain } from "../lib/likedStrains.js";
+import { addLikedStrain, escapeLikePattern } from "../lib/likedStrains.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -21,13 +21,20 @@ export async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed" });
   }
 
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return jsonResponse(400, { error: "Invalid JSON body" });
+  }
+
   try {
     const user = await authenticateRequest(event);
     if (user.error) {
       return jsonResponse(user.status || 401, { error: user.error });
     }
 
-    const { action, strain_name, strain_type, notes } = JSON.parse(event.body);
+    const { action, strain_name, strain_type, notes } = body;
 
     if (!action || !["add", "remove"].includes(action)) {
       return jsonResponse(400, { error: "action must be 'add' or 'remove'" });
@@ -46,12 +53,12 @@ export async function handler(event) {
       // path in chat-send.js stays in lockstep with this endpoint.
       await addLikedStrain(user.user_id, strain_name, strain_type, notes);
     } else {
-      // Remove
+      // Remove (wildcards escaped — a raw "%" here would delete everything)
       const { error: deleteErr } = await supabaseAdmin
         .from("liked_strains")
         .delete()
         .eq("user_id", user.user_id)
-        .ilike("strain_name", strain_name);
+        .ilike("strain_name", escapeLikePattern(strain_name));
 
       if (deleteErr) throw deleteErr;
     }

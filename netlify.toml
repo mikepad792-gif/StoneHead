@@ -13,6 +13,19 @@
   node_bundler = "esbuild"
   included_files = ["data/**"]
 
+# Security headers for every response.
+# TODO: add a Content-Security-Policy as a follow-up with a report-only
+# rollout — CRA's build emits inline chunks, and a broken CSP is worse
+# than none.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
 # API route redirects -> Netlify Functions
 # Existing (Thread 1 & 2):
 [[redirects]]
@@ -23,6 +36,11 @@
 [[redirects]]
   from = "/api/auth/login"
   to = "/.netlify/functions/auth-login"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/refresh"
+  to = "/.netlify/functions/auth-refresh"
   status = 200
 
 [[redirects]]

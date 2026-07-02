@@ -8,17 +8,17 @@
 //   - the thread titler accepting non-titles (scaffold, code lines,
 //     conversational fragments) and freezing threads on garbage
 //
-// Note: lib/strainSearch.js reads data via `__dirname` (provided by esbuild in
-// the Netlify bundle). Under plain Node ESM that global is absent, so we shim it
-// to the lib directory before importing, then dynamic-import the real modules.
 import assert from "node:assert";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-globalThis.__dirname = path.join(scriptsDir, "..", "lib");
+// lib/likedStrains.js imports the supabase client, which insists on env vars
+// at import time. The functions under test never touch the network — dummies
+// keep the import happy.
+process.env.SUPABASE_URL ||= "https://example.supabase.co";
+process.env.SUPABASE_ANON_KEY ||= "check-dummy";
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= "check-dummy";
 
 const { detectSaveIntent } = await import("../lib/saveIntent.js");
+const { escapeLikePattern } = await import("../lib/likedStrains.js");
 const { looksLikeTitle, buildTitleTranscript } = await import("../lib/titleGen.js");
 const { BLANK_REPLY_FALLBACK } = await import("../lib/constants.js");
 
@@ -96,6 +96,18 @@ assert(
 assert(
   transcript.includes("northern lights"),
   "T03-b: real conversation content must remain in the transcript"
+);
+
+// ── L01: ILIKE wildcards are escaped; plain names pass through unchanged ──
+assert.strictEqual(
+  escapeLikePattern("100% OG"),
+  "100\\% OG",
+  "L01-a: % must be escaped for ILIKE"
+);
+assert.strictEqual(
+  escapeLikePattern("Northern Lights"),
+  "Northern Lights",
+  "L01-b: plain names pass through unchanged"
 );
 
 console.log("save-intent-check: all assertions passed");

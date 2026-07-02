@@ -16,7 +16,7 @@
 // Title generation lives in lib/titleGen.js, shared with the live path in
 // chat-send.js — one prompt, one validator, one input shape for both.
 
-import { errorResponse, jsonResponse } from "../lib/auth.js";
+import { errorResponse, jsonResponse, safeEqual } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { generateTopicTitle } from "../lib/titleGen.js";
 import { DEFAULT_TITLES } from "../lib/constants.js";
@@ -32,7 +32,7 @@ export async function handler(event) {
   const provided =
     event.headers?.["x-backfill-secret"] ||
     event.headers?.["X-Backfill-Secret"];
-  if (!process.env.CALLBACK_SECRET || provided !== process.env.CALLBACK_SECRET) {
+  if (!process.env.CALLBACK_SECRET || !safeEqual(provided, process.env.CALLBACK_SECRET)) {
     return errorResponse(401, "Unauthorized");
   }
 

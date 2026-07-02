@@ -34,25 +34,27 @@ export async function handler(event) {
       .eq("user_id", user.user_id)
       .eq("status", "pending");
 
-    // Generate a unique code — 8 chars, uppercase alphanumeric
-    const payment_code = crypto
-      .randomBytes(6)
-      .toString("base64url")
-      .replace(/[^A-Za-z0-9]/g, "")
-      .substring(0, 8)
-      .toUpperCase();
-
     // Expires in 30 minutes
     const expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-    const { error } = await supabaseAdmin.from("payment_codes").insert({
-      user_id: user.user_id,
-      code: payment_code,
-      status: "pending",
-      expires_at,
-    });
+    // Generate a unique code — 12 hex chars (48 bits), fixed length, no
+    // case-folding entropy loss. One retry on a unique-violation collision
+    // (Postgres 23505) before giving up.
+    let payment_code;
+    for (let attempt = 0; ; attempt++) {
+      payment_code = crypto.randomBytes(6).toString("hex").toUpperCase();
 
-    if (error) throw error;
+      const { error } = await supabaseAdmin.from("payment_codes").insert({
+        user_id: user.user_id,
+        code: payment_code,
+        status: "pending",
+        expires_at,
+      });
+
+      if (!error) break;
+      if (error.code === "23505" && attempt === 0) continue;
+      throw error;
+    }
 
     return jsonResponse(200, {
       payment_code,

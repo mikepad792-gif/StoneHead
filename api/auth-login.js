@@ -8,6 +8,7 @@
 // Response fields (MASTER_TERMS.md):
 //   user_id        — string (uuid)
 //   session_token  — string
+//   refresh_token  — string (rotate via /api/auth/refresh when session_token expires)
 //   username       — string
 //   is_subscribed  — boolean
 //   age_verified   — boolean
@@ -46,6 +47,7 @@ export async function handler(event) {
 
   const user_id = authData.user.id;
   const session_token = authData.session.access_token;
+  const refresh_token = authData.session.refresh_token;
 
   // --- Fetch profile from users table ---
   const { data: profile, error: profileError } = await supabaseAdmin
@@ -62,6 +64,7 @@ export async function handler(event) {
   return jsonResponse(200, {
     user_id,
     session_token,
+    refresh_token,
     username: profile.username,
     is_subscribed: profile.is_subscribed,
     age_verified: profile.age_verified,
