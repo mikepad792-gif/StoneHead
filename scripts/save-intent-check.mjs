@@ -123,5 +123,17 @@ assert.strictEqual(
   null,
   "L02-b: unknown literal names stay type-null"
 );
+// Spelling variant: type attaches via the high-confidence closest match,
+// while the stored name stays exactly what the user said.
+assert.strictEqual(
+  lookupStrainType("grandaddy purp"),
+  "indica",
+  "L02-c: 'grandaddy purp' must borrow Granddaddy-Purple's indica type"
+);
+assert.strictEqual(
+  lookupStrainType("cereal milk"),
+  null,
+  "L02-d: names absent from the dataset stay type-null"
+);
 
 console.log("save-intent-check: all assertions passed");
