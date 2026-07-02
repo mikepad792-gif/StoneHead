@@ -18,7 +18,7 @@ process.env.SUPABASE_ANON_KEY ||= "check-dummy";
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= "check-dummy";
 
 const { detectSaveIntent } = await import("../lib/saveIntent.js");
-const { escapeLikePattern } = await import("../lib/likedStrains.js");
+const { escapeLikePattern, lookupStrainType } = await import("../lib/likedStrains.js");
 const { looksLikeTitle, buildTitleTranscript } = await import("../lib/titleGen.js");
 const { BLANK_REPLY_FALLBACK } = await import("../lib/constants.js");
 
@@ -108,6 +108,20 @@ assert.strictEqual(
   escapeLikePattern("Northern Lights"),
   "Northern Lights",
   "L01-b: plain names pass through unchanged"
+);
+
+// ── L02: type resolution for the /memory badge ──
+// A known dataset strain resolves to a real type (de-hyphenated form, the
+// shape stored by addLikedStrain); an unknown literal stays null.
+const nlType = lookupStrainType("northern lights");
+assert(
+  ["indica", "sativa", "hybrid"].includes(nlType),
+  `L02-a: 'northern lights' must resolve to a valid type, got ${JSON.stringify(nlType)}`
+);
+assert.strictEqual(
+  lookupStrainType("razzle's dazzle"),
+  null,
+  "L02-b: unknown literal names stay type-null"
 );
 
 console.log("save-intent-check: all assertions passed");
