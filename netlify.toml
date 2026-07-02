@@ -26,6 +26,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/auth/refresh"
+  to = "/.netlify/functions/auth-refresh"
+  status = 200
+
+[[redirects]]
   from = "/api/chat/send"
   to = "/.netlify/functions/chat-send"
   status = 200

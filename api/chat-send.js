@@ -17,8 +17,7 @@
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { FREE_DAILY_LIMIT, DEFAULT_TITLES, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
-import { generateTopicTitle } from "../lib/titleGen.js";
+import { FREE_DAILY_LIMIT, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
 import { VIBE_PROMPT } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
@@ -28,8 +27,6 @@ import {
   formatPhilosophyContext,
 } from "../lib/philosophyPull.js";
 import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
-import { detectSaveIntent } from "../lib/saveIntent.js";
-import { addLikedStrain } from "../lib/likedStrains.js";
 import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
 import { detectFrame, isProductSettled, classifyTopic, hasDiagnosisCue } from "../lib/frameDetect.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
@@ -41,9 +38,7 @@ import { fGate, canFireRumi } from "../lib/fGate.js";
 import {
   fetchSessionMemories,
   formatSessionMemoryBlock,
-  maybeWriteSessionMemory,
 } from "../lib/sessionMemory.js";
-import { maybeConsolidate } from "../lib/consolidateMemory.js";
 import { stripModelTags } from "../lib/sanitize.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
@@ -89,6 +84,9 @@ export async function handler(event) {
 
   if (!message || typeof message !== "string" || !message.trim()) {
     return errorResponse(400, "message is required");
+  }
+  if (message.length > 4000) {
+    return errorResponse(400, "message too long (max 4000 characters)");
   }
   if (!thread_id) {
     return errorResponse(400, "thread_id is required");
@@ -383,78 +381,27 @@ export async function handler(event) {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", thread_id);
 
-    // ── Auto-generate thread title (with lazy retry) ─────────────────
-    // Fire-and-forget so the user never waits. Runs on EVERY message while
-    // the thread still wears a default name, and receives the actual
-    // conversation (recent history + this exchange), not just the last
-    // exchange — the old call fed the model two live chat turns to
-    // continue, which is how "<ds_safety>" and stray code became titles.
-    // Each retry now carries a fuller transcript, so a failed attempt
-    // doesn't freeze the default forever.
-    const defaultsLower = DEFAULT_TITLES.map((t) => t.toLowerCase());
-    const isDefaultTitle =
-      !thread.title ||
-      defaultsLower.includes(thread.title.trim().toLowerCase());
-
-    if (isDefaultTitle) {
-      const titleTranscript = [
-        ...history,
-        { role: "user", content: userContent },
-        { role: "assistant", content: reply },
-      ];
-      generateThreadTitle(thread_id, titleTranscript).catch((e) =>
-        console.error("Title generation failed (non-blocking):", e)
+    // ── Post-response work → background function ─────────────────────
+    // Title, session memory, consolidation, and the conversational strain
+    // save run in api/chat-postwork-background.js — a sync Lambda freezes at
+    // return, so detached promises here are lost/deferred. The await below is
+    // only the 202 handshake (~100ms), not the work. The background function
+    // re-derives everything from the DB, which is authoritative because both
+    // messages were inserted above.
+    try {
+      await fetch(
+        `${process.env.URL}/.netlify/functions/chat-postwork-background`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": process.env.INTERNAL_TASK_SECRET,
+          },
+          body: JSON.stringify({ user_id, thread_id, tab }),
+        }
       );
-    }
-
-    // ── Write session memory (Phase 2, fire-and-forget) ──────────────
-    // Compresses a deep enough thread into a frame-tagged summary. Trips
-    // at 8 messages (see sessionMemory.js); the full updated transcript is
-    // what the trigger counts, so pass history + this exchange.
-    const transcript = [
-      ...history,
-      { role: "user", content: userContent },
-      { role: "assistant", content: reply },
-    ];
-    maybeWriteSessionMemory({ threadId: thread_id, userId: user_id, tab, transcript })
-      .catch((e) =>
-        console.error("session memory write failed (non-blocking):", e)
-      );
-
-    // ── Memory consolidation (Phase 2.5, fire-and-forget, runs DARK) ──
-    // Re-derives core memories from the session log when enough fresh
-    // material has arrived. Writes core_memories rows; the /memory page's
-    // Core section stays flag-gated off until the output is validated.
-    maybeConsolidate({ userId: user_id }).catch((e) =>
-      console.error("consolidation failed (non-blocking):", e)
-    );
-
-    // ── Conversational save/remember (plant tab, fire-and-forget) ────
-    // If the user expressed intent to save a strain they like, fire the
-    // write in the background so Stone Head's spoken "I'll remember that"
-    // and the profile's LIKED STRAINS actually agree. Cheap prefilter
-    // (no LLM); only a real strain-name match triggers a DB write.
-    if (tab === "plant") {
-      const intent = detectSaveIntent(userContent);
-      if (intent && intent.type === "liked_strain") {
-        // Trace what the save actually received vs what it derived — this is
-        // the line that catches a sentence fragment before it hits the DB.
-        console.log(
-          "liked-strain save:",
-          JSON.stringify({
-            received: userContent.slice(0, 160),
-            saving: intent.value,
-          })
-        );
-        addLikedStrain(
-          user_id,
-          intent.value.strain_name,
-          intent.value.strain_type,
-          null
-        ).catch((e) =>
-          console.error("Liked-strain save failed (non-blocking):", e.message)
-        );
-      }
+    } catch (e) {
+      console.error("postwork invoke failed (non-blocking):", e.message);
     }
 
     // ── Increment usage counter ───────────────────────────────────────
@@ -537,22 +484,4 @@ async function callChatModel(aiMessages) {
       .trim();
   }
   return { ok: true, reply, rawContent, finishReason, aiData };
-}
-
-// ── Thread Title Generator (background, non-blocking) ─────────────
-// Thin wrapper over lib/titleGen.js — the transcript goes in as DATA
-// (one serialized user message), never as live chat turns to continue.
-async function generateThreadTitle(threadId, transcript) {
-  try {
-    const title = await generateTopicTitle(transcript);
-    if (!title) return; // nothing usable — keep the default; lazy retry fires next message
-
-    await supabaseAdmin
-      .from("threads")
-      .update({ title })
-      .eq("id", threadId);
-  } catch (e) {
-    // Non-critical — log and move on
-    console.error("Title gen error:", e.message);
-  }
 }

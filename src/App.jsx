@@ -4,7 +4,31 @@ const API_BASE = "";
 const AppContext = createContext(null);
 function useApp() { return useContext(AppContext); }
 
-async function apiCall(endpoint, options = {}) {
+// Single-flight session refresh: N parallel 401s trigger ONE refresh
+// round-trip; everyone awaits the same promise. Supabase rotates refresh
+// tokens, so both tokens are re-stored on success.
+let refreshing = null;
+async function refreshSession() {
+  const refresh_token = localStorage.getItem("refresh_token");
+  if (!refresh_token) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    let parsed;
+    if (typeof data.body === "string") { try { parsed = JSON.parse(data.body); } catch { parsed = data; } } else { parsed = data; }
+    if (!parsed.session_token || !parsed.refresh_token) return false;
+    localStorage.setItem("session_token", parsed.session_token);
+    localStorage.setItem("refresh_token", parsed.refresh_token);
+    return true;
+  } catch { return false; }
+}
+
+async function apiCall(endpoint, options = {}, isRetry = false) {
   const token = localStorage.getItem("session_token");
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -12,6 +36,21 @@ async function apiCall(endpoint, options = {}) {
   const data = await res.json();
   let parsed;
   if (typeof data.body === "string") { try { parsed = JSON.parse(data.body); } catch { parsed = data; } } else { parsed = data; }
+  // Expired session: one transparent refresh + one retry, then give up.
+  // Auth endpoints are exempt (a login 401 means wrong password, not an
+  // expired session) and never loop: the retry passes isRetry=true.
+  if (res.status === 401 && !endpoint.startsWith("/api/auth/")) {
+    if (!isRetry && localStorage.getItem("refresh_token")) {
+      if (!refreshing) refreshing = refreshSession().finally(() => { refreshing = null; });
+      const refreshed = await refreshing;
+      if (refreshed) return apiCall(endpoint, options, true);
+    }
+    // Refresh failed or the retry 401'd again — clear both tokens and throw;
+    // loadProfile's catch path lands the user back on AuthScreen.
+    localStorage.removeItem("session_token");
+    localStorage.removeItem("refresh_token");
+    throw new Error(parsed.error || "session expired");
+  }
   if (parsed.error) throw new Error(parsed.error);
   return parsed;
 }
@@ -120,17 +159,20 @@ export default function App() {
   async function handleLogin(email, password) {
     const data = await apiPost("/api/auth/login", { email, password });
     localStorage.setItem("session_token", data.session_token);
+    if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
     setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified });
   }
   async function handleRegister(email, password, username) {
     const data = await apiPost("/api/auth/register", { email, password, username });
     localStorage.setItem("session_token", data.session_token);
+    if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
     setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false });
   }
   function handleLogout() {
-    localStorage.removeItem("session_token"); setSessionToken(null); setUser(null); setProfile(null);
+    localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
+    setSessionToken(null); setUser(null); setProfile(null);
     setThreads([]); setMessages([]); setActiveThreadId(null);
   }
   async function handleSwitchTab(tab) {

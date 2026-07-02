@@ -10,6 +10,7 @@
 // Response fields (MASTER_TERMS.md):
 //   user_id       — string (uuid)
 //   session_token — string
+//   refresh_token — string (rotate via /api/auth/refresh when session_token expires)
 
 import { supabase, supabaseAdmin } from "../lib/supabase.js";
 import { errorResponse, jsonResponse } from "../lib/auth.js";
@@ -90,6 +91,7 @@ export async function handler(event) {
   }
 
   const session_token = authData.session.access_token;
+  const refresh_token = authData.session.refresh_token;
 
   // --- Insert row into users table ---
   // password_hash is handled by Supabase Auth internally.
@@ -118,5 +120,6 @@ export async function handler(event) {
   return jsonResponse(201, {
     user_id,
     session_token,
+    refresh_token,
   });
 }
