@@ -6,7 +6,7 @@
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
-import { addLikedStrain } from "../lib/likedStrains.js";
+import { addLikedStrain, escapeLikePattern } from "../lib/likedStrains.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -46,12 +46,12 @@ export async function handler(event) {
       // path in chat-send.js stays in lockstep with this endpoint.
       await addLikedStrain(user.user_id, strain_name, strain_type, notes);
     } else {
-      // Remove
+      // Remove (wildcards escaped — a raw "%" here would delete everything)
       const { error: deleteErr } = await supabaseAdmin
         .from("liked_strains")
         .delete()
         .eq("user_id", user.user_id)
-        .ilike("strain_name", strain_name);
+        .ilike("strain_name", escapeLikePattern(strain_name));
 
       if (deleteErr) throw deleteErr;
     }

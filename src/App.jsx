@@ -351,7 +351,7 @@ function ChatWindow() {
       <div className="sh-input-bar">
         {showUsage && <div className="sh-usage-badge">{usageRemaining > 0 ? `${usageRemaining} left today` : "tapped out for today"}</div>}
         <div className="sh-input-form">
-          <textarea ref={textareaRef} value={input} onChange={handleTextareaChange} onKeyDown={handleKeyDown}
+          <textarea ref={textareaRef} value={input} onChange={handleTextareaChange} onKeyDown={handleKeyDown} maxLength={4000}
             placeholder={activeTab === "vibe" ? "say something..." : "ask about a strain..."} className="sh-chat-input" disabled={loading} rows={1} />
           <button type="button" className={`sh-send-btn ${input.trim() && !loading ? "sh-send-btn--active" : ""}`}
             onClick={handleSubmit} disabled={!input.trim() || loading}>
