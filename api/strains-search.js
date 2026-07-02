@@ -6,11 +6,13 @@
 // Returns top 3 matches by keyword against effects, flavor, name, description.
 
 import { authenticateRequest } from "../lib/auth.js";
-import { createRequire } from "module";
+import { loadDataFile } from "../lib/dataFile.js";
 
-// JSON import via createRequire for ESM compatibility
-const require = createRequire(import.meta.url);
-const rawStrains = require("../data/strains.json");
+// NOTE: createRequire(import.meta.url) crashes in Netlify's esbuild CJS
+// bundle (import.meta.url compiles to undefined) — this endpoint carried
+// that latent cold-start crash for months, unnoticed because nothing
+// invokes it. loadDataFile works under both module systems.
+const rawStrains = loadDataFile("strains.json");
 
 // Normalize strain data keys on load (Source uses capital keys: Strain, Type, etc.)
 const normalizedStrains = rawStrains.map((s) => ({
