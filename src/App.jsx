@@ -581,7 +581,7 @@ function LikedStrainsSection() {
               {s.strain_type && <span className={`sh-strain-type sh-strain-type--${s.strain_type}`}>{s.strain_type}</span>}
             </div>
             {s.notes && <p className="sh-strain-notes">{s.notes}</p>}
-            {expanded && <button className="sh-mem-remove" onClick={() => remove(s.strain_name)}>remove</button>}
+            <button className="sh-mem-remove" onClick={() => remove(s.strain_name)}>remove</button>
           </div>
         ))}
       </div>
