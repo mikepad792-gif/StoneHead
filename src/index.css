@@ -392,6 +392,9 @@ body {
 .sh-profile-header h2 { font-family: var(--font-mono); font-size: 18px; font-weight: 400; color: var(--text-primary); }
 .sh-sub-badge { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--stone-dark); color: var(--text-muted); }
 .sh-sub-badge--active { background: var(--green-primary); color: var(--bg-primary); }
+/* Founding member ("OG Sesher") — warm amber so it reads as founder against
+   the app's green/purple. Mirrors .sh-sub-badge metrics. */
+.sh-founder-badge { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 10px; background: rgba(222, 170, 60, 0.18); color: #deaa3c; margin-left: 6px; }
 .sh-profile-section { margin-bottom: 20px; }
 .sh-profile-section h3 { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 10px; }
 .sh-empty-strains { color: var(--text-muted); font-size: 13px; font-style: italic; }

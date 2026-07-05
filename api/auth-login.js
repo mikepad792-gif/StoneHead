@@ -52,7 +52,7 @@ export async function handler(event) {
   // --- Fetch profile from users table ---
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("users")
-    .select("username, is_subscribed, age_verified")
+    .select("username, is_subscribed, age_verified, is_founder, founder_number")
     .eq("id", user_id)
     .single();
 
@@ -68,5 +68,7 @@ export async function handler(event) {
     username: profile.username,
     is_subscribed: profile.is_subscribed,
     age_verified: profile.age_verified,
+    is_founder: profile.is_founder,
+    founder_number: profile.founder_number,
   });
 }
