@@ -113,7 +113,7 @@ export async function handler(event) {
     // Write-side handled here: reset if new day, then check limit.
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
-      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires")
+      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder")
       .eq("id", user_id)
       .single();
 
@@ -125,7 +125,9 @@ export async function handler(event) {
     // If is_subscribed is true but subscription_expires is in the past,
     // flip to false in the DB. Catches every lapsed subscription on
     // next message — no scheduled function needed.
-    if (user.is_subscribed && user.subscription_expires) {
+    // FOUNDERS ARE EXEMPT: no background path may ever revoke a founder's
+    // access, so the flip is skipped entirely for them.
+    if (!user.is_founder && user.is_subscribed && user.subscription_expires) {
       const expiresAt = new Date(user.subscription_expires);
       if (expiresAt < new Date()) {
         user.is_subscribed = false;
@@ -144,8 +146,12 @@ export async function handler(event) {
       currentCount = 0;
     }
 
+    // Founder ("OG Sesher") wins BEFORE subscription logic: a founder with
+    // an expired/false subscription is still unlimited, always.
+    const unlimited = user.is_founder || user.is_subscribed;
+
     // Enforce limit for free-tier users
-    if (!user.is_subscribed && currentCount >= FREE_DAILY_LIMIT) {
+    if (!unlimited && currentCount >= FREE_DAILY_LIMIT) {
       return jsonResponse(200, {
         reply: LIMIT_MESSAGE,
         tokens_in: 0,
@@ -417,8 +423,10 @@ export async function handler(event) {
       .eq("id", user_id);
 
     // ── Calculate usage_remaining ─────────────────────────────────────
-    // null if subscribed (unlimited), integer if free tier
-    const usage_remaining = user.is_subscribed
+    // null if unlimited (founder or subscribed), integer if free tier.
+    // Counting still happens for everyone (harmless); it's just never
+    // enforced against founders.
+    const usage_remaining = unlimited
       ? null
       : Math.max(0, FREE_DAILY_LIMIT - newCount);
 

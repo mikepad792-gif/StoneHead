@@ -142,7 +142,7 @@ export default function App() {
     try {
       const p = await apiGet("/api/profile/get");
       setProfile(p);
-      setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified });
+      setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified, is_founder: p.is_founder, founder_number: p.founder_number });
       setUsageRemaining(p.usage_remaining ?? null);
     } catch (e) { handleLogout(); }
   }
@@ -163,14 +163,15 @@ export default function App() {
     localStorage.setItem("session_token", data.session_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
-    setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified });
+    setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified, is_founder: data.is_founder, founder_number: data.founder_number });
   }
   async function handleRegister(email, password, username) {
     const data = await apiPost("/api/auth/register", { email, password, username });
     localStorage.setItem("session_token", data.session_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
-    setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false });
+    // New signups are never founders — the grant is operator-CLI only.
+    setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null });
   }
   function handleLogout() {
     localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
@@ -484,6 +485,11 @@ function ProfilePage() {
         <div className="sh-profile-avatar">{user?.username?.[0]?.toUpperCase() || "?"}</div>
         <h2>{user?.username || "..."}</h2>
         <span className={`sh-sub-badge ${user?.is_subscribed ? "sh-sub-badge--active" : ""}`}>{user?.is_subscribed ? "subscribed" : "free tier"}</span>
+        {user?.is_founder && (
+          <span className="sh-founder-badge" title={`OG Sesher #${user.founder_number}`}>
+            ★ og sesher{user.founder_number ? ` #${user.founder_number}` : ""}
+          </span>
+        )}
       </div>
       <p className="sh-profile-memory-hint">your liked strains and what Stone Head remembers now live in <strong>memory</strong> (open the menu).</p>
       <div className="sh-profile-actions">

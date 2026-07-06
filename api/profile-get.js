@@ -34,7 +34,7 @@ export async function handler(event) {
   const { data: user, error: userError } = await supabaseAdmin
     .from("users")
     .select(
-      "id, username, email, is_subscribed, subscription_expires, age_verified, daily_message_count, last_message_date"
+      "id, username, email, is_subscribed, subscription_expires, age_verified, daily_message_count, last_message_date, is_founder, founder_number"
     )
     .eq("id", user_id)
     .single();
@@ -53,8 +53,10 @@ export async function handler(event) {
   }
 
   // --- Compute usage_remaining ---
+  // Founder wins before subscription logic — a founder is never limited.
+  const unlimited = user.is_founder || user.is_subscribed;
   let usage_remaining = null;
-  if (!user.is_subscribed) {
+  if (!unlimited) {
     usage_remaining = Math.max(0, FREE_DAILY_LIMIT - daily_message_count);
   }
 
@@ -79,6 +81,8 @@ export async function handler(event) {
     age_verified: user.age_verified,
     daily_message_count,
     usage_remaining,
+    is_founder: user.is_founder,
+    founder_number: user.founder_number,
     liked_strains: liked_strains || [],
   });
 }
