@@ -390,11 +390,28 @@ body {
   font-family: var(--font-mono); font-size: 22px; color: var(--text-primary);
 }
 .sh-profile-header h2 { font-family: var(--font-mono); font-size: 18px; font-weight: 400; color: var(--text-primary); }
+/* Username inline edit — pencil sits beside the name; edit mode swaps in an
+   input styled like .sh-thread-edit-input with mono to match the h2. */
+.sh-username-row { display: flex; align-items: center; gap: 8px; }
+.sh-username-edit-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; padding: 2px 4px; line-height: 1; }
+.sh-username-edit-btn:hover { color: var(--text-primary); }
+.sh-username-edit { display: flex; align-items: center; gap: 6px; }
+.sh-username-input {
+  width: 160px; background: var(--bg-primary); border: 1px solid var(--green-primary);
+  border-radius: 4px; padding: 6px 10px; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 14px; outline: none; text-align: center;
+}
+.sh-username-btn { font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; border-radius: 4px; border: none; cursor: pointer; background: var(--green-primary); color: var(--bg-primary); }
+.sh-username-btn:disabled { opacity: 0.6; cursor: default; }
+.sh-username-btn--cancel { background: var(--stone-dark); color: var(--text-muted); }
 .sh-sub-badge { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--stone-dark); color: var(--text-muted); }
 .sh-sub-badge--active { background: var(--green-primary); color: var(--bg-primary); }
 /* Founding member ("OG Sesher") — warm amber so it reads as founder against
    the app's green/purple. Mirrors .sh-sub-badge metrics. */
 .sh-founder-badge { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 10px; background: rgba(222, 170, 60, 0.18); color: #deaa3c; margin-left: 6px; }
+/* New-system badges (badges/user_badges tables) — same metrics as founder;
+   color + tinted background come inline from the badge registry's hex. */
+.sh-badge { font-family: var(--font-mono); font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--stone-dark); color: var(--text-muted); margin-left: 6px; }
 .sh-profile-section { margin-bottom: 20px; }
 .sh-profile-section h3 { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 10px; }
 .sh-empty-strains { color: var(--text-muted); font-size: 13px; font-style: italic; }

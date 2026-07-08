@@ -12,10 +12,12 @@
 //   age_verified         — boolean
 //   daily_message_count  — integer
 //   usage_remaining      — integer or null (null if subscribed)
+//   badges               — array of { key, label, color, number } (new badge system; founder is separate)
 //   liked_strains        — array of { strain_name, strain_type, notes, added_at }
 
 import { supabaseAdmin } from "../lib/supabase.js";
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
+import { getUserBadges } from "../lib/getUserBadges.js";
 import { FREE_DAILY_LIMIT } from "../lib/constants.js";
 
 export async function handler(event) {
@@ -71,6 +73,11 @@ export async function handler(event) {
     return errorResponse(500, "Failed to load liked_strains");
   }
 
+  // --- Fetch badges (new-system badges only; founder stays on its columns) ---
+  // getUserBadges returns [] on any error, so a badge hiccup (or the 007
+  // migration not having run yet) can never break the profile.
+  const badges = await getUserBadges(supabaseAdmin, user_id);
+
   // --- Return MASTER_TERMS.md response fields ---
   return jsonResponse(200, {
     user_id: user.id,
@@ -83,6 +90,7 @@ export async function handler(event) {
     usage_remaining,
     is_founder: user.is_founder,
     founder_number: user.founder_number,
+    badges,
     liked_strains: liked_strains || [],
   });
 }

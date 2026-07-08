@@ -59,6 +59,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/profile/username-update"
+  to = "/.netlify/functions/profile-username-update"
+  status = 200
+
+[[redirects]]
   from = "/api/usage/check"
   to = "/.netlify/functions/usage-check"
   status = 200
