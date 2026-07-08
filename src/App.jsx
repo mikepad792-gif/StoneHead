@@ -477,14 +477,52 @@ function AgeGateModal() {
 }
 
 function ProfilePage() {
-  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile } = useApp();
+  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast } = useApp();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
   useEffect(() => { loadProfile(); }, []);
+  function startEditName() { setNameDraft(user?.username || ""); setEditingName(true); }
+  async function handleSaveName() {
+    const next = nameDraft.trim();
+    if (!next || next === user?.username) { setEditingName(false); return; }
+    if (next.length < 2 || next.length > 30) { addToast("username must be 2-30 characters"); return; }
+    setSavingName(true);
+    try {
+      await apiPost("/api/profile/username-update", { username: next });
+      await loadProfile();
+      setEditingName(false);
+      addToast("username updated");
+    } catch (e) {
+      // Server says why — "username already taken" is the common case.
+      addToast(e.message || "couldn't update username");
+    } finally { setSavingName(false); }
+  }
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
       <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)}>×</button></div>
       <div className="sh-profile-header">
         <div className="sh-profile-avatar">{user?.username?.[0]?.toUpperCase() || "?"}</div>
-        <h2>{user?.username || "..."}</h2>
+        {editingName ? (
+          <div className="sh-username-edit">
+            <input
+              className="sh-username-input"
+              value={nameDraft}
+              maxLength={30}
+              autoFocus
+              disabled={savingName}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+            />
+            <button className="sh-username-btn" onClick={handleSaveName} disabled={savingName}>{savingName ? "..." : "save"}</button>
+            <button className="sh-username-btn sh-username-btn--cancel" onClick={() => setEditingName(false)} disabled={savingName}>cancel</button>
+          </div>
+        ) : (
+          <div className="sh-username-row">
+            <h2>{user?.username || "..."}</h2>
+            <button className="sh-username-edit-btn" onClick={startEditName} title="edit username" aria-label="edit username">✎</button>
+          </div>
+        )}
         <span className={`sh-sub-badge ${user?.is_subscribed ? "sh-sub-badge--active" : ""}`}>{user?.is_subscribed ? "subscribed" : "free tier"}</span>
         {user?.is_founder && (
           <span className="sh-founder-badge" title={`OG Sesher #${user.founder_number}`}>
