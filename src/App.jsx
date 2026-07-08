@@ -142,7 +142,7 @@ export default function App() {
     try {
       const p = await apiGet("/api/profile/get");
       setProfile(p);
-      setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified, is_founder: p.is_founder, founder_number: p.founder_number });
+      setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified, is_founder: p.is_founder, founder_number: p.founder_number, badges: p.badges || [] });
       setUsageRemaining(p.usage_remaining ?? null);
     } catch (e) { handleLogout(); }
   }
@@ -163,15 +163,16 @@ export default function App() {
     localStorage.setItem("session_token", data.session_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
-    setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified, is_founder: data.is_founder, founder_number: data.founder_number });
+    // badges arrive via loadProfile (fires on sessionToken change) — login response doesn't carry them.
+    setUser({ user_id: data.user_id, username: data.username, is_subscribed: data.is_subscribed, age_verified: data.age_verified, is_founder: data.is_founder, founder_number: data.founder_number, badges: [] });
   }
   async function handleRegister(email, password, username) {
     const data = await apiPost("/api/auth/register", { email, password, username });
     localStorage.setItem("session_token", data.session_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
     setSessionToken(data.session_token);
-    // New signups are never founders — the grant is operator-CLI only.
-    setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null });
+    // New signups are never founders and hold no badges — grants are operator-CLI only.
+    setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null, badges: [] });
   }
   function handleLogout() {
     localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
@@ -490,6 +491,17 @@ function ProfilePage() {
             ★ og sesher{user.founder_number ? ` #${user.founder_number}` : ""}
           </span>
         )}
+        {/* New-system badges render after founder — one strip, two data sources. */}
+        {(user?.badges || []).map((b) => (
+          <span
+            key={b.key}
+            className="sh-badge"
+            style={b.color ? { color: b.color, background: `${b.color}2e` } : undefined}
+            title={`${b.label}${b.number ? ` #${b.number}` : ""}`}
+          >
+            ★ {b.label.toLowerCase()}{b.number ? ` #${b.number}` : ""}
+          </span>
+        ))}
       </div>
       <p className="sh-profile-memory-hint">your liked strains and what Stone Head remembers now live in <strong>memory</strong> (open the menu).</p>
       <div className="sh-profile-actions">
