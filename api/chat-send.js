@@ -18,7 +18,7 @@
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { FREE_DAILY_LIMIT, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
-import { VIBE_PROMPT } from "../prompts/vibe.js";
+import { VIBE_PROMPT, VIBE_HANDOFF_PROMPT, VIBE_SAFETY_SCOPE_NOTE } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
 import {
@@ -28,7 +28,13 @@ import {
 } from "../lib/philosophyPull.js";
 import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
 import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
-import { detectFrame, isProductSettled, classifyTopic, hasDiagnosisCue } from "../lib/frameDetect.js";
+import {
+  detectFrame,
+  isProductSettled,
+  classifyTopic,
+  hasDiagnosisCue,
+  routeVibeTurn,
+} from "../lib/frameDetect.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
 import {
   CULTIVATION_MODE_PROMPT,
@@ -188,6 +194,8 @@ export async function handler(event) {
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
     let topic = "STRAIN"; // plant-tab topic route (Cultivation Phase 1)
+    let handoff = null; // "plant" when a vibe turn should route to Talk the Plant
+    let vibeSafety = false; // vibe turn answered in place under the safety prompt
 
     if (tab === "plant") {
       // Liked strains are frame-gated: withhold where name-dropping a saved
@@ -209,6 +217,23 @@ export async function handler(event) {
       else if (topic === "CONSUMPTION-SAFETY") systemPrompt += "\n\n" + CONSUMPTION_SAFETY_PROMPT;
     } else {
       systemPrompt = VIBE_PROMPT;
+
+      // Vibe-side routing (pure string checks — no API call, no latency).
+      // SAFETY answers in place; HANDOFF points to Talk the Plant; NONE
+      // leaves the turn untouched. routeVibeTurn deliberately does NOT use
+      // classifyTopic's STRAIN return (a catch-all that matches every
+      // philosophy message) or its CULTIVATION cues (which over-fire on
+      // vibe text like "burned out" / "growing as a person") — only the
+      // narrow vibe-side cue sets in frameDetect.js can fire a handoff.
+      const vibeRoute = routeVibeTurn(userContent);
+      if (vibeRoute === "SAFETY") {
+        vibeSafety = true;
+        systemPrompt += "\n\n" + CONSUMPTION_SAFETY_PROMPT + "\n\n" + VIBE_SAFETY_SCOPE_NOTE;
+      } else if (vibeRoute === "HANDOFF") {
+        // No cultivation or strain data is injected on this surface.
+        systemPrompt += "\n\n" + VIBE_HANDOFF_PROMPT;
+        handoff = "plant";
+      }
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────
@@ -268,6 +293,19 @@ export async function handler(event) {
           content_augmented = (content_augmented || userContent) + historyBlock;
         }
       }
+    } else if (tab === "vibe" && !handoff && !vibeSafety) {
+      // Cannabis history/culture is age-neutral and allowed on vibe — and when
+      // the database has the answer, it must be the source, not training
+      // memory. NOT frame-gated: searchHistory requires an explicit trigger
+      // match, so this only fires when they actually asked about a history
+      // topic, and a grounded answer should never be withheld then. Skipped
+      // on handoff turns (he's redirecting, not answering) and safety turns
+      // (don't stuff trivia into a help moment).
+      const matchedHistory = searchHistory(userContent);
+      const historyBlock = formatHistoryContext(matchedHistory);
+      if (historyBlock) {
+        content_augmented = userContent + historyBlock;
+      }
     }
 
     // ── Philosophy pull (frame-gated; cadence still applies) ──────────
@@ -277,8 +315,10 @@ export async function handler(event) {
     // cadence on a high-confidence Challenge/Breakthrough with the product
     // question settled — with the rule detector that's Challenge in practice;
     // Breakthrough stays dormant until the Phase 3 classifier.
-    const philAllowed = fGate("philosophy", frame, confidence);
-    const rumiBeat = canFireRumi(frame, confidence, isProductSettled(userContent));
+    // Never on a vibe handoff/safety turn: a redirect (or someone in trouble)
+    // must not arrive wearing a philosophy quote.
+    const philAllowed = fGate("philosophy", frame, confidence) && !handoff && !vibeSafety;
+    const rumiBeat = !handoff && !vibeSafety && canFireRumi(frame, confidence, isProductSettled(userContent));
     if ((philAllowed && shouldPullPhilosophy(currentCount)) || rumiBeat) {
       const quote = pullPhilosophy(userContent);
       const philBlock = formatPhilosophyContext(quote);
@@ -422,6 +462,19 @@ export async function handler(event) {
       })
       .eq("id", user_id);
 
+    // ── Retention instrumentation (append-only, per-user per-day) ─────
+    // Counts for EVERYONE, founders included — like the counter above, the
+    // founder check skips the limit, not the increment. Dashboards exclude
+    // internal accounts via users.is_internal, not by skipping the write.
+    // Non-blocking: a metrics miss must never fail a chat message.
+    const { error: activityError } = await supabaseAdmin.rpc("bump_activity_day", {
+      p_user_id: user_id,
+      p_day: today,
+    });
+    if (activityError) {
+      console.error("bump_activity_day failed (non-blocking):", activityError.message);
+    }
+
     // ── Calculate usage_remaining ─────────────────────────────────────
     // null if unlimited (founder or subscribed), integer if free tier.
     // Counting still happens for everyone (harmless); it's just never
@@ -431,11 +484,15 @@ export async function handler(event) {
       : Math.max(0, FREE_DAILY_LIMIT - newCount);
 
     // ── Response ──────────────────────────────────────────────────────
+    // handoff drives the UI's click-over button — the client must gate on
+    // this flag, never on string-matching the reply prose.
     return jsonResponse(200, {
       reply,
       tokens_in,
       tokens_out,
       usage_remaining,
+      handoff, // "plant" | null
+      handoff_message: handoff ? userContent : null, // carried into the new thread
     });
   } catch (err) {
     console.error("chat/send error:", err);

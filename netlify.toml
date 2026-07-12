@@ -146,6 +146,12 @@
   to = "/.netlify/functions/memory-pin"
   status = 200
 
+# Founder-only metrics snapshot (Early Update v2 §5):
+[[redirects]]
+  from = "/api/admin/metrics"
+  to = "/.netlify/functions/admin-metrics"
+  status = 200
+
 # One-off title backfill (Phase 2 §0). Delete this redirect and
 # api/backfill-titles.js once the backlog is cleared (remaining: 0).
 [[redirects]]

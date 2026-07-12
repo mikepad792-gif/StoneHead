@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 
 const API_BASE = "";
+const DISCORD_INVITE_URL = "https://discord.gg/twJuwv6WT";
 const AppContext = createContext(null);
 function useApp() { return useContext(AppContext); }
 
@@ -119,6 +120,7 @@ export default function App() {
   const [showSubscription, setShowSubscription] = useState(false);
   const [showAgeGate, setShowAgeGate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingHandoff, setPendingHandoff] = useState(null); // vibe→plant question awaiting age verify
   const [loading, setLoading] = useState(false);
   const [appLoading, setAppLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -184,9 +186,16 @@ export default function App() {
     setActiveTab(tab); setActiveThreadId(null); setMessages([]);
   }
   async function handleAgeVerify() {
-    try { await apiPost("/api/profile/age-verify", {}); setUser((u) => ({ ...u, age_verified: true })); setShowAgeGate(false); setActiveTab("plant"); setActiveThreadId(null); setMessages([]); }
+    try {
+      await apiPost("/api/profile/age-verify", {});
+      setUser((u) => ({ ...u, age_verified: true }));
+      setShowAgeGate(false); setActiveTab("plant"); setActiveThreadId(null); setMessages([]);
+      // A handoff that hit the gate resumes here — verified first, then carried.
+      if (pendingHandoff) { const carried = pendingHandoff; setPendingHandoff(null); await startPlantThreadWith(carried); }
+    }
     catch (e) { addToast("age verification failed"); }
   }
+  function dismissAgeGate() { setShowAgeGate(false); setPendingHandoff(null); }
   async function handleNewThread() {
     try { const data = await apiPost("/api/threads/create", { tab: activeTab }); setActiveThreadId(data.thread_id); setMessages([]); await loadThreads(); setSidebarOpen(false); }
     catch (e) { addToast("couldn't create thread"); }
@@ -200,34 +209,53 @@ export default function App() {
     try { await apiPost("/api/threads/rename", { thread_id: threadId, title: newTitle }); setThreads((p) => p.map((t) => (t.id === threadId ? { ...t, title: newTitle } : t))); }
     catch (e) { addToast("couldn't rename thread"); }
   }
-  async function handleSendMessage(text) {
+  // opts { threadId, tab } override the active state — the vibe→plant handoff
+  // sends into a thread it just created, before React state has caught up.
+  async function handleSendMessage(text, opts = {}) {
     if (!text.trim()) return;
-    let threadId = activeThreadId;
+    const tab = opts.tab || activeTab;
+    let threadId = opts.threadId || activeThreadId;
     if (!threadId) {
-      try { const data = await apiPost("/api/threads/create", { tab: activeTab }); threadId = data.thread_id; setActiveThreadId(threadId); loadThreads(); }
+      try { const data = await apiPost("/api/threads/create", { tab }); threadId = data.thread_id; setActiveThreadId(threadId); loadThreads(); }
       catch (e) { addToast("couldn't start thread"); return; }
     }
     setMessages((p) => [...p, { id: `temp-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
     setLoading(true);
     try {
-      const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab: activeTab });
+      const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab });
       // A blank/whitespace reply must never render as an empty bubble — treat
       // it as a failed send so the user gets the error bubble + retry button.
       if (!data.reply || !String(data.reply).trim()) throw new Error("empty reply");
-      setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString() }]);
+      // handoff comes from the API flag, never from string-matching the prose.
+      setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString(), handoff: data.handoff || null, handoff_message: data.handoff_message || null }]);
       if (data.usage_remaining !== null && data.usage_remaining !== undefined) setUsageRemaining(data.usage_remaining);
       setTimeout(() => loadThreads(), 2000);
     } catch (e) {
-      setMessages((p) => [...p, { id: `err-${Date.now()}`, role: "assistant", content: "yo something went sideways... try again in a sec", created_at: new Date().toISOString(), isError: true }]);
+      setMessages((p) => [...p, { id: `err-${Date.now()}`, role: "assistant", content: "man, something went sideways... try again in a sec", created_at: new Date().toISOString(), isError: true }]);
       addToast("message failed to send");
     } finally { setLoading(false); }
+  }
+  // The click-over button: switch to plant, new thread, carry the question so
+  // they never retype what they just asked. Unverified users route THROUGH
+  // the age gate (handleAgeVerify resumes the carry) — never around it.
+  async function handleHandoffClick(text) {
+    if (!text || !text.trim() || loading) return;
+    if (user && !user.age_verified) { setPendingHandoff(text); setShowAgeGate(true); return; }
+    await startPlantThreadWith(text);
+  }
+  async function startPlantThreadWith(text) {
+    try {
+      const data = await apiPost("/api/threads/create", { tab: "plant" });
+      setView("chat"); setActiveTab("plant"); setActiveThreadId(data.thread_id); setMessages([]);
+      await handleSendMessage(text, { threadId: data.thread_id, tab: "plant" });
+    } catch (e) { addToast("couldn't carry that over — try again"); }
   }
   async function handleToggleData(threadId, currentState) {
     try { const data = await apiPost("/api/threads/toggle-data", { thread_id: threadId, data_opt_in: !currentState }); setThreads((p) => p.map((t) => (t.id === threadId ? { ...t, data_opt_in: data.data_opt_in } : t))); }
     catch (e) { addToast("couldn't update data setting"); }
   }
 
-  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, handleNewThread, handleSelectThread, handleSendMessage, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate };
+  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate };
 
   if (!sessionToken) return <AppContext.Provider value={ctx}><div className="sh-root"><AuthScreen /></div></AppContext.Provider>;
   if (appLoading) return (
@@ -371,6 +399,7 @@ function ChatWindow() {
 }
 
 function MessageBubble({ message, tab, onRetry }) {
+  const { handleHandoffClick } = useApp();
   const isUser = message.role === "user";
   return (
     <div className={`sh-bubble-row ${isUser ? "sh-bubble-row--user" : ""}`}>
@@ -379,6 +408,11 @@ function MessageBubble({ message, tab, onRetry }) {
       )}
       <div className={`sh-bubble ${isUser ? "sh-bubble--user" : tab === "plant" ? "sh-bubble--assistant-plant" : "sh-bubble--assistant-vibe"}`}>
         <p className="sh-bubble-text">{message.content}</p>
+        {!isUser && message.handoff === "plant" && message.handoff_message && (
+          <button className="sh-handoff-btn" onClick={() => handleHandoffClick(message.handoff_message)}>
+            take it to talk the plant 🌿
+          </button>
+        )}
         {onRetry && <button className="sh-retry-btn" onClick={onRetry}>↻ retry</button>}
       </div>
     </div>
@@ -414,6 +448,7 @@ function ThreadSidebar() {
       <div className="sh-sidebar-nav">
         <button className={`sh-nav-item ${view === "chat" ? "sh-nav-item--active" : ""}`} onClick={goChat}>💬 chat</button>
         <button className={`sh-nav-item ${view === "memory" ? "sh-nav-item--active" : ""}`} onClick={goMemory}>🧠 memory</button>
+        <a className="sh-nav-item sh-nav-item--link" href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">👾 discord</a>
       </div>
       <div className="sh-sidebar-header"><span className="sh-sidebar-title">THREADS</span><button className="sh-new-thread-btn" onClick={handleNewThread}>+ new</button></div>
       <div className="sh-thread-list">
@@ -461,7 +496,7 @@ function DataToggle({ threadId, currentState }) {
 }
 
 function AgeGateModal() {
-  const { handleAgeVerify, showAgeGate, setShowAgeGate } = useApp();
+  const { handleAgeVerify, showAgeGate, dismissAgeGate } = useApp();
   if (!showAgeGate) return null;
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-age-gate">
@@ -470,7 +505,7 @@ function AgeGateModal() {
       <p>Talk the Plant is for people 21 and older. Are you 21 years of age or older?</p>
       <div className="sh-age-actions">
         <button className="sh-btn-primary" onClick={handleAgeVerify}>yeah, I'm 21+</button>
-        <button className="sh-btn-secondary" onClick={() => setShowAgeGate(false)}>nah, take me back</button>
+        <button className="sh-btn-secondary" onClick={dismissAgeGate}>nah, take me back</button>
       </div>
     </div></div>
   );
