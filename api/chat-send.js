@@ -18,7 +18,7 @@
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { FREE_DAILY_LIMIT, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
-import { VIBE_PROMPT, VIBE_HANDOFF_PROMPT, VIBE_SAFETY_SCOPE_NOTE } from "../prompts/vibe.js";
+import { VIBE_MODE, VIBE_HANDOFF_PROMPT, VIBE_SAFETY_SCOPE_NOTE } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
 import {
@@ -35,6 +35,13 @@ import {
   hasDiagnosisCue,
   routeVibeTurn,
 } from "../lib/frameDetect.js";
+import {
+  detectCrisis,
+  shouldSuppressInjection,
+  CRISIS_REPLY,
+  CRISIS_CLARIFY_PROMPT,
+} from "../lib/crisisDetect.js";
+import { CHARACTER_CORE } from "../prompts/character.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
 import {
   CULTIVATION_MODE_PROMPT,
@@ -47,7 +54,7 @@ import {
 } from "../lib/sessionMemory.js";
 import { stripModelTags } from "../lib/sanitize.js";
 import { openrouterChat } from "../lib/openrouter.js";
-import { AI_MODEL_CHAT } from "../lib/config.js";
+import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10) || 700;
@@ -55,6 +62,23 @@ const AI_TEMPERATURE = 0.75;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
+// Does this turn actually name or ask about a specific strain? Gate for the
+// retrieval-miss grounding line (Doc 3a edit 5). Deliberately conservative:
+// it only ever NARROWS when the grounding line fires. A false negative costs
+// one turn of the old behavior; a false positive tells StoneHead he doesn't
+// know a strain nobody asked about.
+const STRAIN_ASK_CUES = [
+  "strain", "strains", "cultivar", "phenotype", "pheno", "cut of",
+  "heard of", "know of", "ever tried", "ever had", "ever smoked",
+  "tell me about", "what about", "how about", "what's in", "whats in",
+  "any good", "is it good", "worth trying", "lineage", "genetics",
+  "crossed with", "bred", "breeder",
+];
+function asksAboutAStrain(text) {
+  const t = " " + String(text || "").toLowerCase() + " ";
+  return STRAIN_ASK_CUES.some((c) => t.includes(c));
+}
+
 const LIMIT_MESSAGE =
   "hey bro... I'm kinda tapped for today. like my brain needs to recharge or whatever. " +
   "come back tomorrow though, I'll be right here. same couch. same vibe. we'll pick it up.";
@@ -112,7 +136,7 @@ export async function handler(event) {
     // Write-side handled here: reset if new day, then check limit.
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
-      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder")
+      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified")
       .eq("id", user_id)
       .single();
 
@@ -149,6 +173,36 @@ export async function handler(event) {
     // an expired/false subscription is still unlimited, always.
     const unlimited = user.is_founder || user.is_subscribed;
 
+    // ── Crisis intercept — tier 2 (explicit) ──────────────────────────
+    // Sits ABOVE the daily limit on purpose: someone out of messages is
+    // still someone, and LIMIT_MESSAGE is not an acceptable answer to
+    // "I don't want to be here anymore." Tier 2 is history-independent by
+    // design so it can run this early.
+    //
+    // No model call on this path. Fixed text — it cannot drift, cannot be
+    // steered by preceding turns, and reads the same on any model.
+    const crisisEarly = detectCrisis(message.trim());
+    if (crisisEarly.tier === 2) {
+      console.warn(
+        "crisis intercept:",
+        JSON.stringify({ tier: 2, thread_id, matched: crisisEarly.matched })
+      );
+
+      await supabaseAdmin.from("messages").insert([
+        { thread_id, role: "user", content: message.trim(), tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "assistant", content: CRISIS_REPLY, tokens_in: 0, tokens_out: 0 },
+      ]);
+
+      return jsonResponse(200, {
+        reply: CRISIS_REPLY,
+        tokens_in: 0,
+        tokens_out: 0,
+        usage_remaining: unlimited ? null : Math.max(0, FREE_DAILY_LIMIT - currentCount),
+        handoff: null,
+        handoff_message: null,
+      });
+    }
+
     // Enforce limit for free-tier users
     if (!unlimited && currentCount >= FREE_DAILY_LIMIT) {
       return jsonResponse(200, {
@@ -184,6 +238,22 @@ export async function handler(event) {
     let content_augmented = null;
     const { frame, confidence } = detectFrame(userContent, history);
 
+    // ── Crisis intercept — tier 1 (ambiguous) ─────────────────────────
+    // The letting-go vocabulary pointed at a person instead of a grudge.
+    // This turn still goes to the model — a canned 988 reply to "like stop
+    // everything" would wreck the vibe tab and get the layer switched off.
+    // What changes: affirm-then-clarify is forbidden, and lore/philosophy/
+    // strain injection is suppressed in CODE below, so the suppression
+    // holds whether or not the model follows the instruction.
+    const crisis = detectCrisis(userContent, history);
+    if (crisis.tier === 1) {
+      console.warn(
+        "crisis intercept:",
+        JSON.stringify({ tier: 1, thread_id, matched: crisis.matched, echo: crisis.echo })
+      );
+    }
+    const suppressInjection = shouldSuppressInjection(crisis.tier);
+
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
     let topic = "STRAIN"; // plant-tab topic route (Cultivation Phase 1)
@@ -201,7 +271,11 @@ export async function handler(event) {
           .eq("user_id", user_id);
         liked_strains = data || [];
       }
-      systemPrompt = buildPlantPrompt(liked_strains);
+      // CHARACTER_CORE loads on BOTH tabs. Until now the plant tab ran on a
+      // separate personality description that had drifted from the vibe one,
+      // so every character rule — including the honest-miss block — was
+      // invisible here. Pink Thunder and Blue Smog were plant-tab failures.
+      systemPrompt = CHARACTER_CORE + "\n\n" + buildPlantPrompt(liked_strains);
 
       // Topic routing (silent — never surfaced as a mode switch).
       topic = classifyTopic(userContent);
@@ -209,7 +283,7 @@ export async function handler(event) {
       if (topic === "CULTIVATION") systemPrompt += "\n\n" + CULTIVATION_MODE_PROMPT;
       else if (topic === "CONSUMPTION-SAFETY") systemPrompt += "\n\n" + CONSUMPTION_SAFETY_PROMPT;
     } else {
-      systemPrompt = VIBE_PROMPT;
+      systemPrompt = CHARACTER_CORE + "\n\n" + VIBE_MODE;
 
       // Vibe-side routing (pure string checks — no API call, no latency).
       // SAFETY answers in place; HANDOFF points to Talk the Plant; NONE
@@ -227,6 +301,12 @@ export async function handler(event) {
         systemPrompt += "\n\n" + VIBE_HANDOFF_PROMPT;
         handoff = "plant";
       }
+    }
+
+    // Appended LAST of the prompt blocks on purpose: it must win over
+    // VIBE_HANDOFF_PROMPT and CONSUMPTION_SAFETY_PROMPT if a turn trips both.
+    if (crisis.tier === 1) {
+      systemPrompt += "\n\n" + CRISIS_CLARIFY_PROMPT;
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────
@@ -251,7 +331,7 @@ export async function handler(event) {
       }
     } else if (tab === "plant" && topic === "STRAIN") {
       // Strain retrieval — only when the frame allows informative content.
-      if (fGate("strain_context", frame, confidence)) {
+      if (fGate("strain_context", frame, confidence) && !suppressInjection) {
         // Parse stated exclusions once (P0) and thread to BOTH retrieval and
         // the context block, so the filter and the model agree.
         const constraints = parseConstraints(userContent);
@@ -268,6 +348,21 @@ export async function handler(event) {
 
         if (strainBlock) {
           content_augmented = userContent + strainBlock;
+        } else if (asksAboutAStrain(userContent) || correction) {
+          // A lookup ran and found nothing. Say so explicitly — otherwise this
+          // turn is identical to one where no lookup happened, and the model
+          // fills the silence. See the honest-miss block in character.js.
+          //
+          // GATED on the turn actually naming/asking about a strain. classifyTopic
+          // returns STRAIN as a catch-all, so this branch is also reached by
+          // "hey what's up" and "thanks man" — and telling the model "you do not
+          // know this strain" on a greeting contradicts plant.js ("you don't have
+          // to talk weed every message"). No strain named means no absence to
+          // declare.
+          content_augmented = userContent +
+            "\n\n[GROUNDING: searched the strain database for this turn. No match found. " +
+            "You do not know this strain. Say so plainly — do not hedge, do not say you " +
+            "have heard the name, do not describe effects or lineage.]";
         }
 
         // Extras (Part B): dab knowledge + slang origins. After strain
@@ -279,14 +374,14 @@ export async function handler(event) {
       }
 
       // History retrieval — gated the same way.
-      if (fGate("history", frame, confidence)) {
+      if (fGate("history", frame, confidence) && !suppressInjection) {
         const matchedHistory = searchHistory(userContent);
         const historyBlock = formatHistoryContext(matchedHistory);
         if (historyBlock) {
           content_augmented = (content_augmented || userContent) + historyBlock;
         }
       }
-    } else if (tab === "vibe" && !handoff && !vibeSafety) {
+    } else if (tab === "vibe" && !handoff && !vibeSafety && !suppressInjection) {
       // Cannabis history/culture is age-neutral and allowed on vibe — and when
       // the database has the answer, it must be the source, not training
       // memory. NOT frame-gated: searchHistory requires an explicit trigger
@@ -310,8 +405,8 @@ export async function handler(event) {
     // Breakthrough stays dormant until the Phase 3 classifier.
     // Never on a vibe handoff/safety turn: a redirect (or someone in trouble)
     // must not arrive wearing a philosophy quote.
-    const philAllowed = fGate("philosophy", frame, confidence) && !handoff && !vibeSafety;
-    const rumiBeat = !handoff && !vibeSafety && canFireRumi(frame, confidence, isProductSettled(userContent));
+    const philAllowed = fGate("philosophy", frame, confidence) && !handoff && !vibeSafety && !suppressInjection;
+    const rumiBeat = !handoff && !vibeSafety && !suppressInjection && canFireRumi(frame, confidence, isProductSettled(userContent));
     if ((philAllowed && shouldPullPhilosophy(currentCount)) || rumiBeat) {
       const quote = pullPhilosophy(userContent);
       const philBlock = formatPhilosophyContext(quote);
@@ -512,6 +607,11 @@ async function callChatModel(aiMessages) {
     // fix. Some OpenRouter providers ignore unsupported params silently.
     frequency_penalty: 0.4,
     presence_penalty: 0.3,
+  }, {
+    // Synchronous path: Netlify kills this function at 10s, so the
+    // per-attempt timeout has to leave room for the cross-model retry
+    // inside that budget. Background callers keep the longer default.
+    timeoutMs: OPENROUTER_TIMEOUT_CHAT_MS,
   });
 
   if (!aiData) {

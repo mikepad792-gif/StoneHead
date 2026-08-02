@@ -58,11 +58,15 @@ async function apiCall(endpoint, options = {}, isRetry = false) {
 async function apiPost(endpoint, body) { return apiCall(endpoint, { method: "POST", body: JSON.stringify(body) }); }
 async function apiGet(endpoint, params = {}) { const qs = new URLSearchParams(params).toString(); return apiCall(qs ? `${endpoint}?${qs}` : endpoint, { method: "GET" }); }
 
+// §7: all four are in the USER's voice, and none can be satisfied by a single
+// deep line — the previous set was quote-vending prompts, which taught the
+// exact behavior the giveaway rejects. Chip 3 is the first-contact demo of the
+// voice rewrite: it asks him to bring something, which surfaces a tide pool.
 const VIBE_SUGGESTIONS = [
-  { text: "what's on your mind lately?", icon: "💬" },
-  { text: "tell me something weird", icon: "✨" },
-  { text: "is it okay to not have a plan?", icon: "🌿" },
-  { text: "what's the meaning of all this?", icon: "◎" },
+  { text: "i don't even know what to say to you", icon: "💭" },
+  { text: "there's something i can't stop thinking about", icon: "🌀" },
+  { text: "what do you think about when nobody's talking to you?", icon: "🗿" },
+  { text: "i keep going back and forth on something", icon: "🔀" },
 ];
 const PLANT_SUGGESTIONS = [
   // §7: 2 strain + 2 grow, each phrased as a real user message. The grow chips
@@ -125,6 +129,7 @@ export default function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [recoveryToken, setRecoveryToken] = useState(null); // set from the reset-email hash
 
   function addToast(msg) {
     const id = Date.now();
@@ -139,6 +144,25 @@ export default function App() {
   }, [sessionToken]);
 
   useEffect(() => { if (sessionToken) loadThreads(); }, [activeTab]);
+
+  // §6a — the password-reset link lands here with the tokens in the URL HASH
+  // (Supabase verifies on its own domain, then redirects). Keying off the hash
+  // rather than the path means this works no matter what redirect_to resolves
+  // to. Runs once, before anything else touches the address bar.
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    if (hash.includes("type=recovery")) {
+      const params = new URLSearchParams(hash.slice(1));
+      const token = params.get("access_token");
+      if (token) {
+        setRecoveryToken(token);
+        setAuthView("reset");
+        // Strip the token out of the address bar so it isn't sitting in
+        // history or a screenshot.
+        window.history.replaceState({}, "", "/");
+      }
+    }
+  }, []);
 
   async function loadProfile() {
     try {
@@ -175,6 +199,20 @@ export default function App() {
     setSessionToken(data.session_token);
     // New signups are never founders and hold no badges — grants are operator-CLI only.
     setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null, badges: [] });
+  }
+  // §6b — the toast copy matches what the endpoint actually does: it always
+  // returns 200, so the UI must not claim an inbox we can't confirm exists.
+  async function handleForgotPassword(email) {
+    await apiPost("/api/auth/forgot-password", { email });
+    addToast("if that email has an account, a reset link is on the way");
+  }
+  // §6c — send them to login rather than auto-signing-in. One extra step, and
+  // it confirms the new password actually works.
+  async function handleResetPassword(password) {
+    await apiPost("/api/auth/reset-password", { access_token: recoveryToken, password });
+    setRecoveryToken(null);
+    setAuthView("login");
+    addToast("password updated — log in with the new one");
   }
   function handleLogout() {
     localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
@@ -255,9 +293,20 @@ export default function App() {
     catch (e) { addToast("couldn't update data setting"); }
   }
 
-  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate };
+  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword };
 
-  if (!sessionToken) return <AppContext.Provider value={ctx}><div className="sh-root"><AuthScreen /></div></AppContext.Provider>;
+  // A recovery link can arrive while a session is still in localStorage, so the
+  // reset view wins over the logged-in app until the password is set.
+  if (!sessionToken || (authView === "reset" && recoveryToken)) {
+    return (
+      <AppContext.Provider value={ctx}>
+        <div className="sh-root">
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+          <AuthScreen />
+        </div>
+      </AppContext.Provider>
+    );
+  }
   if (appLoading) return (
     <div className="sh-root"><div className="sh-loading">
       <img src="/images/stonehead-clean.png" alt="" className="sh-loading-img" />
@@ -302,13 +351,20 @@ export default function App() {
 }
 
 function AuthScreen() {
-  const { handleLogin, handleRegister, authView, setAuthView } = useApp();
+  const { handleLogin, handleRegister, handleForgotPassword, authView, setAuthView } = useApp();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [username, setUsername] = useState(""); const [error, setError] = useState(""); const [submitting, setSubmitting] = useState(false);
   async function handleSubmit(e) {
     e.preventDefault(); setError(""); setSubmitting(true);
     try { if (authView === "login") await handleLogin(email, password); else { if (!username.trim()) { setError("need a username, dude"); setSubmitting(false); return; } await handleRegister(email, password, username); } }
     catch (err) { setError(err.message || "something went wrong"); } finally { setSubmitting(false); }
+  }
+  async function onForgot() {
+    setError("");
+    if (!email.trim()) { setError("put your email in first"); return; }
+    setSubmitting(true);
+    try { await handleForgotPassword(email); }
+    catch (err) { setError(err.message || "couldn't send that — try again"); } finally { setSubmitting(false); }
   }
   return (
     <div className="sh-auth-screen"><div className="sh-auth-card">
@@ -317,15 +373,49 @@ function AuthScreen() {
         <img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img sh-logo-img--large" />
         <p className="sh-tagline">Your Always Stone-D AI Friend</p>
       </div>
-      <form onSubmit={handleSubmit} className="sh-auth-form">
-        {authView === "register" && <input type="text" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} className="sh-input" autoComplete="username" />}
-        <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sh-input" autoComplete="email" required />
-        <input type="password" placeholder="password" value={password} onChange={(e) => setPassword(e.target.value)} className="sh-input" autoComplete={authView === "login" ? "current-password" : "new-password"} required />
-        {error && <p className="sh-error">{error}</p>}
-        <button type="submit" className="sh-btn-primary" disabled={submitting}>{submitting ? "hold on..." : authView === "login" ? "come in" : "join up"}</button>
-      </form>
-      <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>
+      {authView === "reset" ? <ResetPasswordForm /> : (
+        <>
+          <form onSubmit={handleSubmit} className="sh-auth-form">
+            {authView === "register" && <input type="text" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value)} className="sh-input" autoComplete="username" />}
+            <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sh-input" autoComplete="email" required />
+            <input type="password" placeholder="password" value={password} onChange={(e) => setPassword(e.target.value)} className="sh-input" autoComplete={authView === "login" ? "current-password" : "new-password"} required />
+            {error && <p className="sh-error">{error}</p>}
+            <button type="submit" className="sh-btn-primary" disabled={submitting}>{submitting ? "hold on..." : authView === "login" ? "come in" : "join up"}</button>
+          </form>
+          {authView === "login" && <button type="button" className="sh-auth-toggle" onClick={onForgot} disabled={submitting}>forgot your password?</button>}
+          <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>
+        </>
+      )}
     </div></div>
+  );
+}
+
+// §6c — shown when a recovery hash put us in the "reset" view. The token
+// itself lives in App state; this form only collects the new password.
+function ResetPasswordForm() {
+  const { handleResetPassword, setAuthView } = useApp();
+  const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState(""); const [submitting, setSubmitting] = useState(false);
+  async function onSubmit(e) {
+    e.preventDefault(); setError("");
+    // Same minimum as register and as api/auth-reset-password.js.
+    if (password.length < 8) { setError("password must be at least 8 characters"); return; }
+    if (password !== confirm) { setError("those don't match"); return; }
+    setSubmitting(true);
+    try { await handleResetPassword(password); }
+    catch (err) { setError(err.message || "couldn't update the password"); } finally { setSubmitting(false); }
+  }
+  return (
+    <>
+      <form onSubmit={onSubmit} className="sh-auth-form">
+        <p className="sh-tagline">pick a new password</p>
+        <input type="password" placeholder="new password" value={password} onChange={(e) => setPassword(e.target.value)} className="sh-input" autoComplete="new-password" required />
+        <input type="password" placeholder="confirm new password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="sh-input" autoComplete="new-password" required />
+        {error && <p className="sh-error">{error}</p>}
+        <button type="submit" className="sh-btn-primary" disabled={submitting}>{submitting ? "hold on..." : "set it"}</button>
+      </form>
+      <button className="sh-auth-toggle" onClick={() => setAuthView("login")}>back to log in</button>
+    </>
   );
 }
 

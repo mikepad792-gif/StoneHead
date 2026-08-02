@@ -44,6 +44,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/auth/forgot-password"
+  to = "/.netlify/functions/auth-forgot-password"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/reset-password"
+  to = "/.netlify/functions/auth-reset-password"
+  status = 200
+
+[[redirects]]
   from = "/api/chat/send"
   to = "/.netlify/functions/chat-send"
   status = 200
