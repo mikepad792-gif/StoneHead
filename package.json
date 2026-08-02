@@ -9,12 +9,24 @@
     "dev": "netlify dev",
     "build": "react-scripts build",
     "deploy": "netlify deploy --prod",
-    "check": "node scripts/retrieval-check.mjs && node scripts/save-intent-check.mjs && node scripts/cultivation-runtime-check.mjs && node scripts/frame-check.mjs && python3 scripts/cultivation-eval/run_eval.py"
+    "check": "node scripts/openrouter-check.mjs && node scripts/retrieval-check.mjs && node scripts/save-intent-check.mjs && node scripts/cultivation-runtime-check.mjs && node scripts/frame-check.mjs && python3 scripts/cultivation-eval/run_eval.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-scripts": "^5.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }

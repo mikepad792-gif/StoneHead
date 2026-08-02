@@ -46,19 +46,12 @@ import {
   formatSessionMemoryBlock,
 } from "../lib/sessionMemory.js";
 import { stripModelTags } from "../lib/sanitize.js";
+import { openrouterChat } from "../lib/openrouter.js";
+import { AI_MODEL_CHAT } from "../lib/config.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
-// Cheapest viable model via OpenRouter. Stone Head doesn't need to be
-// too smart — the system prompt is the soul, the model is the mouth.
-const AI_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const AI_MODEL = process.env.AI_MODEL || "nousresearch/hermes-3-llama-3.1-405b:free";
+const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10) || 700;
 const AI_TEMPERATURE = 0.75;
-// Max reply length for the main completion. Env-tunable like AI_MODEL.
-// Headroom matters: this model sometimes front-loads hidden reasoning/scaffold
-// (<think>/<ds_safety>) that eats the budget and truncates the real answer
-// mid-sentence ("You mean to…"). 700 leaves room for reasoning + a full reply;
-// the prompt still enforces brevity, so this is a ceiling, not a target.
-const MAX_TOKENS = Number(process.env.MAX_TOKENS) || 700;
 
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
@@ -505,39 +498,26 @@ export async function handler(event) {
 // { ok:true, reply, rawContent, finishReason, aiData }. `reply` is the
 // sanitized text — "" when the return was blank/pure scaffold.
 async function callChatModel(aiMessages) {
-  const aiResponse = await fetch(AI_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "https://stoneheadai.com",
-      "X-Title": "StoneHead AI",
-    },
-    body: JSON.stringify({
-      model: AI_MODEL,
-      messages: aiMessages,
-      temperature: AI_TEMPERATURE,
-      max_tokens: MAX_TOKENS,
-      // Kill reasoning at the source: the hidden <think>/<ds_safety>
-      // scaffold was eating the output budget (truncation, blank replies)
-      // before the real answer. The sanitizer stays as a backstop for
-      // providers that ignore this.
-      reasoning: { enabled: false },
-      // Reduce within-response repetition / stock signature lines.
-      // NOTE: these only affect a single response, not across requests —
-      // the prompt instruction in prompts/plant.js is the cross-session
-      // fix. Some OpenRouter providers ignore unsupported params silently.
-      frequency_penalty: 0.4,
-      presence_penalty: 0.3,
-    }),
+  const aiData = await openrouterChat(AI_MODEL_CHAT, aiMessages, {
+    temperature: AI_TEMPERATURE,
+    max_tokens: MAX_TOKENS,
+    // Kill reasoning at the source: the hidden <think>/<ds_safety>
+    // scaffold was eating the output budget (truncation, blank replies)
+    // before the real answer. The sanitizer stays as a backstop for
+    // providers that ignore this.
+    reasoning: { enabled: false },
+    // Reduce within-response repetition / stock signature lines.
+    // NOTE: these only affect a single response, not across requests —
+    // the prompt instruction in prompts/plant.js is the cross-session
+    // fix. Some OpenRouter providers ignore unsupported params silently.
+    frequency_penalty: 0.4,
+    presence_penalty: 0.3,
   });
 
-  if (!aiResponse.ok) {
-    const errBody = await aiResponse.text();
-    return { ok: false, status: aiResponse.status, errBody };
+  if (!aiData) {
+    return { ok: false, status: 0, errBody: "openrouter request failed" };
   }
 
-  const aiData = await aiResponse.json();
   const choice = aiData.choices?.[0];
   const finishReason = choice?.finish_reason || null;
   // Strip any leaked model scaffolding (<think>, <ds_safety>, stray XML-ish
