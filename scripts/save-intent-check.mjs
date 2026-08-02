@@ -16,6 +16,9 @@ import assert from "node:assert";
 process.env.SUPABASE_URL ||= "https://example.supabase.co";
 process.env.SUPABASE_ANON_KEY ||= "check-dummy";
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= "check-dummy";
+// Same deal for lib/config.js (reached via titleGen): an unresolvable model is
+// a config error and throws at import. No model is called here.
+process.env.AI_MODEL ||= "check-dummy/model";
 
 const { detectSaveIntent } = await import("../lib/saveIntent.js");
 const { escapeLikePattern, lookupStrainType } = await import("../lib/likedStrains.js");
