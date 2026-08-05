@@ -169,6 +169,19 @@
   to = "/.netlify/functions/backfill-titles"
   status = 200
 
+# Legal pages. Static HTML generated from docs/*.md by scripts/build-legal.mjs.
+# These MUST sit above the SPA fallback or /privacy resolves to the app shell
+# and a link from a signup form goes nowhere.
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy.html"
+  status = 200
+
+[[redirects]]
+  from = "/terms"
+  to = "/terms.html"
+  status = 200
+
 # SPA fallback — serve index.html for all non-API routes
 [[redirects]]
   from = "/*"

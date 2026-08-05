@@ -40,7 +40,17 @@ import {
   shouldSuppressInjection,
   CRISIS_REPLY,
   CRISIS_CLARIFY_PROMPT,
+  POST_CRISIS_RELEASE_PROMPT,
 } from "../lib/crisisDetect.js";
+import {
+  detectSubstance,
+  wasSubstanceTurn,
+  SUBSTANCE_REPLY_S1,
+  SUBSTANCE_REPLY_S2,
+  POST_SUBSTANCE_PROMPT,
+} from "../lib/substanceDetect.js";
+import { detectAge, blocksCannabis, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
+import { MINOR_PROMPT } from "../prompts/minor.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
 import {
@@ -136,7 +146,7 @@ export async function handler(event) {
     // Write-side handled here: reset if new day, then check limit.
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
-      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified")
+      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified, self_reported_age_band")
       .eq("id", user_id)
       .single();
 
@@ -173,28 +183,138 @@ export async function handler(event) {
     // an expired/false subscription is still unlimited, always.
     const unlimited = user.is_founder || user.is_subscribed;
 
-    // ── Crisis intercept — tier 2 (explicit) ──────────────────────────
-    // Sits ABOVE the daily limit on purpose: someone out of messages is
-    // still someone, and LIMIT_MESSAGE is not an acceptable answer to
-    // "I don't want to be here anymore." Tier 2 is history-independent by
-    // design so it can run this early.
+    // ── Load thread history (windowed to most recent 20) ──────────────
+    // Fetch newest-first with a hard limit so a long thread doesn't send
+    // the entire transcript every message, then reverse so the prompt
+    // still reads chronologically (oldest → newest).
     //
-    // No model call on this path. Fixed text — it cannot drift, cannot be
-    // steered by preceding turns, and reads the same on any model.
-    const crisisEarly = detectCrisis(message.trim());
-    if (crisisEarly.tier === 2) {
-      console.warn(
-        "crisis intercept:",
-        JSON.stringify({ tier: 2, thread_id, matched: crisisEarly.matched })
-      );
+    // LOADED BEFORE THE DAILY LIMIT, deliberately (Aug 4 batch, §3.1). The
+    // post-crisis window derives its state from history, and a PROMOTED tier 2
+    // ("Stop me forever", one turn after a tier-1 fire) has to clear the limit
+    // check for the same reason an explicit one does. Scoring the turn after
+    // the limit would mean a free user on message 51 gets LIMIT_MESSAGE
+    // instead of a safety response — which is the exact hole edit 4a was
+    // written to close, reopened through the side door.
+    const { data: recentHistory, error: historyError } = await supabaseAdmin
+      .from("messages")
+      .select("role, content")
+      .eq("thread_id", thread_id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (historyError) {
+      return errorResponse(500, "Failed to load thread history");
+    }
+
+    const history = (recentHistory || []).slice().reverse();
+
+    let userContent = message.trim();
+    let content_augmented = null;
+
+    // ── Age self-identification (Addendum A2) ─────────────────────────
+    // Detection is the easy half; PERSISTENCE is what fixes probe A1. The band
+    // lives on the USER, not the thread — a 14-year-old who opens a new thread
+    // is still fourteen, and thread-scoped state would reproduce the failure
+    // one conversation later instead of one turn later.
+    //
+    // Set on first detection and never cleared by anything the user types
+    // afterward. "I'm 14" followed by "actually I'm 25" leaves the flag set:
+    // treating a retraction as authoritative makes it trivially bypassable.
+    let ageBand = user.self_reported_age_band || null;
+    if (!ageBand) {
+      const stated = detectAge(userContent);
+      if (stated.band) {
+        ageBand = stated.band;
+        // The BAND only. Never the number — the behavior doesn't need it, and
+        // storing a child's exact age is collecting more than the job requires.
+        await supabaseAdmin
+          .from("users")
+          .update({ self_reported_age_band: ageBand, age_band_set_at: new Date().toISOString() })
+          .eq("id", user_id);
+        // Revoke a prior 21+ confirmation. It cannot stand next to this.
+        if (blocksCannabis(ageBand) && user.age_verified) {
+          await supabaseAdmin.from("users").update({ age_verified: false }).eq("id", user_id);
+        }
+        console.warn("age intercept:", JSON.stringify({
+          band: ageBand, thread_id, signal: stated.signal,
+        }));
+      }
+    }
+
+    // Below the ToS floor: say so plainly and kindly, and stop. Logged at
+    // error level because the published policy commits to acting on it —
+    // "if I learn that someone under 13 has created an account, I'll delete
+    // it" needed something behind it.
+    if (belowFloor(ageBand)) {
+      console.error("under-13 account:", JSON.stringify({ user_id, thread_id }));
+      await supabaseAdmin.from("messages").insert([
+        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "assistant", content: UNDER_13_REPLY, tokens_in: 0, tokens_out: 0 },
+      ]);
+      return jsonResponse(200, {
+        reply: UNDER_13_REPLY,
+        tokens_in: 0,
+        tokens_out: 0,
+        usage_remaining: unlimited ? null : Math.max(0, FREE_DAILY_LIMIT - currentCount),
+        handoff: null,
+        handoff_message: null,
+      });
+    }
+
+    // The plant tab is closed to a flagged user regardless of any prior 21+
+    // confirmation — including a thread they already had open.
+    if (tab === "plant" && blocksCannabis(ageBand)) {
+      return errorResponse(403, "Age verification required for Talk the Plant");
+    }
+
+    // ── Crisis intercept ──────────────────────────────────────────────
+    // ONE call, scored with history so the post-crisis window can promote.
+    // Tier 2 is still history-INDEPENDENT: passing history can only ever add
+    // detections, never remove one, so the Doc-1 invariant holds.
+    const crisis = detectCrisis(userContent, history);
+
+    // ── Substance intercept ───────────────────────────────────────────
+    // Independent of the crisis layer and of each other's cue lists. Cannabis
+    // never reaches here — it routes to CONSUMPTION_SAFETY_PROMPT instead.
+    const substanceHit = detectSubstance(userContent);
+
+    // ── Fixed-reply intercepts, ABOVE the daily limit ─────────────────
+    // Someone out of messages is still someone, and LIMIT_MESSAGE is not an
+    // acceptable answer to "I don't want to be here anymore" or to "I think I
+    // took too much." Neither path calls the model, so neither costs anything
+    // to serve.
+    //
+    // Deliberately absent from all of these, and all four on purpose:
+    //   - no usage increment. A crisis turn does not cost a message.
+    //   - no bump_activity_day. This must not appear as engagement.
+    //   - no postwork. Nothing about this turn gets written into the person's
+    //     long-term memory profile to be referenced cheerfully in three days.
+    //   - no message text in the log. Tier and matched cue only.
+    const fixedReply =
+      crisis.tier === 2 ? CRISIS_REPLY
+      : substanceHit.tier === 2 ? SUBSTANCE_REPLY_S2
+      : substanceHit.tier === 1 ? SUBSTANCE_REPLY_S1
+      : null;
+
+    if (fixedReply) {
+      if (crisis.tier === 2) {
+        console.warn("crisis intercept:", JSON.stringify({
+          tier: 2, thread_id, matched: crisis.matched, postCrisis: crisis.postCrisis,
+        }));
+      } else {
+        console.warn("substance intercept:", JSON.stringify({
+          tier: substanceHit.tier, thread_id,
+          substances: substanceHit.substances, signals: substanceHit.signals,
+        }));
+      }
 
       await supabaseAdmin.from("messages").insert([
-        { thread_id, role: "user", content: message.trim(), tokens_in: 0, tokens_out: 0 },
-        { thread_id, role: "assistant", content: CRISIS_REPLY, tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "assistant", content: fixedReply, tokens_in: 0, tokens_out: 0 },
       ]);
 
       return jsonResponse(200, {
-        reply: CRISIS_REPLY,
+        reply: fixedReply,
         tokens_in: 0,
         tokens_out: 0,
         usage_remaining: unlimited ? null : Math.max(0, FREE_DAILY_LIMIT - currentCount),
@@ -213,46 +333,37 @@ export async function handler(event) {
       });
     }
 
-    // ── Load thread history (windowed to most recent 20) ──────────────
-    // Fetch newest-first with a hard limit so a long thread doesn't send
-    // the entire transcript every message, then reverse so the prompt
-    // still reads chronologically (oldest → newest).
-    const { data: recentHistory, error: historyError } = await supabaseAdmin
-      .from("messages")
-      .select("role, content")
-      .eq("thread_id", thread_id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (historyError) {
-      return errorResponse(500, "Failed to load thread history");
-    }
-
-    const history = (recentHistory || []).slice().reverse();
-
     // ── Frame detection (Phase 2) ─────────────────────────────────────
     // Detect the relational frame once, from the message + recent history.
     // This drives frame-addressed injection (the F Gate) below: content
     // fires when the relational moment is right, not when a keyword matches.
-    let userContent = message.trim();
-    let content_augmented = null;
     const { frame, confidence } = detectFrame(userContent, history);
 
-    // ── Crisis intercept — tier 1 (ambiguous) ─────────────────────────
-    // The letting-go vocabulary pointed at a person instead of a grudge.
-    // This turn still goes to the model — a canned 988 reply to "like stop
+    // Tier 1 still goes to the model — a canned 988 reply to "like stop
     // everything" would wreck the vibe tab and get the layer switched off.
     // What changes: affirm-then-clarify is forbidden, and lore/philosophy/
-    // strain injection is suppressed in CODE below, so the suppression
-    // holds whether or not the model follows the instruction.
-    const crisis = detectCrisis(userContent, history);
+    // strain injection is suppressed in CODE below, so the suppression holds
+    // whether or not the model follows the instruction.
     if (crisis.tier === 1) {
-      console.warn(
-        "crisis intercept:",
-        JSON.stringify({ tier: 1, thread_id, matched: crisis.matched, echo: crisis.echo })
-      );
+      console.warn("crisis intercept:", JSON.stringify({
+        tier: 1, thread_id, matched: crisis.matched,
+        echo: crisis.echo, postCrisis: crisis.postCrisis,
+      }));
     }
-    const suppressInjection = shouldSuppressInjection(crisis.tier);
+    // A release turn is logged too: it is the outcome that was silently
+    // missing before, and it is the one you want to see in the logs when
+    // somebody reports that StoneHead stayed weird after a false alarm.
+    if (crisis.postCrisis === "release") {
+      console.warn("crisis intercept:", JSON.stringify({
+        tier: 0, thread_id, postCrisis: "release", windowTurns: crisis.windowTurns,
+      }));
+    }
+
+    // Post-substance turns suppress injection too — a Chemdawg riff one turn
+    // after an overdose check-in is exactly the wrong texture.
+    const postSubstance = wasSubstanceTurn(history);
+    const suppressInjection =
+      shouldSuppressInjection(crisis.tier) || postSubstance;
 
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
@@ -303,10 +414,28 @@ export async function handler(event) {
       }
     }
 
-    // Appended LAST of the prompt blocks on purpose: it must win over
+    // Appended LAST of the prompt blocks on purpose: these must win over
     // VIBE_HANDOFF_PROMPT and CONSUMPTION_SAFETY_PROMPT if a turn trips both.
     if (crisis.tier === 1) {
       systemPrompt += "\n\n" + CRISIS_CLARIFY_PROMPT;
+    }
+    // The release block (§3.6). This is the one that was missing entirely:
+    // after a fire, the model got no guidance in EITHER direction, so it read
+    // CRISIS_REPLY sitting in history and stayed in crisis register while the
+    // person talked about a drive home with their nephew.
+    if (crisis.postCrisis === "release") {
+      systemPrompt += "\n\n" + POST_CRISIS_RELEASE_PROMPT;
+    }
+    // Same shape, one turn after a substance intercept (§4.4): stop discussing
+    // the substance, keep discussing the person.
+    if (postSubstance) {
+      systemPrompt += "\n\n" + POST_SUBSTANCE_PROMPT;
+    }
+    // Every turn for a flagged user, not once (Addendum A2). The failure being
+    // fixed is precisely a thing that was true on turn 1 and forgotten by
+    // turn 3.
+    if (blocksCannabis(ageBand)) {
+      systemPrompt += "\n\n" + MINOR_PROMPT;
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────

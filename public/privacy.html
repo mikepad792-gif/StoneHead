@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141412" />
+    <title>Privacy Policy — Stone Head AI</title>
+    <link rel="icon" href="/images/favicon.png" />
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; padding: 2rem 1.25rem 5rem;
+        background: #141412; color: #e8e4dc;
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      main { max-width: 42rem; margin: 0 auto; }
+      a { color: #9ec37d; }
+      a:hover { color: #b8d99a; }
+      h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 1.5rem; }
+      h2 { font-size: 1.25rem; margin: 2.5rem 0 .75rem; color: #f3efe6; }
+      h3 { font-size: 1.05rem; margin: 1.75rem 0 .5rem; color: #f3efe6; }
+      p, li { color: #ccc6ba; }
+      li { margin: .35rem 0; }
+      ul { padding-left: 1.25rem; }
+      strong { color: #f3efe6; }
+      hr { border: 0; border-top: 1px solid #2c2a26; margin: 2.5rem 0; }
+      code { background: #1f1d1a; padding: .1em .35em; border-radius: 3px; font-size: .9em; }
+      .back { display: inline-block; margin-bottom: 2rem; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">&larr; back to Stone Head</a>
+      <h1 id="stonehead-ai-privacy-policy">StoneHead AI — Privacy Policy</h1>
+      <p><strong>Last updated:</strong> August 5, 2026</p>
+      <p>StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.</p>
+      <hr />
+      <h2 id="the-short-version">The short version</h2>
+      <ul>
+      <li>I store your email, your username, and your conversations, because the app doesn't work otherwise.</li>
+      <li>Your messages are sent to third-party AI providers to generate replies. That's how the app works, and it's the part I control least.</li>
+      <li>Before your message goes anywhere, the app checks it against a list of phrases that suggest a crisis or a drug emergency. See <a href="#the-safety-layer">The safety layer</a> — it's the one part of the app that reads your words before the AI does.</li>
+      <li>I don't train AI models on your conversations. I also can't speak for what the AI providers do — see <a href="#about-training">Training</a> below, where I've been specific about that.</li>
+      <li>StoneHead remembers things about you across sessions — that's a feature, and you can delete it.</li>
+      <li>I don't sell your data. I don't run ads. There is no analytics tracker following you around.</li>
+      <li>You can delete your account and everything in it, at any time, from the app.</li>
+      </ul>
+      <hr />
+      <h2 id="what-i-collect">What I collect</h2>
+      <p><strong>Account information</strong></p>
+      <ul>
+      <li>Your email address (to log you in and recover your account)</li>
+      <li>Your username (shown in the app)</li>
+      <li>Your password (stored as a secure hash — I cannot see your password)</li>
+      <li>Whether you've confirmed you're 21+ (required for the Talk the Plant tab), and, if you've mentioned your age in conversation, which broad age band you said you were in — I store the band, never a birth date</li>
+      <li>Whether you have a subscription, and when it expires</li>
+      </ul>
+      <p><strong>Your conversations</strong></p>
+      <ul>
+      <li>Every message you send and every reply StoneHead gives</li>
+      <li>Which tab it was on (the vibe / talk the plant)</li>
+      <li>The title of each conversation thread (generated automatically from the conversation)</li>
+      </ul>
+      <p><strong>What StoneHead remembers about you</strong> This is the part most apps don't tell you about, so I want to be direct.</p>
+      <p>StoneHead builds memory so conversations carry forward instead of restarting cold each time:</p>
+      <ul>
+      <li><strong>Session memories</strong> — short summaries of a conversation thread</li>
+      <li><strong>Core memories</strong> — longer-running things StoneHead has picked up about you across conversations</li>
+      <li><strong>Liked strains</strong> — strains you've saved, with any notes you added</li>
+      </ul>
+      <p>This is what makes StoneHead feel like it knows you. It's also the most personal data in the app. <strong>You can view and delete these at any time in the memory section of the app.</strong></p>
+      <p><strong>Technical data</strong></p>
+      <ul>
+      <li>Token counts per message (how much text was processed — used to understand costs)</li>
+      <li>Timestamps</li>
+      <li>Error logs when something breaks. These record which AI model was called and what went wrong. They do not contain the body of your messages.</li>
+      <li><strong>Safety-layer records.</strong> When the crisis or drug-emergency check fires, the app records that it fired, which tier, and <strong>the specific phrase that matched</strong> — which is a short piece of text you actually typed. I'm calling that out rather than filing it under "technical data" and hoping you don't notice. See below.</li>
+      </ul>
+      <p><strong>What I do NOT collect</strong></p>
+      <ul>
+      <li>No advertising or tracking cookies</li>
+      <li>No third-party analytics following you around the web</li>
+      <li>No location data</li>
+      <li>No payment card details (there is currently no live payment system)</li>
+      <li>No date of birth (age is self-attested — I ask, you confirm)</li>
+      </ul>
+      <hr />
+      <h2 id="the-safety-layer">The safety layer</h2>
+      <p>Some things are too important to leave to an AI's judgment in the moment. So before your message is sent to the AI at all, the app checks it in code against lists of phrases.</p>
+      <p><strong>What it checks for:</strong></p>
+      <ul>
+      <li>Language suggesting you might be thinking about hurting yourself</li>
+      <li>Language suggesting you've taken something and might be in physical danger</li>
+      </ul>
+      <p><strong>What happens when it fires:</strong> StoneHead responds with fixed text I wrote in advance rather than something the AI generated on the spot. Depending on what you said, that's either a question about what you meant, or a response that names <strong>988</strong> (crisis, call or text, any hour) or <strong>911</strong> and points you toward people actually equipped to help.</p>
+      <p><strong>What gets recorded:</strong> that it fired, which tier, the timestamp, and the phrase that matched. That last one is a fragment of what you typed, and it's stored so I can tell whether the safety layer is working — including whether it's firing when it shouldn't.</p>
+      <p><strong>What does not happen:</strong> nobody is alerted in real time. I am not watching. There is no monitoring desk, no notification on my phone, no report to anyone. It's a check in code and a log I read later, in batches, to find out where the thing is broken. <strong>No one is contacted on your behalf, ever.</strong> If you need someone, you have to reach out yourself — that's why the app gives you the numbers.</p>
+      <p><strong>It gets it wrong sometimes.</strong> It fires on things people say casually — "I don't want to be here anymore" about a party, "I'm done" about a bad night. If you get a serious response you didn't expect, that's a false positive, not a judgment about you. Tell it what you meant and it moves on.</p>
+      <p><strong>This is not a crisis service.</strong> It's a check in code written by one person. It will miss things. Please don't treat it as a safety net you can rely on.</p>
+      <p>The messages that trigger it are stored the same way as every other message in your thread, and deleted the same way when you delete the thread or your account.</p>
+      <hr />
+      <h2 id="the-data-toggle">The data toggle</h2>
+      <p>Each conversation has a <strong>data toggle</strong>, and it is <strong>off by default</strong>.</p>
+      <p>I want to be precise about what this is, because a switch in an app can imply more than it delivers.</p>
+      <p><strong>What it is:</strong> a permission record. Turning it on marks that thread as one I'm allowed to open when I'm trying to work out why StoneHead gave a bad answer — where it guessed, where the voice broke, where it got something wrong. Leaving it off means I don't.</p>
+      <p><strong>What it is not:</strong> encryption. I have administrative access to the database that stores your messages, and this toggle does not take that access away. It is a commitment about what I do, not a technical lock on what I'm able to do.</p>
+      <p><strong>One exception, stated plainly:</strong> the safety-layer records described above are operational logs, not thread content, and I look at them regardless of the toggle. That's how I find out the crisis check is failing. If that isn't acceptable to you, the honest answer is that this app isn't for you.</p>
+      <p>I could have written this section to sound stronger. I'd rather you know exactly what you're getting: my word, and a default that starts at off so you're never opted in without choosing it.</p>
+      <hr />
+      <h2 id="who-else-sees-your-messages">Who else sees your messages</h2>
+      <p><strong>The AI providers.</strong> To generate a reply, your message is sent over the internet to third-party AI services. Right now that means requests are routed through <a href="https://openrouter.ai/privacy" target="_blank" rel="noopener noreferrer">OpenRouter</a>, which passes them to the model that generates the reply — currently DeepSeek, with <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener noreferrer">Anthropic</a>'s Claude as a backup when the primary is unavailable.</p>
+      <p>Your message text is transmitted to them, along with recent context from the conversation and any memory StoneHead has of you. Their handling of that data is governed by their own privacy policies, not mine. I don't control it. If that doesn't sit right with you, this might not be the right app for you yet — and I'd rather tell you that plainly than bury it.</p>
+      <p><strong>The database provider.</strong> Your data is stored in a Supabase database (Postgres) and the app is hosted on Netlify. They store the data; they don't use it.</p>
+      <p><strong>Me.</strong> I can technically see the database. I don't read conversations for entertainment, and I don't go looking through people's threads. If you turn the data toggle <strong>on</strong>, you're giving me permission to read that thread to improve the app. If it's off, I leave it alone — with the safety-log exception named above.</p>
+      <p><strong>Nobody else.</strong> I don't sell your data. I don't share it with advertisers. I don't have a business model that depends on it.</p>
+      <hr />
+      <h2 id="links-out">Links out</h2>
+      <p>When the safety layer fires it may point you to resources run by other organizations — the 988 Suicide &amp; Crisis Lifeline, Never Use Alone, naloxone finders, and similar. Those are not mine. If you call, text, or visit them, whatever happens there is between you and them under their own policies. I don't get told that you went, and I have no relationship with any of them.</p>
+      <hr />
+      <h2 id="about-training">About training</h2>
+      <p>Earlier versions of this policy said your conversations were never used to train any AI model, "not mine, not anyone else's." The first half of that was true. The second half was a promise I wasn't in a position to make, and I'm correcting it rather than leaving it up.</p>
+      <p><strong>What I can tell you for certain:</strong> I don't train AI models. I don't fine-tune anything, and I have never exported anyone's conversations to build a dataset. StoneHead's knowledge comes from material I assembled myself — cultivation research from university extension services, strain data, cannabis history — not from what users type.</p>
+      <p><strong>What I can't control:</strong> the AI providers your messages pass through. Some model endpoints — particularly free ones — reserve the right to use what goes through them to improve their own systems. StoneHead has run on free endpoints for much of its life, which means messages sent before <strong>August 5, 2026</strong> may have been used that way by a provider, under their terms rather than mine.</p>
+      <p>As of that date StoneHead runs on paid endpoints, where the providers' terms say inputs are not used for training. That's their commitment to me, and I'm passing it to you as exactly what it is — a contract with someone else, not something I can personally guarantee.</p>
+      <p>If that ever changes, I'll say so here with the date it changed.</p>
+      <hr />
+      <h2 id="age">Age</h2>
+      <p>The <strong>Talk the Plant</strong> tab is for 21+ only, and asks you to confirm your age before you can use it.</p>
+      <p><strong>The vibe tab has no age gate.</strong> It's for conversation — life, ideas, whatever's on your mind. It does not give strain recommendations, dosing guidance, or grow diagnosis; if you ask it for those, it points you to the 21+ tab instead. It does talk about cannabis history and culture, because that's part of what it is.</p>
+      <p>Age is self-attested. I ask; I trust your answer. If you're under 21, don't use the plant tab.</p>
+      <p>You must be at least 13 to use StoneHead at all. If I learn that someone under 13 has created an account, I'll delete it.</p>
+      <hr />
+      <h2 id="how-long-i-keep-things">How long I keep things</h2>
+      <p>As long as you have an account. If you delete your account, your data — conversations, memories, everything linked to you — is deleted with it.</p>
+      <hr />
+      <h2 id="your-rights-over-your-data">Your rights over your data</h2>
+      <p>You can, at any time:</p>
+      <ul>
+      <li><strong>See what StoneHead remembers</strong> about you (in the app's memory section)</li>
+      <li><strong>Delete individual memories</strong></li>
+      <li><strong>Delete a conversation thread</strong> (and its messages and summaries)</li>
+      <li><strong>Delete your entire account and all data</strong> — there's a button in the app, and it takes effect immediately. You can also email me and I'll do it.</li>
+      <li><strong>Ask me what I have on you</strong> and I'll tell you</li>
+      </ul>
+      <p>Depending on where you live (California, the EU, and others), you may have additional legal rights over your data. I'll honor them. You don't need to cite a statute — just ask.</p>
+      <p><strong>Contact:</strong> stoneheadAI@gmail.com</p>
+      <hr />
+      <h2 id="security-honestly">Security, honestly</h2>
+      <p>Passwords are hashed and never stored in readable form. Data is transmitted over HTTPS. The database is locked down so users can only see their own rows.</p>
+      <p>But I want to be honest with you: <strong>this is a small project built by one person, not a company with a security team.</strong> I've done what I know how to do, and I'll keep improving it. I'm not going to claim a level of security I can't guarantee. If you wouldn't want something read by a stranger in a worst case, think twice before typing it into any app — including this one.</p>
+      <p>If you find a security problem, please tell me. I'll fix it and I'll credit you.</p>
+      <hr />
+      <h2 id="changes">Changes</h2>
+      <p>If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.</p>
+      <hr />
+      <h2 id="contact">Contact</h2>
+      <p>Michael Padilla stoneheadAI@gmail.com</p>
+      <p>Discord: the StoneHead AI server (linked in the app)</p>
+    </main>
+  </body>
+</html>
