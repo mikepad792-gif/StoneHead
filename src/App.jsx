@@ -488,6 +488,32 @@ function ChatWindow() {
   );
 }
 
+// §6 — the model emits markdown emphasis (*can*, **Especially**) and the bubble
+// rendered it as literal asterisks, including on the crisis path, which is the
+// most sensitive screen in the app.
+//
+// Deliberately NOT a markdown library. Only inline emphasis ever showed up, the
+// persona forbids headings and lists outright, and pulling in a parser to render
+// two delimiters would mean shipping an HTML pipeline for prose we control.
+//
+// Returns React nodes, never HTML — no dangerouslySetInnerHTML, so model output
+// can never become markup.
+// The delimiter must hug its content on both sides, same as real markdown.
+// Without that, "2 * 3 * 4" italicizes the 3.
+const EMPHASIS_RE =
+  /(\*\*[^\s*][^*\n]*?[^\s*]\*\*|\*\*[^\s*]\*\*|\*[^\s*][^*\n]*?[^\s*]\*|\*[^\s*]\*)/g;
+const BOLD_RE = /^\*\*[^*\n]+\*\*$/;
+const ITALIC_RE = /^\*[^*\n]+\*$/;
+
+function renderInline(text) {
+  const parts = String(text || "").split(EMPHASIS_RE);
+  return parts.map((part, i) => {
+    if (BOLD_RE.test(part)) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (ITALIC_RE.test(part)) return <em key={i}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
 function MessageBubble({ message, tab, onRetry }) {
   const { handleHandoffClick } = useApp();
   const isUser = message.role === "user";
@@ -497,7 +523,7 @@ function MessageBubble({ message, tab, onRetry }) {
         <div className="sh-bubble-avatar"><img src={tab === "plant" ? "/images/stonehead-avatar-smoke.png" : "/images/stonehead-avatar-clean.png"} alt="" className="sh-avatar-img" /></div>
       )}
       <div className={`sh-bubble ${isUser ? "sh-bubble--user" : tab === "plant" ? "sh-bubble--assistant-plant" : "sh-bubble--assistant-vibe"}`}>
-        <p className="sh-bubble-text">{message.content}</p>
+        <p className="sh-bubble-text">{renderInline(message.content)}</p>
         {!isUser && message.handoff === "plant" && message.handoff_message && (
           <button className="sh-handoff-btn" onClick={() => handleHandoffClick(message.handoff_message)}>
             take it to talk the plant 🌿
