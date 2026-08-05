@@ -9,7 +9,7 @@
     "dev": "netlify dev",
     "build": "react-scripts build",
     "deploy": "netlify deploy --prod",
-    "check": "node scripts/crisis-check.mjs && node scripts/strain-match-check.mjs && node scripts/openrouter-check.mjs && node scripts/retrieval-check.mjs && node scripts/save-intent-check.mjs && node scripts/cultivation-runtime-check.mjs && node scripts/frame-check.mjs && python3 scripts/cultivation-eval/run_eval.py"
+    "check": "node scripts/crisis-check.mjs && node scripts/age-check.mjs && node scripts/strain-match-check.mjs && node scripts/openrouter-check.mjs && node scripts/retrieval-check.mjs && node scripts/save-intent-check.mjs && node scripts/cultivation-runtime-check.mjs && node scripts/frame-check.mjs && python3 scripts/cultivation-eval/run_eval.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

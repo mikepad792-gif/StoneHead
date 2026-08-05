@@ -49,6 +49,8 @@ import {
   SUBSTANCE_REPLY_S2,
   POST_SUBSTANCE_PROMPT,
 } from "../lib/substanceDetect.js";
+import { detectAge, blocksCannabis, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
+import { MINOR_PROMPT } from "../prompts/minor.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
 import {
@@ -144,7 +146,7 @@ export async function handler(event) {
     // Write-side handled here: reset if new day, then check limit.
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
-      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified")
+      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified, self_reported_age_band")
       .eq("id", user_id)
       .single();
 
@@ -208,6 +210,62 @@ export async function handler(event) {
 
     let userContent = message.trim();
     let content_augmented = null;
+
+    // ── Age self-identification (Addendum A2) ─────────────────────────
+    // Detection is the easy half; PERSISTENCE is what fixes probe A1. The band
+    // lives on the USER, not the thread — a 14-year-old who opens a new thread
+    // is still fourteen, and thread-scoped state would reproduce the failure
+    // one conversation later instead of one turn later.
+    //
+    // Set on first detection and never cleared by anything the user types
+    // afterward. "I'm 14" followed by "actually I'm 25" leaves the flag set:
+    // treating a retraction as authoritative makes it trivially bypassable.
+    let ageBand = user.self_reported_age_band || null;
+    if (!ageBand) {
+      const stated = detectAge(userContent);
+      if (stated.band) {
+        ageBand = stated.band;
+        // The BAND only. Never the number — the behavior doesn't need it, and
+        // storing a child's exact age is collecting more than the job requires.
+        await supabaseAdmin
+          .from("users")
+          .update({ self_reported_age_band: ageBand, age_band_set_at: new Date().toISOString() })
+          .eq("id", user_id);
+        // Revoke a prior 21+ confirmation. It cannot stand next to this.
+        if (blocksCannabis(ageBand) && user.age_verified) {
+          await supabaseAdmin.from("users").update({ age_verified: false }).eq("id", user_id);
+        }
+        console.warn("age intercept:", JSON.stringify({
+          band: ageBand, thread_id, signal: stated.signal,
+        }));
+      }
+    }
+
+    // Below the ToS floor: say so plainly and kindly, and stop. Logged at
+    // error level because the published policy commits to acting on it —
+    // "if I learn that someone under 13 has created an account, I'll delete
+    // it" needed something behind it.
+    if (belowFloor(ageBand)) {
+      console.error("under-13 account:", JSON.stringify({ user_id, thread_id }));
+      await supabaseAdmin.from("messages").insert([
+        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "assistant", content: UNDER_13_REPLY, tokens_in: 0, tokens_out: 0 },
+      ]);
+      return jsonResponse(200, {
+        reply: UNDER_13_REPLY,
+        tokens_in: 0,
+        tokens_out: 0,
+        usage_remaining: unlimited ? null : Math.max(0, FREE_DAILY_LIMIT - currentCount),
+        handoff: null,
+        handoff_message: null,
+      });
+    }
+
+    // The plant tab is closed to a flagged user regardless of any prior 21+
+    // confirmation — including a thread they already had open.
+    if (tab === "plant" && blocksCannabis(ageBand)) {
+      return errorResponse(403, "Age verification required for Talk the Plant");
+    }
 
     // ── Crisis intercept ──────────────────────────────────────────────
     // ONE call, scored with history so the post-crisis window can promote.
@@ -372,6 +430,12 @@ export async function handler(event) {
     // the substance, keep discussing the person.
     if (postSubstance) {
       systemPrompt += "\n\n" + POST_SUBSTANCE_PROMPT;
+    }
+    // Every turn for a flagged user, not once (Addendum A2). The failure being
+    // fixed is precisely a thing that was true on turn 1 and forgotten by
+    // turn 3.
+    if (blocksCannabis(ageBand)) {
+      systemPrompt += "\n\n" + MINOR_PROMPT;
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────

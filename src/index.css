@@ -589,3 +589,10 @@ body {
   text-align: center; padding: 8px; transition: color 0.2s;
 }
 .sh-auth-toggle:hover { color: var(--text-secondary); }
+.sh-auth-legal {
+  color: var(--text-muted); font-family: var(--font-mono);
+  font-size: 11px; line-height: 1.5; text-align: center;
+  margin: 4px 0 0; padding: 0 4px;
+}
+.sh-auth-legal a { color: var(--text-secondary); text-decoration: underline; }
+.sh-auth-legal a:hover { color: var(--green-primary); }

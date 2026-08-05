@@ -384,6 +384,19 @@ function AuthScreen() {
           </form>
           {authView === "login" && <button type="button" className="sh-auth-toggle" onClick={onForgot} disabled={submitting}>forgot your password?</button>}
           <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>
+          {/* Signup notice. Shown on the register view because that's the point
+              where someone is actually agreeing to something. Plain links to
+              static pages, not a modal or a checkbox — consent GATING is its
+              own spec; this batch publishes and discloses. */}
+          {authView === "register" && (
+            <p className="sh-auth-legal">
+              by signing up you're agreeing to the{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer">terms</a>
+              {" "}and the{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.
+              you have to be 13 or older, and 21+ for talk the plant.
+            </p>
+          )}
         </>
       )}
     </div></div>

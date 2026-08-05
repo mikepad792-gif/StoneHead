@@ -4,6 +4,7 @@
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { blocksCannabis } from "../lib/ageDetect.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -41,9 +42,15 @@ export async function handler(event) {
     if (tab === "plant") {
       const { data: profile } = await supabaseAdmin
         .from("users")
-        .select("age_verified")
+        .select("age_verified, self_reported_age_band")
         .eq("id", user.user_id)
         .single();
+
+      // A self-reported under-21 band closes this tab regardless of any prior
+      // confirmation (Addendum A2).
+      if (blocksCannabis(profile?.self_reported_age_band)) {
+        return jsonResponse(403, { error: "Talk the Plant is 21+" });
+      }
 
       if (!profile?.age_verified) {
         return jsonResponse(403, { error: "Age verification required for Talk the Plant" });
