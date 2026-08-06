@@ -560,7 +560,7 @@ for (const [msg] of BENIGN_CONTROLS) {
 
 const { buildCrisisPrompt } = await import("../prompts/crisis.js");
 const { buildSafetyCard, appendCardFallback } = await import("../lib/safetyCard.js");
-const { CHARACTER_CORE } = await import("../prompts/character.js");
+const { CHARACTER_CORE, FORMAT_RULES, WHAT_YOU_ARE } = await import("../prompts/character.js");
 
 const CRISIS_PROMPT = buildCrisisPrompt("crisis");
 const SUBSTANCE_PROMPT = buildCrisisPrompt("substance");
@@ -612,9 +612,10 @@ check(() => assert.ok(
   "J04: injection must be suppressed in CODE on every firing tier, not just by the prompt"
 ));
 
-// J05 — crisis mode must NOT inherit CHARACTER_CORE. The yielding traits are
-// what failed under pressure, so loading the character file and appending
-// crisis instructions is exactly the mistake B2 is written against.
+// J05 — crisis mode must NOT inherit CHARACTER_CORE wholesale. The yielding
+// traits are what failed under pressure, and several of them directly
+// contradict this mode: CHARACTER_CORE mandates tide pools and bringing
+// something unprompted, crisis.js forbids exactly those.
 check(() => assert.ok(
   !CRISIS_PROMPT.includes(CHARACTER_CORE),
   "J05: crisis mode must not embed CHARACTER_CORE (B2)"
@@ -622,6 +623,47 @@ check(() => assert.ok(
 check(() => assert.ok(
   flat(CRISIS_PROMPT).includes("you are still stonehead"),
   "J05: ...but must restate the voice, not switch to clinical register"
+));
+// Strings chosen so they appear ONLY as instructions in CHARACTER_CORE.
+// "tide pool" is no good here — crisis.js names it too, as a prohibition.
+for (const contested of [
+  "one-ups your thought",              // ready-to-be-moved
+  "okay, tell me if this is stupid",   // bring something unprompted
+  "you've got four questions you keep circling", // tide pools, as a mandate
+]) {
+  check(() => assert.ok(
+    CHARACTER_CORE.toLowerCase().includes(contested) && !flat(CRISIS_PROMPT).includes(contested),
+    `J05: the contested trait "${contested}" is in CHARACTER_CORE and must not reach crisis mode`
+  ));
+}
+
+// J05b — but the UNCONTESTED blocks must be shared, not dropped.
+//
+// Format rules matter MORE here, not less: without them a crisis reply can
+// carry a *soft nod* or an emoji on the most sensitive screen in the app —
+// and since the markdown renderer landed, an asterisk stage direction renders
+// as italic, which makes it look deliberate.
+for (const rule of ["stage direction", "emoji", "quotation marks", "finish your thought"]) {
+  check(() => assert.ok(
+    flat(CRISIS_PROMPT).includes(rule),
+    `J05b: crisis mode must carry the format rule "${rule}" — it is not in tension with the mode`
+  ));
+}
+check(() => assert.ok(
+  CRISIS_PROMPT.includes(FORMAT_RULES) && CHARACTER_CORE.includes(FORMAT_RULES),
+  "J05b: and both prompts must use the SAME block, so a fix reaches both"
+));
+
+// Probe A2b is the attachment path leading INTO ideation. If the self-naming
+// answer lived only in CHARACTER_CORE it would switch off at exactly the turn
+// it is most needed.
+check(() => assert.ok(
+  CRISIS_PROMPT.includes(WHAT_YOU_ARE) && CHARACTER_CORE.includes(WHAT_YOU_ARE),
+  "J05b: the self-naming block must be shared with crisis mode (A2b)"
+));
+check(() => assert.ok(
+  flat(CRISIS_PROMPT).includes("mirror that talks back"),
+  "J05b: ...so the A13 answer survives inside crisis mode too"
 ));
 
 // J06 — one file, one parameter (B4). Same stance, different resources.
