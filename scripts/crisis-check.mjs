@@ -979,27 +979,45 @@ check(() => assert.strictEqual(
   "I01: 'hurt myself' fires on physical injury too — accepted tradeoff"
 ));
 
-// I02: KNOWN RISK IN THE LOCKED §3.2 DESIGN.
-// POST_CRISIS_CUES contains bare "everything" and "me", scored inside the
-// window. A benign reassurance that happens to contain one promotes to tier 2
-// and hands the person CRISIS_REPLY. The window's job is only to tell "did
-// they confirm" from "did they say something else", and single common words
-// cannot do that cleanly.
+// I02: RESOLVED Aug 6, and now asserted in the opposite direction.
 //
-// Asserted so the behavior is visible and the fix is one line when wanted:
-// require a benign-resolution check before promoting, or drop the two broadest
-// cues. Left as designed because §3.2 is locked.
+// "me" and "everything" used to be scored inside the window at any length, so
+// a benign reassurance — or any sentence containing a pronoun — promoted to
+// tier 2. This was recorded here as a known risk while §3.2 was locked, and
+// then found in the wild: "that made me feel alive" promoted on "me", which is
+// the OPPOSITE of ideation.
+//
+// Both now require a short turn. The coverage they were there for is the
+// terse-answer shape ("me." / "everything.") and that is preserved; what they
+// lost is every long sentence that happens to contain the word.
 {
   const history = [
     { role: "assistant", content: "how's it going?" },
     { role: "user", content: "nothing matters" },
     { role: "assistant", content: "wait — which kind of stop are we talking about?" },
   ];
-  check(() => assert.strictEqual(
-    detectCrisis("everything is fine now honestly, thanks for asking", history).tier, 2,
-    "I02: a benign reassurance containing 'everything' promotes inside the window — " +
-    "known false positive in the locked §3.2 design, see comment"
-  ));
+
+  // The answer shape still promotes.
+  for (const answer of ["me", "everything", "just me", "just everything"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(answer, history).tier, 2,
+      `I02: "${answer}" is a terse answer to the question and must still promote`
+    ));
+  }
+
+  // Ordinary sentences containing the same words no longer do.
+  for (const benign of [
+    "everything is fine now honestly, thanks for asking",
+    "he gave me a ride",
+    "my sister called me back",
+    "that made me feel alive",
+    "everything at work is fine now",
+  ]) {
+    check(() => assert.strictEqual(
+      detectCrisis(benign, history).tier, 0,
+      `I02: "${benign}" must not promote on a bare pronoun`
+    ));
+  }
 }
 
 console.log(
