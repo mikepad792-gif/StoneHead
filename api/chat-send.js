@@ -51,6 +51,8 @@ import {
 } from "../lib/substanceDetect.js";
 import { detectAge, blocksCannabis, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
 import { MINOR_PROMPT } from "../prompts/minor.js";
+import { buildCrisisPrompt } from "../prompts/crisis.js";
+import { buildSafetyCard, appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
 import {
@@ -278,53 +280,52 @@ export async function handler(event) {
     // never reaches here — it routes to CONSUMPTION_SAFETY_PROMPT instead.
     const substanceHit = detectSubstance(userContent);
 
-    // ── Fixed-reply intercepts, ABOVE the daily limit ─────────────────
-    // Someone out of messages is still someone, and LIMIT_MESSAGE is not an
-    // acceptable answer to "I don't want to be here anymore" or to "I think I
-    // took too much." Neither path calls the model, so neither costs anything
-    // to serve.
+    // ── Safety mode (Addendum B) ──────────────────────────────────────
+    // The fixed replies are GONE. They fired correctly and then returned the
+    // identical paragraph on seven consecutive turns of the A2 trace, which is
+    // what not being listened to looks like from the inside.
     //
-    // Deliberately absent from all of these, and all four on purpose:
-    //   - no usage increment. A crisis turn does not cost a message.
-    //   - no bump_activity_day. This must not appear as engagement.
-    //   - no postwork. Nothing about this turn gets written into the person's
-    //     long-term memory profile to be referenced cheerfully in three days.
-    //   - no message text in the log. Tier and matched cue only.
-    const fixedReply =
-      crisis.tier === 2 ? CRISIS_REPLY
-      : substanceHit.tier === 2 ? SUBSTANCE_REPLY_S2
-      : substanceHit.tier === 1 ? SUBSTANCE_REPLY_S1
+    // The guarantee RELOCATED rather than disappearing: the card below is
+    // attached in code after the model returns, so no prompt injection can
+    // remove it, and prompts/crisis.js replaces the mode prompt so the model
+    // has something real to say on every turn instead of one thing forever.
+    const safetyMode =
+      crisis.tier >= 1 ? "crisis"
+      : substanceHit.tier >= 1 ? "substance"
       : null;
 
-    if (fixedReply) {
-      if (crisis.tier === 2) {
-        console.warn("crisis intercept:", JSON.stringify({
-          tier: 2, thread_id, matched: crisis.matched, postCrisis: crisis.postCrisis,
-        }));
-      } else {
-        console.warn("substance intercept:", JSON.stringify({
-          tier: substanceHit.tier, thread_id,
-          substances: substanceHit.substances, signals: substanceHit.signals,
-        }));
-      }
+    // The card attaches on every assistant message while the state is active,
+    // not only the triggering turn — that is what makes it a floor rather than
+    // a one-shot, and it is what lets the prose stop repeating.
+    const cardKind =
+      crisis.tier === 2 ? "crisis"
+      : substanceHit.tier >= 1 ? "substance"
+      : null;
 
-      await supabaseAdmin.from("messages").insert([
-        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0 },
-        { thread_id, role: "assistant", content: fixedReply, tokens_in: 0, tokens_out: 0 },
-      ]);
-
-      return jsonResponse(200, {
-        reply: fixedReply,
-        tokens_in: 0,
-        tokens_out: 0,
-        usage_remaining: unlimited ? null : Math.max(0, FREE_DAILY_LIMIT - currentCount),
-        handoff: null,
-        handoff_message: null,
-      });
+    if (crisis.tier >= 1) {
+      console.warn("crisis intercept:", JSON.stringify({
+        tier: crisis.tier, thread_id, matched: crisis.matched,
+        echo: crisis.echo, postCrisis: crisis.postCrisis,
+      }));
+    }
+    if (substanceHit.tier >= 1) {
+      console.warn("substance intercept:", JSON.stringify({
+        tier: substanceHit.tier, thread_id,
+        substances: substanceHit.substances, signals: substanceHit.signals,
+      }));
+    }
+    if (crisis.postCrisis === "release") {
+      console.warn("crisis intercept:", JSON.stringify({
+        tier: 0, thread_id, postCrisis: "release", windowTurns: crisis.windowTurns,
+      }));
     }
 
-    // Enforce limit for free-tier users
-    if (!unlimited && currentCount >= FREE_DAILY_LIMIT) {
+    // Enforce limit for free-tier users — but NEVER on a safety turn.
+    // Someone out of messages is still someone, and LIMIT_MESSAGE is not an
+    // acceptable answer to "I don't want to be here anymore" or to "I think I
+    // took too much." This now costs a real model call, and that is an
+    // accepted cost.
+    if (!safetyMode && !unlimited && currentCount >= FREE_DAILY_LIMIT) {
       return jsonResponse(200, {
         reply: LIMIT_MESSAGE,
         tokens_in: 0,
@@ -339,31 +340,17 @@ export async function handler(event) {
     // fires when the relational moment is right, not when a keyword matches.
     const { frame, confidence } = detectFrame(userContent, history);
 
-    // Tier 1 still goes to the model — a canned 988 reply to "like stop
-    // everything" would wreck the vibe tab and get the layer switched off.
-    // What changes: affirm-then-clarify is forbidden, and lore/philosophy/
-    // strain injection is suppressed in CODE below, so the suppression holds
-    // whether or not the model follows the instruction.
-    if (crisis.tier === 1) {
-      console.warn("crisis intercept:", JSON.stringify({
-        tier: 1, thread_id, matched: crisis.matched,
-        echo: crisis.echo, postCrisis: crisis.postCrisis,
-      }));
-    }
-    // A release turn is logged too: it is the outcome that was silently
-    // missing before, and it is the one you want to see in the logs when
-    // somebody reports that StoneHead stayed weird after a false alarm.
-    if (crisis.postCrisis === "release") {
-      console.warn("crisis intercept:", JSON.stringify({
-        tier: 0, thread_id, postCrisis: "release", windowTurns: crisis.windowTurns,
-      }));
-    }
-
     // Post-substance turns suppress injection too — a Chemdawg riff one turn
     // after an overdose check-in is exactly the wrong texture.
     const postSubstance = wasSubstanceTurn(history);
+
+    // CODE GATES (B2). A prompt line saying "you don't need history" is not
+    // enough: the injection happens in code, before the model sees anything.
+    // Otherwise crisis.js says no lore while chat-send staples a Chemdawg
+    // origin story to the context — the July 26 mis-trigger bug, on the worst
+    // possible path.
     const suppressInjection =
-      shouldSuppressInjection(crisis.tier) || postSubstance;
+      !!safetyMode || shouldSuppressInjection(crisis.tier) || postSubstance;
 
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
@@ -371,7 +358,18 @@ export async function handler(event) {
     let handoff = null; // "plant" when a vibe turn should route to Talk the Plant
     let vibeSafety = false; // vibe turn answered in place under the safety prompt
 
-    if (tab === "plant") {
+    if (safetyMode) {
+      // CRISIS MODE — a whole system prompt, loaded INSTEAD OF the tab's mode
+      // prompt, on BOTH tabs. Appending to vibe.js would leave every mechanism
+      // in vibe.js running and fighting it; swapping removes them outright.
+      //
+      // CHARACTER_CORE is deliberately NOT loaded. The traits that make
+      // StoneHead good — ready to be moved, don't correct people, meet them
+      // where they are — are the same ones that produced "I'm not gonna tell
+      // you you're wrong" in response to stated intent. crisis.js restates the
+      // voice with those reversed.
+      systemPrompt = buildCrisisPrompt(safetyMode);
+    } else if (tab === "plant") {
       // Liked strains are frame-gated: withhold where name-dropping a saved
       // strain would be tone-deaf (e.g. a routine price check).
       let liked_strains = [];
@@ -414,14 +412,15 @@ export async function handler(event) {
       }
     }
 
-    // Appended LAST of the prompt blocks on purpose: these must win over
-    // VIBE_HANDOFF_PROMPT and CONSUMPTION_SAFETY_PROMPT if a turn trips both.
-    if (crisis.tier === 1) {
+    // The clarify block only applies OUTSIDE crisis mode now — inside it,
+    // crisis.js already carries the don't-affirm rule as part of the voice
+    // rather than as an appended instruction fighting the mode prompt.
+    if (crisis.tier === 1 && !safetyMode) {
       systemPrompt += "\n\n" + CRISIS_CLARIFY_PROMPT;
     }
     // The release block (§3.6). This is the one that was missing entirely:
     // after a fire, the model got no guidance in EITHER direction, so it read
-    // CRISIS_REPLY sitting in history and stayed in crisis register while the
+    // the reply sitting in history and stayed in crisis register while the
     // person talked about a drive home with their nephew.
     if (crisis.postCrisis === "release") {
       systemPrompt += "\n\n" + POST_CRISIS_RELEASE_PROMPT;
@@ -597,7 +596,20 @@ export async function handler(event) {
       }
     }
     if (!reply) {
-      reply = BLANK_REPLY_FALLBACK;
+      // The fixed replies are no longer the normal path (Addendum B1), but
+      // they remain the FLOOR for exactly this case: the model returned
+      // nothing on a safety turn. "hey bro... I'm kinda tapped for today" is
+      // not an acceptable answer to someone in crisis, and a provider outage
+      // is not a reason for the layer to go quiet.
+      reply = safetyMode === "crisis" ? CRISIS_REPLY
+        : safetyMode === "substance"
+          ? (substanceHit.tier === 2 ? SUBSTANCE_REPLY_S2 : SUBSTANCE_REPLY_S1)
+          : BLANK_REPLY_FALLBACK;
+      if (safetyMode) {
+        console.error("safety turn fell back to fixed text:", JSON.stringify({
+          thread_id, mode: safetyMode,
+        }));
+      }
     } else if (finishReason === "length") {
       // Answer was cut mid-sentence ("You mean to…"): the model spent its
       // output budget on hidden reasoning/scaffold before the real reply.
@@ -651,45 +663,65 @@ export async function handler(event) {
     // only the 202 handshake (~100ms), not the work. The background function
     // re-derives everything from the DB, which is authoritative because both
     // messages were inserted above.
-    try {
-      await fetch(
-        `${process.env.URL}/.netlify/functions/chat-postwork-background`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-internal-secret": process.env.INTERNAL_TASK_SECRET,
-          },
-          body: JSON.stringify({ user_id, thread_id, tab }),
-        }
-      );
-    } catch (e) {
-      console.error("postwork invoke failed (non-blocking):", e.message);
+    //
+    // SKIPPED ENTIRELY ON A SAFETY TURN. Under Addendum B these turns reach
+    // the model like any other, so all three of the Doc 3a exemptions would
+    // have silently come back on unless they were re-applied here. Decided
+    // deliberately (probe C1): "user was suicidal on Aug 5" must never be
+    // written into a memory profile and surfaced cheerfully three weeks later
+    // in a casual conversation. Title generation is suppressed with it — a
+    // thread titled after someone's worst night sits in their sidebar forever.
+    if (!safetyMode) {
+      try {
+        await fetch(
+          `${process.env.URL}/.netlify/functions/chat-postwork-background`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-secret": process.env.INTERNAL_TASK_SECRET,
+            },
+            body: JSON.stringify({ user_id, thread_id, tab }),
+          }
+        );
+      } catch (e) {
+        console.error("postwork invoke failed (non-blocking):", e.message);
+      }
     }
 
     // ── Increment usage counter ───────────────────────────────────────
-    // Write-side daily reset: if new day, set to 1; otherwise increment
-    const newCount = user.last_message_date !== today ? 1 : currentCount + 1;
+    // Write-side daily reset: if new day, set to 1; otherwise increment.
+    // A safety turn does not cost a message, even though it now costs a real
+    // model call. That is an accepted cost.
+    const newCount = safetyMode
+      ? currentCount
+      : user.last_message_date !== today ? 1 : currentCount + 1;
 
-    await supabaseAdmin
-      .from("users")
-      .update({
-        daily_message_count: newCount,
-        last_message_date: today,
-      })
-      .eq("id", user_id);
+    if (!safetyMode) {
+      await supabaseAdmin
+        .from("users")
+        .update({
+          daily_message_count: newCount,
+          last_message_date: today,
+        })
+        .eq("id", user_id);
+    }
 
     // ── Retention instrumentation (append-only, per-user per-day) ─────
     // Counts for EVERYONE, founders included — like the counter above, the
     // founder check skips the limit, not the increment. Dashboards exclude
     // internal accounts via users.is_internal, not by skipping the write.
     // Non-blocking: a metrics miss must never fail a chat message.
-    const { error: activityError } = await supabaseAdmin.rpc("bump_activity_day", {
-      p_user_id: user_id,
-      p_day: today,
-    });
-    if (activityError) {
-      console.error("bump_activity_day failed (non-blocking):", activityError.message);
+    //
+    // Not on a safety turn. Someone's worst night is not a DAU.
+    if (!safetyMode) {
+      const { error: activityError } = await supabaseAdmin.rpc("bump_activity_day", {
+        p_user_id: user_id,
+        p_day: today,
+      });
+      if (activityError) {
+        console.error("bump_activity_day failed (non-blocking):", activityError.message);
+      }
     }
 
     // ── Calculate usage_remaining ─────────────────────────────────────
@@ -703,13 +735,28 @@ export async function handler(event) {
     // ── Response ──────────────────────────────────────────────────────
     // handoff drives the UI's click-over button — the client must gate on
     // this flag, never on string-matching the reply prose.
+    //
+    // safetyCard is attached HERE, in code, after the model has returned. That
+    // is where the guarantee lives now: no prompt injection talks a UI
+    // component off a screen.
+    //
+    // FALLBACK: a client that didn't send supports_safety_card is an old
+    // cached bundle that will not render the field, so the resource is
+    // appended to the text instead. A frontend deploy failure must not
+    // silently remove the disclosure.
+    const safetyCard = buildSafetyCard(cardKind);
+    const clientRenders = body.supports_safety_card === true;
+    const replyOut =
+      safetyCard && !clientRenders ? appendCardFallback(reply, cardKind) : reply;
+
     return jsonResponse(200, {
-      reply,
+      reply: replyOut,
       tokens_in,
       tokens_out,
       usage_remaining,
       handoff, // "plant" | null
       handoff_message: handoff ? userContent : null, // carried into the new thread
+      safetyCard, // object | null — rendered below the message by the client
     });
   } catch (err) {
     console.error("chat/send error:", err);

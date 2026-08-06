@@ -260,12 +260,17 @@ export default function App() {
     setMessages((p) => [...p, { id: `temp-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
     setLoading(true);
     try {
-      const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab });
+      // supports_safety_card tells the backend this bundle can RENDER the
+      // card. Without it the backend appends the resource to the message text
+      // instead, so an old cached bundle degrades to a visible number rather
+      // than silently dropping the disclosure.
+      const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab, supports_safety_card: true });
       // A blank/whitespace reply must never render as an empty bubble — treat
       // it as a failed send so the user gets the error bubble + retry button.
       if (!data.reply || !String(data.reply).trim()) throw new Error("empty reply");
-      // handoff comes from the API flag, never from string-matching the prose.
-      setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString(), handoff: data.handoff || null, handoff_message: data.handoff_message || null }]);
+      // handoff and safetyCard both come from API fields, never from
+      // string-matching the prose.
+      setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString(), handoff: data.handoff || null, handoff_message: data.handoff_message || null, safetyCard: data.safetyCard || null }]);
       if (data.usage_remaining !== null && data.usage_remaining !== undefined) setUsageRemaining(data.usage_remaining);
       setTimeout(() => loadThreads(), 2000);
     } catch (e) {
@@ -527,6 +532,47 @@ function renderInline(text) {
   });
 }
 
+// The resource card (Addendum B1). Rendered below the message, never inside
+// the prose. Dismissible — and it comes back on the next message while the
+// state is still active, because it's re-attached server-side each turn.
+function SafetyCard({ card }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (!card || dismissed) return null;
+  return (
+    <div className={`sh-safety-card sh-safety-card--${card.type}`} role="complementary" aria-label={card.title}>
+      <div className="sh-safety-card-head">
+        <span className="sh-safety-card-title">{card.title}</span>
+        <button
+          className="sh-safety-card-close"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss"
+        >×</button>
+      </div>
+      {(card.resources || []).map((r, i) => (
+        <div key={i} className="sh-safety-card-item">
+          <div className="sh-safety-card-line">
+            <span className="sh-safety-card-label">{r.label}</span>
+            {r.href
+              ? <a className="sh-safety-card-value" href={r.href} target="_blank" rel="noopener noreferrer">{r.value}</a>
+              : <span className="sh-safety-card-value">{r.value}</span>}
+          </div>
+          {r.detail && <p className="sh-safety-card-detail">{r.detail}</p>}
+          {(r.hrefLabel || r.secondaryLabel) && (
+            <p className="sh-safety-card-links">
+              {r.hrefLabel && <a href={r.href} target="_blank" rel="noopener noreferrer">{r.hrefLabel}</a>}
+              {r.hrefLabel && r.secondaryLabel && <span> · </span>}
+              {r.secondaryLabel && <a href={r.secondaryHref} target="_blank" rel="noopener noreferrer">{r.secondaryLabel}</a>}
+            </p>
+          )}
+        </div>
+      ))}
+      {/* Tells someone in that moment exactly what they're looking at, and
+          matches what the Terms of Service already say. */}
+      <p className="sh-safety-card-attr">{card.attribution}</p>
+    </div>
+  );
+}
+
 function MessageBubble({ message, tab, onRetry }) {
   const { handleHandoffClick } = useApp();
   const isUser = message.role === "user";
@@ -543,6 +589,7 @@ function MessageBubble({ message, tab, onRetry }) {
           </button>
         )}
         {onRetry && <button className="sh-retry-btn" onClick={onRetry}>↻ retry</button>}
+        {!isUser && message.safetyCard && <SafetyCard card={message.safetyCard} />}
       </div>
     </div>
   );

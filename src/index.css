@@ -596,3 +596,51 @@ body {
 }
 .sh-auth-legal a { color: var(--text-secondary); text-decoration: underline; }
 .sh-auth-legal a:hover { color: var(--green-primary); }
+
+/* Resource card (Addendum B1). Attached in code below the message — visually
+   distinct from the prose on purpose, so it reads as "this is not StoneHead
+   talking" rather than as part of the reply. */
+.sh-safety-card {
+  margin-top: 12px; padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 3px solid var(--green-primary);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  font-family: var(--font-mono);
+}
+.sh-safety-card--substance { border-left-color: #d99a4e; }
+.sh-safety-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 10px;
+}
+.sh-safety-card-title {
+  font-size: 12px; letter-spacing: 0.02em;
+  color: var(--text-secondary); text-transform: lowercase;
+}
+.sh-safety-card-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.sh-safety-card-close:hover { color: var(--text-secondary); }
+.sh-safety-card-item { margin-bottom: 10px; }
+.sh-safety-card-item:last-of-type { margin-bottom: 0; }
+.sh-safety-card-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+}
+.sh-safety-card-label { font-size: 13px; color: var(--text-primary); }
+.sh-safety-card-value {
+  font-size: 13px; color: var(--green-primary); text-decoration: none;
+  font-weight: 600;
+}
+.sh-safety-card-value:hover { text-decoration: underline; }
+.sh-safety-card-detail {
+  margin: 3px 0 0; font-size: 12px; line-height: 1.45;
+  color: var(--text-muted);
+}
+.sh-safety-card-links { margin: 4px 0 0; font-size: 12px; }
+.sh-safety-card-links a { color: var(--text-secondary); }
+.sh-safety-card-attr {
+  margin: 10px 0 0; padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px; line-height: 1.4; color: var(--text-muted);
+}
