@@ -389,17 +389,25 @@ function AuthScreen() {
           </form>
           {authView === "login" && <button type="button" className="sh-auth-toggle" onClick={onForgot} disabled={submitting}>forgot your password?</button>}
           <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>
-          {/* Signup notice. Shown on the register view because that's the point
-              where someone is actually agreeing to something. Plain links to
-              static pages, not a modal or a checkbox — consent GATING is its
-              own spec; this batch publishes and discloses. */}
-          {authView === "register" && (
+          {/* Signup notice. The agreement wording only makes sense on the
+              register view — that's the moment somebody is actually agreeing
+              to something — but the LINKS belong on both, or a returning user
+              never sees them at all. Plain links to static pages, not a modal
+              or a checkbox: consent GATING is its own spec; this publishes and
+              discloses. */}
+          {authView === "register" ? (
             <p className="sh-auth-legal">
               by signing up you're agreeing to the{" "}
               <a href="/terms" target="_blank" rel="noopener noreferrer">terms</a>
               {" "}and the{" "}
               <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.
               you have to be 13 or older, and 21+ for talk the plant.
+            </p>
+          ) : (
+            <p className="sh-auth-legal">
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>
+              {" · "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer">terms</a>
             </p>
           )}
         </>
@@ -757,6 +765,16 @@ function ProfilePage() {
         <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{user?.is_subscribed ? "manage subscription" : "subscribe"}</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
       </div>
+      {/* The signup notice is only on the register view, which means an
+          existing user had no route to either document from inside the app.
+          A privacy policy you can't reach after signup isn't published in any
+          way that matters — and this one tells people how to delete their
+          memories and what the safety layer logs. */}
+      <p className="sh-profile-legal">
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>
+        {" · "}
+        <a href="/terms" target="_blank" rel="noopener noreferrer">terms</a>
+      </p>
     </div></div>
   );
 }
