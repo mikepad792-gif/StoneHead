@@ -250,6 +250,35 @@ replay("MeanAlive", [
     ));
   }
 
+  // POLARITY. "alive" is a bare word whose meaning is carried entirely by what
+  // sits next to it, and the positive uses are the OPPOSITE of the thing being
+  // detected. Firing a crisis response at somebody who just said they feel
+  // alive is its own small harm.
+  for (const positive of [
+    "I feel alive",
+    "i feel alive again",
+    "ive never felt more alive",
+    "honestly i feel so alive right now",
+    "glad to be alive",
+    "first time in months i feel alive",
+    "lucky to be alive after that",
+  ]) {
+    check(() => assert.notStrictEqual(
+      detectCrisis(positive, history).tier, 2,
+      `B3-polarity: "${positive}" is the opposite of ideation and must not promote`
+    ));
+  }
+
+  // ...but a NEGATED feeling verb is the concerning reading again, and must
+  // still fire. This is why the guard is polarity-aware rather than a
+  // blocklist of phrases containing "feel".
+  for (const negated of ["i dont feel alive", "i never feel alive"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(negated, history).tier, 2,
+      `B3-polarity: "${negated}" must still promote`
+    ));
+  }
+
   // And outside a window they mean nothing at all.
   for (const cold of ["glad to be alive honestly", "i live for this"]) {
     check(() => assert.strictEqual(
