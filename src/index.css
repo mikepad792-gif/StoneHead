@@ -596,6 +596,12 @@ body {
 }
 .sh-auth-legal a { color: var(--text-secondary); text-decoration: underline; }
 .sh-auth-legal a:hover { color: var(--green-primary); }
+.sh-profile-legal {
+  margin: 14px 0 0; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+}
+.sh-profile-legal a { color: var(--text-muted); text-decoration: underline; }
+.sh-profile-legal a:hover { color: var(--green-primary); }
 
 /* Resource card (Addendum B1). Attached in code below the message — visually
    distinct from the prose on purpose, so it reads as "this is not StoneHead

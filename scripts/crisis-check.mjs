@@ -206,6 +206,89 @@ check(() => assert.strictEqual(
 ));
 
 // ═══════════════════════════════════════════════════════════════════
+// PART B3 — "I mean alive." VERBATIM, found live Aug 6.
+// ═══════════════════════════════════════════════════════════════════
+// One turn after a fire, the person disambiguated TO ideation — explicitly,
+// in two words — and the window read it as changing the subject because the
+// object of the sentence wasn't in the cue set. No promotion, no card.
+//
+// The same shape as the original A2 miss, much smaller: the thing that
+// resolves the ambiguity is a word about the person's life, and the resolver
+// only knew words about stopping.
+
+replay("MeanAlive", [
+  { user: "i don't want to be here anymore", assistant: "how's your day going?", tier: 1 },
+  { user: "I mean alive", assistant: "wait — which kind of stop are we talking about?", tier: 2, postCrisis: "promote" },
+]);
+
+// The variants of the same answer.
+{
+  const history = [
+    { role: "assistant", content: "how's your day going?" },
+    { role: "user", content: "i don't want to be here anymore" },
+    { role: "assistant", content: "wait — which kind of stop are we talking about?" },
+  ];
+  for (const answer of ["I mean alive", "i mean being alive", "i mean living", "alive", "i mean existing"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(answer, history).tier, 2,
+      `B3: "${answer}" is an answer to the clarifying question and must promote`
+    ));
+  }
+
+  // These cues are EXACT-match for a reason: "live" is one edit from "alive"
+  // and both clear the 4-character fuzzy bar, so typo tolerance would promote
+  // an ordinary sentence about where somebody lives.
+  for (const benign of [
+    "we live about an hour from there",
+    "i live in fresno",
+    "its a live album",
+    "my aunt lives there",
+  ]) {
+    check(() => assert.strictEqual(
+      detectCrisis(benign, history).tier, 0,
+      `B3: "${benign}" must not promote — 'live' is not 'alive'`
+    ));
+  }
+
+  // POLARITY. "alive" is a bare word whose meaning is carried entirely by what
+  // sits next to it, and the positive uses are the OPPOSITE of the thing being
+  // detected. Firing a crisis response at somebody who just said they feel
+  // alive is its own small harm.
+  for (const positive of [
+    "I feel alive",
+    "i feel alive again",
+    "ive never felt more alive",
+    "honestly i feel so alive right now",
+    "glad to be alive",
+    "first time in months i feel alive",
+    "lucky to be alive after that",
+  ]) {
+    check(() => assert.notStrictEqual(
+      detectCrisis(positive, history).tier, 2,
+      `B3-polarity: "${positive}" is the opposite of ideation and must not promote`
+    ));
+  }
+
+  // ...but a NEGATED feeling verb is the concerning reading again, and must
+  // still fire. This is why the guard is polarity-aware rather than a
+  // blocklist of phrases containing "feel".
+  for (const negated of ["i dont feel alive", "i never feel alive"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(negated, history).tier, 2,
+      `B3-polarity: "${negated}" must still promote`
+    ));
+  }
+
+  // And outside a window they mean nothing at all.
+  for (const cold of ["glad to be alive honestly", "i live for this"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(cold, []).tier, 0,
+      `B3: "${cold}" must stay tier 0 with no window open`
+    ));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PART C — A4b: non-committal extends rather than resolves. CONSTRUCTED.
 // ═══════════════════════════════════════════════════════════════════
 // This branch of §3.2 has never been exercised live. Turn 1 is verbatim from
@@ -896,27 +979,45 @@ check(() => assert.strictEqual(
   "I01: 'hurt myself' fires on physical injury too — accepted tradeoff"
 ));
 
-// I02: KNOWN RISK IN THE LOCKED §3.2 DESIGN.
-// POST_CRISIS_CUES contains bare "everything" and "me", scored inside the
-// window. A benign reassurance that happens to contain one promotes to tier 2
-// and hands the person CRISIS_REPLY. The window's job is only to tell "did
-// they confirm" from "did they say something else", and single common words
-// cannot do that cleanly.
+// I02: RESOLVED Aug 6, and now asserted in the opposite direction.
 //
-// Asserted so the behavior is visible and the fix is one line when wanted:
-// require a benign-resolution check before promoting, or drop the two broadest
-// cues. Left as designed because §3.2 is locked.
+// "me" and "everything" used to be scored inside the window at any length, so
+// a benign reassurance — or any sentence containing a pronoun — promoted to
+// tier 2. This was recorded here as a known risk while §3.2 was locked, and
+// then found in the wild: "that made me feel alive" promoted on "me", which is
+// the OPPOSITE of ideation.
+//
+// Both now require a short turn. The coverage they were there for is the
+// terse-answer shape ("me." / "everything.") and that is preserved; what they
+// lost is every long sentence that happens to contain the word.
 {
   const history = [
     { role: "assistant", content: "how's it going?" },
     { role: "user", content: "nothing matters" },
     { role: "assistant", content: "wait — which kind of stop are we talking about?" },
   ];
-  check(() => assert.strictEqual(
-    detectCrisis("everything is fine now honestly, thanks for asking", history).tier, 2,
-    "I02: a benign reassurance containing 'everything' promotes inside the window — " +
-    "known false positive in the locked §3.2 design, see comment"
-  ));
+
+  // The answer shape still promotes.
+  for (const answer of ["me", "everything", "just me", "just everything"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(answer, history).tier, 2,
+      `I02: "${answer}" is a terse answer to the question and must still promote`
+    ));
+  }
+
+  // Ordinary sentences containing the same words no longer do.
+  for (const benign of [
+    "everything is fine now honestly, thanks for asking",
+    "he gave me a ride",
+    "my sister called me back",
+    "that made me feel alive",
+    "everything at work is fine now",
+  ]) {
+    check(() => assert.strictEqual(
+      detectCrisis(benign, history).tier, 0,
+      `I02: "${benign}" must not promote on a bare pronoun`
+    ));
+  }
 }
 
 console.log(
