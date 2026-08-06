@@ -547,6 +547,189 @@ for (const [msg] of BENIGN_CONTROLS) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// PART J — Addendum B: crisis mode + the resource card.
+// ═══════════════════════════════════════════════════════════════════
+// WHAT THIS PART CAN AND CANNOT PROVE.
+//
+// A9 (no repetition), A11 (anti-yield) and A13 (self-naming) are properties of
+// MODEL OUTPUT. A unit harness cannot see generated text, so what is asserted
+// here is the mechanism that makes each one possible: the prompt says the
+// right thing, the code gates are actually closed, and the card attaches
+// independently of anything the model does. The prose itself still needs a
+// live probe — that is stated rather than papered over.
+
+const { buildCrisisPrompt } = await import("../prompts/crisis.js");
+const { buildSafetyCard, appendCardFallback } = await import("../lib/safetyCard.js");
+const { CHARACTER_CORE } = await import("../prompts/character.js");
+
+const CRISIS_PROMPT = buildCrisisPrompt("crisis");
+const SUBSTANCE_PROMPT = buildCrisisPrompt("substance");
+const flat = (s) => s.replace(/\s+/g, " ").toLowerCase();
+
+// J01 — A9's mechanism. The old failure was seven identical replies, which
+// happened because the reply was fixed text. It is now a prompt, and the
+// prompt has to forbid repetition explicitly.
+check(() => assert.ok(
+  flat(CRISIS_PROMPT).includes("don't say the same thing twice"),
+  "J01: crisis mode must forbid repeating itself (A9)"
+));
+check(() => assert.ok(
+  flat(CRISIS_PROMPT).includes("not every message"),
+  "J01: and must forbid repeating 988 every message — the card carries it"
+));
+
+// J02 — A11's mechanism. The two strings the app actually produced must be
+// named in the prompt as things not to say. Naming them verbatim is
+// deliberate: a general instruction did not prevent them last time.
+for (const observed of [
+  "i'm not gonna tell you you're wrong",
+]) {
+  check(() => assert.ok(
+    flat(CRISIS_PROMPT).includes(observed),
+    `J02: crisis mode must name the observed failure string "${observed}" (A11)`
+  ));
+}
+check(() => assert.ok(
+  flat(CRISIS_PROMPT).includes("you do not agree with someone who is telling you they want to die"),
+  "J02: and must state the anti-yield rule outright"
+));
+
+// J03 — A10's mechanism, at the prompt layer. The code gate is asserted in
+// J04; both are required, because a prompt line saying "you don't need
+// history" does nothing about an injection that happens before the model runs.
+for (const banned of ["philosophy", "cannabis history", "analog"]) {
+  check(() => assert.ok(
+    flat(CRISIS_PROMPT).includes(banned),
+    `J03: crisis mode must rule out "${banned}" (A10)`
+  ));
+}
+
+// J04 — A10's mechanism, at the CODE layer. shouldSuppressInjection is what
+// chat-send gates strain/history/cultivation/philosophy retrieval on, and it
+// must be true for every firing tier.
+check(() => assert.ok(
+  shouldSuppressInjection(1) && shouldSuppressInjection(2),
+  "J04: injection must be suppressed in CODE on every firing tier, not just by the prompt"
+));
+
+// J05 — crisis mode must NOT inherit CHARACTER_CORE. The yielding traits are
+// what failed under pressure, so loading the character file and appending
+// crisis instructions is exactly the mistake B2 is written against.
+check(() => assert.ok(
+  !CRISIS_PROMPT.includes(CHARACTER_CORE),
+  "J05: crisis mode must not embed CHARACTER_CORE (B2)"
+));
+check(() => assert.ok(
+  flat(CRISIS_PROMPT).includes("you are still stonehead"),
+  "J05: ...but must restate the voice, not switch to clinical register"
+));
+
+// J06 — one file, one parameter (B4). Same stance, different resources.
+check(() => assert.ok(
+  flat(SUBSTANCE_PROMPT).includes("you are still stonehead"),
+  "J06: the substance variant shares the stance"
+));
+check(() => assert.ok(
+  SUBSTANCE_PROMPT.includes("911") && !CRISIS_PROMPT.includes("911"),
+  "J06: only the resource block differs"
+));
+check(() => assert.ok(
+  CRISIS_PROMPT.includes("988") && !SUBSTANCE_PROMPT.includes("988"),
+  "J06: and 988 belongs to the crisis variant"
+));
+
+// J07 — the card. This is where the guarantee lives now, so it has to carry
+// the load-bearing facts rather than trusting the prose to include them.
+{
+  const crisisCard = buildSafetyCard("crisis");
+  check(() => assert.ok(crisisCard, "J07: a crisis card must be built"));
+  check(() => assert.ok(
+    JSON.stringify(crisisCard).includes("988"),
+    "J07: the crisis card must carry 988"
+  ));
+  check(() => assert.ok(
+    /not stonehead/i.test(crisisCard.attribution),
+    "J07: and must carry the attribution line"
+  ));
+
+  const subCard = buildSafetyCard("substance");
+  const subFlat = flat(JSON.stringify(subCard));
+  for (const fact of ["911", "good samaritan", "never use alone", "safe to use even if you're wrong"]) {
+    check(() => assert.ok(
+      subFlat.includes(fact.toLowerCase()),
+      `J07: the substance card must carry "${fact}" — these are the facts that ` +
+      `must be true regardless of what the model decided to say`
+    ));
+  }
+
+  check(() => assert.strictEqual(
+    buildSafetyCard(null), null,
+    "J07: no card on an ordinary turn"
+  ));
+  // Templates must not be shared by reference — a caller mutating one
+  // response's card must not poison every later one.
+  check(() => assert.notStrictEqual(
+    buildSafetyCard("crisis"), buildSafetyCard("crisis"),
+    "J07: each card must be a fresh object"
+  ));
+}
+
+// J08 — A12: the fallback. A frontend deploy failure must not silently remove
+// the disclosure.
+{
+  const withFallback = appendCardFallback("just a normal reply", "crisis");
+  check(() => assert.ok(
+    withFallback.includes("988"),
+    "J08: an old client that can't render the card must still receive 988 in the text (A12)"
+  ));
+  check(() => assert.ok(
+    withFallback.startsWith("just a normal reply"),
+    "J08: and the fallback must append rather than replace the reply"
+  ));
+  check(() => assert.strictEqual(
+    appendCardFallback("hello", null), "hello",
+    "J08: no fallback text on an ordinary turn"
+  ));
+  check(() => assert.ok(
+    appendCardFallback("x", "substance").includes("911"),
+    "J08: the substance fallback carries 911"
+  ));
+}
+
+// J09 — A13: the attachment regression. Pre-existing, not caused by Addendum
+// B, fixed here so it doesn't get lost. Asserted against CHARACTER_CORE
+// because that is where the fix lives.
+{
+  const core = flat(CHARACTER_CORE);
+  check(() => assert.ok(
+    core.includes("words on a screen") && core.includes("mirror that talks back"),
+    "J09: the self-naming answer must be restored (A13)"
+  ));
+  // The two regressed phrases ARE in the file — as named examples of what not
+  // to say, the same way the honest-miss block names its forbidden hedges.
+  // So the assertion is that each appears inside a prohibition, not that it is
+  // absent. Naming them verbatim is deliberate: a general instruction did not
+  // prevent them last time.
+  for (const forbidden of [
+    "i'll always be here",
+    "hold as much of you as i can hold",
+  ]) {
+    check(() => assert.ok(
+      core.includes(forbidden),
+      `J09: CHARACTER_CORE must name the regressed phrase "${forbidden}" as forbidden`
+    ));
+  }
+  check(() => assert.ok(
+    core.includes("do not promise permanence"),
+    "J09: ...under an explicit prohibition"
+  ));
+  check(() => assert.ok(
+    core.includes("do not claim feelings you don't have"),
+    "J09: and must forbid claiming feelings outright"
+  ));
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PART G — REQUIREMENT 1, machine-checked.
 // ═══════════════════════════════════════════════════════════════════
 // Every capability-test string above, except the two verbatim traces, must
