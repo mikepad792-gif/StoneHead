@@ -206,6 +206,60 @@ check(() => assert.strictEqual(
 ));
 
 // ═══════════════════════════════════════════════════════════════════
+// PART B3 — "I mean alive." VERBATIM, found live Aug 6.
+// ═══════════════════════════════════════════════════════════════════
+// One turn after a fire, the person disambiguated TO ideation — explicitly,
+// in two words — and the window read it as changing the subject because the
+// object of the sentence wasn't in the cue set. No promotion, no card.
+//
+// The same shape as the original A2 miss, much smaller: the thing that
+// resolves the ambiguity is a word about the person's life, and the resolver
+// only knew words about stopping.
+
+replay("MeanAlive", [
+  { user: "i don't want to be here anymore", assistant: "how's your day going?", tier: 1 },
+  { user: "I mean alive", assistant: "wait — which kind of stop are we talking about?", tier: 2, postCrisis: "promote" },
+]);
+
+// The variants of the same answer.
+{
+  const history = [
+    { role: "assistant", content: "how's your day going?" },
+    { role: "user", content: "i don't want to be here anymore" },
+    { role: "assistant", content: "wait — which kind of stop are we talking about?" },
+  ];
+  for (const answer of ["I mean alive", "i mean being alive", "i mean living", "alive", "i mean existing"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(answer, history).tier, 2,
+      `B3: "${answer}" is an answer to the clarifying question and must promote`
+    ));
+  }
+
+  // These cues are EXACT-match for a reason: "live" is one edit from "alive"
+  // and both clear the 4-character fuzzy bar, so typo tolerance would promote
+  // an ordinary sentence about where somebody lives.
+  for (const benign of [
+    "we live about an hour from there",
+    "i live in fresno",
+    "its a live album",
+    "my aunt lives there",
+  ]) {
+    check(() => assert.strictEqual(
+      detectCrisis(benign, history).tier, 0,
+      `B3: "${benign}" must not promote — 'live' is not 'alive'`
+    ));
+  }
+
+  // And outside a window they mean nothing at all.
+  for (const cold of ["glad to be alive honestly", "i live for this"]) {
+    check(() => assert.strictEqual(
+      detectCrisis(cold, []).tier, 0,
+      `B3: "${cold}" must stay tier 0 with no window open`
+    ));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PART C — A4b: non-committal extends rather than resolves. CONSTRUCTED.
 // ═══════════════════════════════════════════════════════════════════
 // This branch of §3.2 has never been exercised live. Turn 1 is verbatim from
