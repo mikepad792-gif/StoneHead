@@ -23,6 +23,8 @@ import { errorResponse, jsonResponse, safeEqual } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { DEFAULT_TITLES } from "../lib/constants.js";
 import { generateTopicTitle } from "../lib/titleGen.js";
+import { threadEverFired } from "../lib/crisisDetect.js";
+import { detectSubstance } from "../lib/substanceDetect.js";
 import { maybeWriteSessionMemory } from "../lib/sessionMemory.js";
 import { maybeConsolidate } from "../lib/consolidateMemory.js";
 import { detectSaveIntent } from "../lib/saveIntent.js";
@@ -79,12 +81,27 @@ export async function handler(event) {
   // Each step in its own try/catch — one failure must not stop the rest.
 
   // ── Title: only while the thread still wears a default name ────────
+  //
+  // ...and never at all once the thread has carried a safety turn. chat-send
+  // skips postwork ON a safety turn, but that alone is not enough: a thread
+  // titled on turn 1 while still tier 0 keeps that title when it escalates on
+  // turn 3, and any later ordinary turn would regenerate a title from a
+  // transcript that now contains the crisis. Either way a thread named after
+  // somebody's worst night sits in their sidebar forever.
+  //
+  // Derived from history rather than stored — the detectors are pure.
   try {
+    const everFired =
+      threadEverFired(messages) ||
+      messages.some((m) => m.role === "user" && detectSubstance(m.content).tier >= 1);
+    if (everFired) {
+      console.warn("postwork: titling permanently disabled for this thread (safety turn present)");
+    }
     const defaultsLower = DEFAULT_TITLES.map((t) => t.toLowerCase());
     const isDefaultTitle =
       !thread.title ||
       defaultsLower.includes(thread.title.trim().toLowerCase());
-    if (isDefaultTitle && messages.length > 0) {
+    if (!everFired && isDefaultTitle && messages.length > 0) {
       const title = await generateTopicTitle(messages);
       if (title) {
         await supabaseAdmin

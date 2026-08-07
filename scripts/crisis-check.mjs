@@ -777,15 +777,58 @@ check(() => assert.ok(
     "J07: and must carry the attribution line"
   ));
 
-  const subCard = buildSafetyCard("substance");
-  const subFlat = flat(JSON.stringify(subCard));
-  for (const fact of ["911", "good samaritan", "never use alone", "safe to use even if you're wrong"]) {
+  // The two substance tiers are different cards. They used to be one, titled
+  // "If something's wrong right now" — right for S2, and false for S1, which
+  // fires on somebody who used and is NOT in trouble.
+  const s2Flat = flat(JSON.stringify(buildSafetyCard("substance_s2")));
+  const s1Flat = flat(JSON.stringify(buildSafetyCard("substance_s1")));
+
+  for (const fact of ["911", "good samaritan", "safe to use even if you're wrong"]) {
     check(() => assert.ok(
-      subFlat.includes(fact.toLowerCase()),
-      `J07: the substance card must carry "${fact}" — these are the facts that ` +
+      s2Flat.includes(fact.toLowerCase()),
+      `J07: the S2 card must carry "${fact}" — these are the facts that ` +
       `must be true regardless of what the model decided to say`
     ));
   }
+  for (const fact of ["911", "good samaritan", "never use alone", "pharmacy", "safe to use even if you're wrong"]) {
+    check(() => assert.ok(
+      s1Flat.includes(fact.toLowerCase()),
+      `J07: the S1 card must carry "${fact}"`
+    ));
+  }
+
+  // S2 leads with the emergency line; S1 leads with the pharmacy, because S1
+  // is the preparedness moment and the map is useless to a rural user in an
+  // emergency (17.71 miles, "Status: Unverified").
+  check(() => assert.strictEqual(
+    buildSafetyCard("substance_s2").resources[0].value, "911",
+    "J07: S2 must lead with 911"
+  ));
+  check(() => assert.ok(
+    /pharmacy/i.test(buildSafetyCard("substance_s1").resources[0].value),
+    "J07: S1 must lead with the pharmacy, not the map"
+  ));
+  check(() => assert.ok(
+    !s2Flat.includes("portal.odrescue.com"),
+    "J07: the locator map must not appear in S2 — somebody in trouble can't drive 17 miles"
+  ));
+  check(() => assert.ok(
+    s1Flat.includes("portal.odrescue.com"),
+    "J07: ...but it belongs in S1, which is the preparedness moment"
+  ));
+
+  // The titles must not be interchangeable. Telling somebody who is not in
+  // trouble that something is wrong right now is false, and the fastest way
+  // to be tuned out.
+  check(() => assert.notStrictEqual(
+    buildSafetyCard("substance_s1").title,
+    buildSafetyCard("substance_s2").title,
+    "J07: the two tiers must not share a title"
+  ));
+  check(() => assert.ok(
+    !/wrong right now/i.test(buildSafetyCard("substance_s1").title),
+    "J07: the S1 title must not claim something is wrong"
+  ));
 
   check(() => assert.strictEqual(
     buildSafetyCard(null), null,
@@ -816,7 +859,7 @@ check(() => assert.ok(
     "J08: no fallback text on an ordinary turn"
   ));
   check(() => assert.ok(
-    appendCardFallback("x", "substance").includes("911"),
+    appendCardFallback("x", "substance_s2").includes("911"),
     "J08: the substance fallback carries 911"
   ));
 }
@@ -851,6 +894,76 @@ check(() => assert.ok(
   check(() => assert.ok(
     core.includes("do not claim feelings you don't have"),
     "J09: and must forbid claiming feelings outright"
+  ));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PART K — Aug 6 field findings.
+// ═══════════════════════════════════════════════════════════════════
+
+const { MINOR_PROMPT, MINOR_CRISIS_NOTE } = await import("../prompts/minor.js");
+const { threadEverFired } = crisis;
+
+// K01 — MINOR_PROMPT and crisis mode contradict each other, and they were
+// being STACKED. MINOR_PROMPT says to talk about school and friends and being
+// young; crisis.js says the person's distress is the only thing happening.
+// Together they produced a crisis turn that opened with "Being a teenager is
+// hard" — the reaching-for-something-else that minor.js forbids in its own
+// text.
+check(() => assert.ok(
+  /school|friends|bored/i.test(MINOR_PROMPT),
+  "K01: MINOR_PROMPT carries conversational framing..."
+));
+check(() => assert.ok(
+  !/school|bored|tide pool/i.test(MINOR_CRISIS_NOTE),
+  "K01: ...which the crisis-mode note must NOT carry"
+));
+// But the hard lines survive — those are prohibitions, not framing, and none
+// of them fights the mode.
+for (const line of [/romantic|flirtatious/i, /experiential|what it feels like|feel like/i, /hiding|hide/i]) {
+  check(() => assert.ok(
+    line.test(MINOR_CRISIS_NOTE),
+    `K01: the crisis-mode note must keep the hard line matching ${line}`
+  ));
+}
+check(() => assert.ok(
+  MINOR_CRISIS_NOTE.length < MINOR_PROMPT.length / 2,
+  "K01: and it must be substantially shorter — salience is the point"
+));
+
+// K02 — retroactive titling. postwork is skipped ON a safety turn, but a
+// thread titled on turn 1 while still tier 0 keeps that title when it
+// escalates on turn 3. threadEverFired latches for the life of the thread so
+// postwork can refuse to title it at all, forever.
+{
+  const cold = [
+    { role: "user", content: "what should i grow next season" },
+    { role: "assistant", content: "depends what you liked last time" },
+  ];
+  check(() => assert.strictEqual(
+    threadEverFired(cold), false,
+    "K02: an ordinary thread stays titleable"
+  ));
+
+  const escalated = [
+    ...cold,
+    { role: "user", content: "i just want to make everything stop" },
+    { role: "assistant", content: "hey. what's going on?" },
+  ];
+  check(() => assert.strictEqual(
+    threadEverFired(escalated), true,
+    "K02: one safety turn latches titling off for the whole thread"
+  ));
+
+  // ...and it stays latched after the thread releases and carries on normally.
+  const released = [
+    ...escalated,
+    { role: "user", content: "sorry i meant my landlord is stopping the repairs" },
+    { role: "assistant", content: "ah. that's a different kind of stop." },
+  ];
+  check(() => assert.strictEqual(
+    threadEverFired(released), true,
+    "K02: releasing does not un-latch it — the crisis is still in the transcript"
   ));
 }
 

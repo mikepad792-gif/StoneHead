@@ -130,6 +130,10 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [recoveryToken, setRecoveryToken] = useState(null); // set from the reset-email hash
+  // Owes an acknowledgement of the CURRENT terms — never accepted, or accepted
+  // an older version. The server decides (profile-get compares against
+  // TOS_VERSION); the client only renders.
+  const [tosPending, setTosPending] = useState(false);
 
   function addToast(msg) {
     const id = Date.now();
@@ -170,6 +174,7 @@ export default function App() {
       setProfile(p);
       setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified, is_founder: p.is_founder, founder_number: p.founder_number, badges: p.badges || [] });
       setUsageRemaining(p.usage_remaining ?? null);
+      setTosPending(p.tos_pending === true);
     } catch (e) { handleLogout(); }
   }
   async function loadThreads() {
@@ -218,6 +223,11 @@ export default function App() {
     localStorage.removeItem("session_token"); localStorage.removeItem("refresh_token");
     setSessionToken(null); setUser(null); setProfile(null);
     setThreads([]); setMessages([]); setActiveThreadId(null);
+    setTosPending(false);
+  }
+  async function handleAcceptTos() {
+    await apiPost("/api/profile/accept-tos", {});
+    setTosPending(false);
   }
   async function handleSwitchTab(tab) {
     if (tab === "plant" && user && !user.age_verified) { setShowAgeGate(true); return; }
@@ -298,7 +308,7 @@ export default function App() {
     catch (e) { addToast("couldn't update data setting"); }
   }
 
-  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword };
+  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos };
 
   // A recovery link can arrive while a session is still in localStorage, so the
   // reset view wins over the logged-in app until the password is set.
@@ -323,6 +333,10 @@ export default function App() {
     <AppContext.Provider value={ctx}>
       <div className="sh-root">
         <ToastContainer toasts={toasts} removeToast={removeToast} />
+        {/* Rendered FIRST and outside the layout: it must sit over everything,
+            including the age gate, because it is the more fundamental
+            agreement. */}
+        {tosPending && <TosModal />}
         {showAgeGate && <AgeGateModal />}
         {showProfile && <ProfilePage />}
         {showSubscription && <SubscriptionPage />}
@@ -691,6 +705,60 @@ function AgeGateModal() {
         <button className="sh-btn-primary" onClick={handleAgeVerify}>yeah, I'm 21+</button>
         <button className="sh-btn-secondary" onClick={dismissAgeGate}>nah, take me back</button>
       </div>
+    </div></div>
+  );
+}
+
+// One-time acknowledgement of the terms and privacy policy, for every account
+// old and new. Gated server-side on TOS_VERSION, so bumping that constant
+// re-prompts everybody — which is the mechanism behind the promise in the
+// Terms that meaningful changes get announced rather than slipped in.
+//
+// NOT DISMISSIBLE. No × and no overlay click-through: a modal you can dismiss
+// without answering records nothing, and then it isn't an acknowledgement, it
+// is a popup.
+//
+// DECLINE LOGS OUT AND DELETES NOTHING. It is fully recoverable — log back in
+// and this is waiting. That matters because a real choice needs a real second
+// option, and because somebody who misreads two buttons shouldn't lose their
+// threads over it.
+function TosModal() {
+  const { handleAcceptTos, handleLogout, addToast } = useApp();
+  const [submitting, setSubmitting] = useState(false);
+  async function accept() {
+    setSubmitting(true);
+    try { await handleAcceptTos(); }
+    catch (e) { addToast("couldn't save that — try again"); setSubmitting(false); }
+  }
+  return (
+    <div className="sh-modal-overlay sh-modal-overlay--top"><div className="sh-modal sh-tos-modal">
+      <h2>before you keep going</h2>
+      <p>
+        StoneHead's terms and privacy policy are published. They're written
+        plainly and they're worth the two minutes — the privacy one covers what
+        the app remembers about you, how to delete it, and what the safety
+        layer logs.
+      </p>
+      <p className="sh-tos-links">
+        <a href="/terms" target="_blank" rel="noopener noreferrer">terms of service</a>
+        {" · "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>
+      </p>
+      <p className="sh-tos-fine">
+        You need to be 13 or older to use StoneHead, and 21+ for Talk the Plant.
+      </p>
+      <div className="sh-age-actions">
+        <button className="sh-btn-primary" onClick={accept} disabled={submitting}>
+          {submitting ? "one sec..." : "I'm good with that"}
+        </button>
+        <button className="sh-btn-secondary" onClick={handleLogout} disabled={submitting}>
+          not for me
+        </button>
+      </div>
+      <p className="sh-tos-fine">
+        "not for me" just logs you out — nothing gets deleted, and you can come
+        back whenever.
+      </p>
     </div></div>
   );
 }
