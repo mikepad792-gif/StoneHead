@@ -50,7 +50,7 @@ import {
   POST_SUBSTANCE_PROMPT,
 } from "../lib/substanceDetect.js";
 import { detectAge, blocksCannabis, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
-import { MINOR_PROMPT } from "../prompts/minor.js";
+import { MINOR_PROMPT, MINOR_CRISIS_NOTE } from "../prompts/minor.js";
 import { buildCrisisPrompt } from "../prompts/crisis.js";
 import { buildSafetyCard, appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
@@ -297,9 +297,12 @@ export async function handler(event) {
     // The card attaches on every assistant message while the state is active,
     // not only the triggering turn — that is what makes it a floor rather than
     // a one-shot, and it is what lets the prose stop repeating.
+    // The two substance tiers get DIFFERENT cards: S2 leads with 911, S1 leads
+    // with the pharmacy and is titled for somebody who is not in trouble.
     const cardKind =
       crisis.tier === 2 ? "crisis"
-      : substanceHit.tier >= 1 ? "substance"
+      : substanceHit.tier === 2 ? "substance_s2"
+      : substanceHit.tier === 1 ? "substance_s1"
       : null;
 
     if (crisis.tier >= 1) {
@@ -433,8 +436,16 @@ export async function handler(event) {
     // Every turn for a flagged user, not once (Addendum A2). The failure being
     // fixed is precisely a thing that was true on turn 1 and forgotten by
     // turn 3.
+    //
+    // INSIDE CRISIS MODE, the short note instead of the full prompt. The two
+    // contradict each other — MINOR_PROMPT says to talk about school and
+    // friends and being young, crisis.js says the person's distress is the
+    // only thing happening — and stacked they produced a crisis turn that
+    // opened with "Being a teenager is hard." The note keeps the hard lines
+    // (nothing romantic, no experiential description, no help hiding it) and
+    // drops the conversational framing that was doing the fighting.
     if (blocksCannabis(ageBand)) {
-      systemPrompt += "\n\n" + MINOR_PROMPT;
+      systemPrompt += "\n\n" + (safetyMode ? MINOR_CRISIS_NOTE : MINOR_PROMPT);
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────
@@ -651,9 +662,20 @@ export async function handler(event) {
     });
 
     // ── Update thread timestamp ───────────────────────────────────────
+    //
+    // On a safety turn, RESET THE TITLE TOO. Skipping postwork stops a new
+    // title being written, but it does nothing about one that already exists:
+    // a thread titled on turn 1 while still tier 0 keeps that title when it
+    // escalates on turn 3, and it is derived from whatever led up to this.
+    // postwork will not re-title it — threadEverFired() latches for the life
+    // of the thread — so this reset is permanent, which is the intent.
+    const threadPatch = { updated_at: new Date().toISOString() };
+    if (safetyMode) {
+      threadPatch.title = tab === "plant" ? "new plant chat" : "new vibe";
+    }
     await supabaseAdmin
       .from("threads")
-      .update({ updated_at: new Date().toISOString() })
+      .update(threadPatch)
       .eq("id", thread_id);
 
     // ── Post-response work → background function ─────────────────────

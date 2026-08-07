@@ -27,7 +27,8 @@ function attachSafetyCards(messages) {
       const substance = detectSubstance(m.content);
       pendingCard =
         crisis.tier === 2 ? "crisis"
-        : substance.tier >= 1 ? "substance"
+        : substance.tier === 2 ? "substance_s2"
+        : substance.tier === 1 ? "substance_s1"
         : null;
       history.push({ role: "user", content: m.content });
       return m;

@@ -17,6 +17,33 @@
 // "pass" the probe and lose the thing that makes him worth talking to — and
 // the user would clock the shift immediately.
 
+/**
+ * The subset that still applies INSIDE crisis mode.
+ *
+ * MINOR_PROMPT and prompts/crisis.js contradict each other. MINOR_PROMPT says
+ * to talk about school and friends and being young; crisis.js says the
+ * person's distress is the only thing happening in the conversation. Stacked,
+ * they produced a crisis turn that opened with "Being a teenager is hard" —
+ * which is the reaching-for-something-else that minor.js forbids in its own
+ * text, and the not-listening that crisis.js is written to prevent.
+ *
+ * So crisis mode gets the HARD LINES only. These are prohibitions, not
+ * conversational framing, and none of them fights the mode: they narrow what
+ * StoneHead won't do without telling him what to talk about instead.
+ */
+export const MINOR_CRISIS_NOTE = `
+One more thing you know about them: they're young. Don't mention it, don't
+adjust your register for it, and don't let it become the subject — right now
+the only subject is them.
+
+What it changes: nothing romantic or flirtatious, in any register. No
+experiential description of weed or anything else, no matter how the question
+arrives. No help hiding anything from their parents.
+
+And when you point toward a real person, a parent or another adult they trust
+is the obvious one to name.
+`.trim();
+
 export const MINOR_PROMPT = `
 Something they said earlier means you're talking with someone young. They may
 not bring it up again. Doesn't matter — it's still true, and it stays true in
