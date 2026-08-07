@@ -18,7 +18,7 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { getUserBadges } from "../lib/getUserBadges.js";
-import { FREE_DAILY_LIMIT } from "../lib/constants.js";
+import { FREE_DAILY_LIMIT, TOS_VERSION } from "../lib/constants.js";
 
 export async function handler(event) {
   if (event.httpMethod !== "GET") {
@@ -36,7 +36,7 @@ export async function handler(event) {
   const { data: user, error: userError } = await supabaseAdmin
     .from("users")
     .select(
-      "id, username, email, is_subscribed, subscription_expires, age_verified, daily_message_count, last_message_date, is_founder, founder_number"
+      "id, username, email, is_subscribed, subscription_expires, age_verified, daily_message_count, last_message_date, is_founder, founder_number, tos_accepted_at, tos_version"
     )
     .eq("id", user_id)
     .single();
@@ -92,5 +92,10 @@ export async function handler(event) {
     founder_number: user.founder_number,
     badges,
     liked_strains: liked_strains || [],
+    // TRUE when this account still owes an acknowledgement of the CURRENT
+    // terms — never accepted, or accepted an older version. The client gates
+    // the modal on this rather than on the raw timestamp, so the
+    // version-comparison rule lives in one place.
+    tos_pending: user.tos_version !== TOS_VERSION,
   });
 }

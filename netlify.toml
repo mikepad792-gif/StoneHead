@@ -74,6 +74,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/profile/accept-tos"
+  to = "/.netlify/functions/profile-accept-tos"
+  status = 200
+
+[[redirects]]
   from = "/api/usage/check"
   to = "/.netlify/functions/usage-check"
   status = 200
