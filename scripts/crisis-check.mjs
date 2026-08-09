@@ -920,7 +920,12 @@ check(() => assert.ok(
 ));
 // But the hard lines survive — those are prohibitions, not framing, and none
 // of them fights the mode.
-for (const line of [/romantic|flirtatious/i, /experiential|what it feels like|feel like/i, /hiding|hide/i]) {
+for (const line of [
+  /romantic|flirtatious/i,
+  /feels? like|experiential/i,
+  /conceal|hiding|hide/i,
+  /trusted adult|guardian/i,
+]) {
   check(() => assert.ok(
     line.test(MINOR_CRISIS_NOTE),
     `K01: the crisis-mode note must keep the hard line matching ${line}`
@@ -1131,6 +1136,262 @@ check(() => assert.strictEqual(
       `I02: "${benign}" must not promote on a bare pronoun`
     ));
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PART L — ADDENDUM C (Aug 8).
+// ═══════════════════════════════════════════════════════════════════
+// Three failures in one week, three subsystems, one shape: something the
+// system knew on turn 1 and had forgotten by turn 2 or 3. The strain half of
+// that lives in strain-match-check.mjs; everything here is the minor-prompt
+// and crisis-prompt half.
+
+const { MINOR_SUBSTANCE_NUDGE } = await import("../prompts/minor.js");
+const memFilter = await import("../lib/memoryFilter.js");
+
+// ── L01 (A14) — NO ANTECEDENT. ──
+// The prompts must not state the fact they are trying to suppress. Two rounds
+// of tightening "do not announce this" changed nothing, three times in
+// production, because you cannot hand a model a fact and also instruct it not
+// to mention the fact.
+//
+// Note the direction of these assertions: they FAIL when a phrase is PRESENT.
+// The rule is about what the prompt does not say.
+const ANTECEDENT_PHRASES = [
+  "someone young", "they're young", "being young", "underage", "a minor",
+  "teenager", "teenage", "their age", "your age", "years old", "age band",
+  "high school", "middle school", "this user is", "the user is",
+];
+for (const variant of [["MINOR_PROMPT", MINOR_PROMPT], ["MINOR_CRISIS_NOTE", MINOR_CRISIS_NOTE]]) {
+  const [label, text] = variant;
+  for (const phrase of ANTECEDENT_PHRASES) {
+    check(() => assert.ok(
+      !text.toLowerCase().includes(phrase),
+      `L01: ${label} must not state the fact — found "${phrase}"`
+    ));
+  }
+  check(() => assert.ok(
+    !/\b\d{1,2}\s*(?:years?[- ]old|yo)\b/i.test(text),
+    `L01: ${label} must not name an age`
+  ));
+}
+
+// ── L02 — the hard lines are all still in the full prompt. ──
+// A rewrite that drops a prohibition while removing the antecedent has traded
+// one failure for a worse one.
+for (const line of [
+  /feels? like|is like to take/i,           // no experiential description
+  /romantic|flirtatious/i,
+  /conceal|hiding|hide/i,
+  /trusted adult|guardian/i,
+  /recommendation|dosing|growing/i,
+  /history, policy|history and culture|policy, and culture/i, // subject stays open
+]) {
+  check(() => assert.ok(
+    line.test(MINOR_PROMPT),
+    `L02: MINOR_PROMPT must keep the hard line matching ${line}`
+  ));
+}
+
+// ── L03 — the trusted-adult nudge exists and is unconditional. ──
+// A self-identified 14-year-old reported regular cocaine use and got a good
+// user-focused question and nothing pointing at anyone who could help. The
+// general rule is correctly hedged with "not every time"; this is the case
+// where "not every time" is the bug.
+check(() => assert.ok(
+  /parent|guardian|counselor|doctor/i.test(MINOR_SUBSTANCE_NUDGE),
+  "L03: the substance nudge must name a real category of adult"
+));
+check(() => assert.ok(
+  !/not every time|sometimes|if it fits/i.test(MINOR_SUBSTANCE_NUDGE),
+  "L03: and it must not carry the hedge that kept it from firing"
+));
+
+// ── L04 (C4) — tier 1 clarifies; it does not demand. ──
+// After Addendum B routed every tier >= 1 into crisis mode, the tier-1 append
+// condition (`tier === 1 && !safetyMode`) could never be true. The clarify
+// instruction silently stopped shipping and tier 1 inherited the tier-2
+// stance, which is how "i don't want to be here anymore" started returning
+// "I need you to stay. Right now, in this moment, with me." — the exact phrase
+// behind the Santa Cruz false positive.
+{
+  const tier2 = buildCrisisPrompt("crisis");
+  const tier1 = buildCrisisPrompt("crisis", { clarify: true });
+
+  check(() => assert.ok(
+    tier1.length > tier2.length,
+    "L04: the clarify variant must actually add something"
+  ));
+  check(() => assert.ok(
+    /which kind|what they mean|ask what/i.test(tier1),
+    "L04: tier 1 must be told to ask which kind"
+  ));
+  check(() => assert.ok(
+    /override|read this last/i.test(tier1),
+    "L04: and told that it overrides the stance above it — ordering is the mechanism"
+  ));
+  check(() => assert.ok(
+    !/which kind of stop/i.test(tier2),
+    "L04: tier 2 must NOT get the clarify block — the ambiguity is resolved there"
+  ));
+  // The demand phrasing is named in the clarify block as something NOT to do,
+  // so assert on the tier-2 prompt being the only place the committed stance
+  // stands unqualified.
+  check(() => assert.ok(
+    /i need you to stay/i.test(tier1),
+    "L04: the clarify block should name the phrase it is forbidding"
+  ));
+}
+
+// ── L05 (C4) — the reassurance cliché is named explicitly. ──
+// A tier-2 reply included "that feeling doesn't last forever, even when it
+// feels like it will." Naming the family is the only thing that has ever
+// worked on a phrasing that the model reaches for under exactly this load.
+{
+  const p = buildCrisisPrompt("crisis");
+  check(() => assert.ok(
+    /doesn't last forever|gets better/i.test(p),
+    "L05: crisis.js must name the reassurance phrasing family"
+  ));
+  check(() => assert.ok(
+    /you don't tell them it gets better/i.test(p),
+    "L05: ...as a prohibition, not as advice"
+  ));
+}
+
+// ── L06 (C4) — S2 directs, it does not triage. ──
+// "I took some zaza and I feel really weird" returned only "Weird how? Tell me
+// what's happening in your body right now." The card carried 911; the text
+// asked for symptoms. Asking someone to describe symptoms keeps them typing
+// instead of dialing.
+{
+  const s = buildCrisisPrompt("substance");
+  check(() => assert.ok(
+    /never ask for symptoms first|do not triage/i.test(s),
+    "L06: the substance prompt must forbid opening with a symptom question"
+  ));
+  check(() => assert.ok(
+    /call 911 right now|say call/i.test(s),
+    "L06: ...and must name the correct opening"
+  ));
+  // The heroin run's opening is the target shape and is quoted in the prompt.
+  check(() => assert.ok(
+    s.indexOf("911") < s.indexOf("Good Samaritan"),
+    "L06: 911 must come before the legal reassurance, in the prompt as on the call"
+  ));
+}
+
+// ── L07 (C1/C5) — the memory exclusion filter. ──
+// The actual cause of all three announcement failures: a stored memory saying
+// the user is 14, injected into the system prompt on every turn including
+// crisis turns. Referencing what it remembers is what the memory feature is
+// FOR — the do-not-announce rule was fighting the memory system and losing.
+{
+  const { memoryExclusionReasons, dropSafetyAdjacent } = memFilter;
+
+  // The verbatim memory that caused it.
+  check(() => assert.deepStrictEqual(
+    memoryExclusionReasons("User is 14 and has been really stressed in school"),
+    ["age"],
+    "L07: the memory behind the C1 failure must be rejected"
+  ));
+  for (const s of [
+    "They mentioned being a 14-year-old dealing with a lot of pressure",
+    "A high schooler figuring out what they actually like",
+    "Turning 15 next month and excited about it",
+    "Born in 2011, into skateboarding",
+  ]) {
+    check(() => assert.ok(
+      memoryExclusionReasons(s).includes("age"),
+      `L07: age must be excluded — "${s}"`
+    ));
+  }
+  for (const s of [
+    "Started taking Zoloft last month and it seems to be helping",
+    "Was diagnosed with something and is still working out what it means",
+    "Sees a therapist on Thursdays",
+  ]) {
+    check(() => assert.ok(
+      memoryExclusionReasons(s).includes("health"),
+      `L07: health must be excluded — "${s}"`
+    ));
+  }
+  // And the filter must not eat ordinary memory, or it has replaced one
+  // failure with a feature that no longer works.
+  for (const s of [
+    "Looking for low-anxiety daytime strains for creative work",
+    "Told a long story about a drive home with their nephew",
+    "Growing their first plants and worried about overwatering",
+    "Likes the prohibition-era history stuff more than the strain talk",
+  ]) {
+    check(() => assert.deepStrictEqual(
+      memoryExclusionReasons(s), [],
+      `L07: ordinary memory must survive — "${s}"`
+    ));
+  }
+
+  // Safety adjacency: the disclosure AND the turns on either side of it.
+  const transcript = [
+    { role: "user", content: "what should i grow next season" },       // 0
+    { role: "assistant", content: "depends what you liked last time" }, // 1  (dropped, i-1)
+    { role: "user", content: "i just want to make everything stop" },   // 2  (dropped, safety)
+    { role: "assistant", content: "hey. what's going on?" },            // 3  (dropped, i+1)
+    { role: "user", content: "sorry i meant my landlord" },             // 4
+    { role: "assistant", content: "ah, different kind of stop" },       // 5
+  ];
+  const kept = dropSafetyAdjacent(transcript, (t) => detectCrisis(t).tier >= 1);
+  check(() => assert.strictEqual(
+    kept.length, 3,
+    "L07: a safety turn and its two neighbours come out of the summarizer's transcript"
+  ));
+  check(() => assert.ok(
+    !kept.some((m) => /make everything stop/.test(m.content)),
+    "L07: ...and the disclosure itself is definitely gone"
+  ));
+  // A clean thread passes through untouched — this must not quietly shrink
+  // every transcript in the app.
+  check(() => assert.strictEqual(
+    dropSafetyAdjacent(transcript.slice(4), () => false).length, 2,
+    "L07: an ordinary transcript is returned whole"
+  ));
+}
+
+// ── L08 (C5) — memory is reduced in safety mode, not removed. ──
+// Addendum B kept memory on crisis turns and that call stands. Three memories
+// is three chances to reach for a remembered detail instead of the person.
+{
+  // sessionMemory.js pulls in lib/supabase.js, which throws at import time
+  // without credentials. formatSessionMemoryBlock itself is pure — stub the
+  // env the way openrouter-check.mjs stubs AI_MODEL. Nothing here connects.
+  process.env.SUPABASE_URL ||= "http://localhost";
+  process.env.SUPABASE_ANON_KEY ||= "test-anon";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service";
+  process.env.AI_MODEL ||= "test/model";
+  const { formatSessionMemoryBlock } = await import("../lib/sessionMemory.js");
+  const rows = [
+    { summary: "first", frame_tag: "routine", tab: "vibe", created_at: new Date().toISOString() },
+    { summary: "second", frame_tag: "routine", tab: "vibe", created_at: new Date().toISOString() },
+    { summary: "third", frame_tag: "routine", tab: "vibe", created_at: new Date().toISOString() },
+  ];
+  const ordinary = formatSessionMemoryBlock(rows);
+  const inCrisis = formatSessionMemoryBlock(rows, { safetyMode: true });
+
+  check(() => assert.strictEqual(
+    (ordinary.match(/^- /gm) || []).length, 3,
+    "L08: ordinary turns still get three memories"
+  ));
+  check(() => assert.strictEqual(
+    (inCrisis.match(/^- /gm) || []).length, 1,
+    "L08: a safety turn gets one"
+  ));
+  check(() => assert.ok(
+    inCrisis.length > 0 && /context only/i.test(inCrisis),
+    "L08: reduced, not removed, and labelled as context"
+  ));
+  check(() => assert.strictEqual(
+    formatSessionMemoryBlock([], { safetyMode: true }), "",
+    "L08: no memories still means no block"
+  ));
 }
 
 console.log(
