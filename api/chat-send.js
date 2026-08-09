@@ -20,7 +20,18 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { FREE_DAILY_LIMIT, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
 import { VIBE_MODE, VIBE_HANDOFF_PROMPT, VIBE_SAFETY_SCOPE_NOTE } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
-import { searchStrains, formatStrainContext, parseConstraints, suggestStrainCorrection } from "../lib/strainSearch.js";
+import {
+  searchStrains,
+  formatStrainContext,
+  parseConstraints,
+  suggestStrainCorrection,
+  lastResolvedStrain,
+  lastStrainQuery,
+  isStrainFollowUp,
+  wantsRecheck,
+  formatLookupState,
+  asksAboutAStrain,
+} from "../lib/strainSearch.js";
 import {
   shouldPullPhilosophy,
   pullPhilosophy,
@@ -39,7 +50,6 @@ import {
   detectCrisis,
   shouldSuppressInjection,
   CRISIS_REPLY,
-  CRISIS_CLARIFY_PROMPT,
   POST_CRISIS_RELEASE_PROMPT,
 } from "../lib/crisisDetect.js";
 import {
@@ -50,7 +60,7 @@ import {
   POST_SUBSTANCE_PROMPT,
 } from "../lib/substanceDetect.js";
 import { detectAge, blocksCannabis, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
-import { MINOR_PROMPT, MINOR_CRISIS_NOTE } from "../prompts/minor.js";
+import { MINOR_PROMPT, MINOR_CRISIS_NOTE, MINOR_SUBSTANCE_NUDGE } from "../prompts/minor.js";
 import { buildCrisisPrompt } from "../prompts/crisis.js";
 import { buildSafetyCard, appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
@@ -72,28 +82,36 @@ import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10) || 700;
 const AI_TEMPERATURE = 0.75;
 
+// asksAboutAStrain moved to lib/strainSearch.js (Addendum C2) — the follow-up
+// and re-check helpers need the same cue set, and two copies of a gate this
+// narrow would drift.
+
 // ─── Limit Message ──────────────────────────────────────────────────
 // In-character response when daily limit exceeded. No upsell, no guilt.
-// Does this turn actually name or ask about a specific strain? Gate for the
-// retrieval-miss grounding line (Doc 3a edit 5). Deliberately conservative:
-// it only ever NARROWS when the grounding line fires. A false negative costs
-// one turn of the old behavior; a false positive tells StoneHead he doesn't
-// know a strain nobody asked about.
-const STRAIN_ASK_CUES = [
-  "strain", "strains", "cultivar", "phenotype", "pheno", "cut of",
-  "heard of", "know of", "ever tried", "ever had", "ever smoked",
-  "tell me about", "what about", "how about", "what's in", "whats in",
-  "any good", "is it good", "worth trying", "lineage", "genetics",
-  "crossed with", "bred", "breeder",
-];
-function asksAboutAStrain(text) {
-  const t = " " + String(text || "").toLowerCase() + " ";
-  return STRAIN_ASK_CUES.some((c) => t.includes(c));
-}
-
 const LIMIT_MESSAGE =
   "hey bro... I'm kinda tapped for today. like my brain needs to recharge or whatever. " +
   "come back tomorrow though, I'll be right here. same couch. same vibe. we'll pick it up.";
+
+// ─── Age announcement (Addendum C1, belt and braces) ─────────────────
+//
+// Matched against the MODEL'S REPLY when self_reported_age_band is set. These
+// are the three field failures verbatim plus their nearest neighbours:
+//
+//   "That makes sense. Being a teenager is hard"
+//   "You're 14, right? That age is brutal for that stuff"
+//   "That's a lot on your system, especially at your age"
+//
+// Deliberately narrow — it catches the ANNOUNCEMENT, not the subject. "most
+// people who started early wish they'd waited" is the good turn 2 and must
+// keep passing, and a regex broad enough to be safe would eat it.
+const ANNOUNCE_RE =
+  /\byou'?re \d{1,2}\b|\bat your age\b|\bbeing a teenager\b|\bfor someone your age\b|\bat \d{1,2},? your\b|\bsomeone your age\b|\bat that age\b|\byour age\b/i;
+
+const ANNOUNCE_SUPPRESSION_NOTE =
+  "Rewrite what you were about to say without referring to how old they are, " +
+  "how old you think they are, what age does, or what a stage of life is like. " +
+  "No 'at your age', no 'being a teenager', no naming a number of years. Say " +
+  "the same thing to the person in front of you. Reply with the message only.";
 
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
@@ -371,7 +389,15 @@ export async function handler(event) {
       // where they are — are the same ones that produced "I'm not gonna tell
       // you you're wrong" in response to stated intent. crisis.js restates the
       // voice with those reversed.
-      systemPrompt = buildCrisisPrompt(safetyMode);
+      //
+      // TIER 1 GETS THE CLARIFY VARIANT (Addendum C4). Everything in this file
+      // is written for tier 2, where what they meant is settled. At tier 1 it
+      // isn't, and the unqualified stance produced "I need you to stay" in
+      // answer to a sentence that had not yet been read — the same phrase
+      // behind the Santa Cruz false positive.
+      systemPrompt = buildCrisisPrompt(safetyMode, {
+        clarify: safetyMode === "crisis" && crisis.tier === 1,
+      });
     } else if (tab === "plant") {
       // Liked strains are frame-gated: withhold where name-dropping a saved
       // strain would be tone-deaf (e.g. a routine price check).
@@ -415,12 +441,12 @@ export async function handler(event) {
       }
     }
 
-    // The clarify block only applies OUTSIDE crisis mode now — inside it,
-    // crisis.js already carries the don't-affirm rule as part of the voice
-    // rather than as an appended instruction fighting the mode prompt.
-    if (crisis.tier === 1 && !safetyMode) {
-      systemPrompt += "\n\n" + CRISIS_CLARIFY_PROMPT;
-    }
+    // NO SEPARATE CLARIFY APPEND (Addendum C4). This used to read
+    // `crisis.tier === 1 && !safetyMode`, which after Addendum B could never
+    // be true — safetyMode is set for every tier >= 1 — so the clarify
+    // instruction silently stopped shipping and tier 1 inherited the tier-2
+    // stance. It now lives inside buildCrisisPrompt() as an explicit variant,
+    // where it cannot be disconnected by a condition somewhere else.
     // The release block (§3.6). This is the one that was missing entirely:
     // after a fire, the model got no guidance in EITHER direction, so it read
     // the reply sitting in history and stayed in crisis register while the
@@ -437,22 +463,34 @@ export async function handler(event) {
     // fixed is precisely a thing that was true on turn 1 and forgotten by
     // turn 3.
     //
-    // INSIDE CRISIS MODE, the short note instead of the full prompt. The two
-    // contradict each other — MINOR_PROMPT says to talk about school and
-    // friends and being young, crisis.js says the person's distress is the
-    // only thing happening — and stacked they produced a crisis turn that
-    // opened with "Being a teenager is hard." The note keeps the hard lines
-    // (nothing romantic, no experiential description, no help hiding it) and
-    // drops the conversational framing that was doing the fighting.
-    if (blocksCannabis(ageBand)) {
+    // INSIDE CRISIS MODE, the short note instead of the full prompt: crisis.js
+    // says the person's distress is the only thing happening, and any line
+    // here that suggests a topic fights that.
+    //
+    // Both variants are now written as house rules with NO stated fact about
+    // the person (Addendum C1) — see the header of prompts/minor.js for why
+    // two rounds of "do not announce this" changed nothing.
+    const isMinor = blocksCannabis(ageBand);
+    if (isMinor) {
       systemPrompt += "\n\n" + (safetyMode ? MINOR_CRISIS_NOTE : MINOR_PROMPT);
+    }
+    // Near-mandatory, not "not every time" (Addendum C1, "Also missing"). A
+    // 14-year-old reporting regular cocaine use got a good question and
+    // nothing pointing at anybody who could actually help.
+    if (isMinor && safetyMode === "substance") {
+      systemPrompt += "\n\n" + MINOR_SUBSTANCE_NUDGE;
     }
 
     // ── Session memory injection (Phase 2, all frames) ────────────────
     // session_memories is unconditional in the F Gate — Stone Head should
     // always carry what he remembers about this person.
+    //
+    // REDUCED, NOT REMOVED, IN SAFETY MODE (Addendum C5). Addendum B kept it
+    // on crisis turns and that call stands; the C1 failure was an injected
+    // memory surfacing at the worst moment, so the count drops to one and it
+    // arrives labelled as context rather than as material.
     const memories = await fetchSessionMemories(user_id);
-    const memBlock = formatSessionMemoryBlock(memories); // "" if none
+    const memBlock = formatSessionMemoryBlock(memories, { safetyMode: !!safetyMode }); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
     // ── Build user message augmentation (plant tab) ──────────────────
@@ -474,7 +512,51 @@ export async function handler(event) {
         // Parse stated exclusions once (P0) and thread to BOTH retrieval and
         // the context block, so the filter and the model agree.
         const constraints = parseConstraints(userContent);
-        const matchedStrains = searchStrains(userContent, constraints);
+        let matchedStrains = searchStrains(userContent, constraints);
+
+        // ── C2: carry, re-check, and name the lookup state ────────────
+        //
+        // Three states were collapsing into one empty context block, and the
+        // model read all three as "not in the database". They are tracked
+        // separately now and only `miss` licenses a claim of absence.
+        let lookupState = matchedStrains.length > 0 ? "hit" : "not_attempted";
+        let carried = false;
+        let rechecked = false;
+
+        if (matchedStrains.length === 0) {
+          // Part one: a follow-up with no name in it ("what's it lineage")
+          // inherits the strain the thread was already about.
+          if (isStrainFollowUp(userContent)) {
+            const carry = lastResolvedStrain(history);
+            if (carry) {
+              matchedStrains = carry.strains;
+              lookupState = "hit";
+              carried = true;
+            }
+          }
+          // Part three: "yeah it is, check again" must produce a check, not a
+          // confident refusal. Re-runs against the earlier query text — which
+          // is where the name actually is — and only when the thread HAS an
+          // earlier strain query, so an ordinary "try again" can't fire it.
+          if (lookupState !== "hit" && wantsRecheck(userContent)) {
+            const priorQuery = lastStrainQuery(history);
+            if (priorQuery) {
+              rechecked = true;
+              const again = searchStrains(priorQuery);
+              if (again.length > 0) {
+                matchedStrains = again;
+                lookupState = "hit";
+                carried = true;
+              } else {
+                // Looked and still nothing. That is a real miss and he may
+                // say so — the difference from before is that he actually
+                // looked, and the reply is allowed to say that too.
+                lookupState = "miss";
+              }
+            }
+          }
+        }
+
         let strainBlock = formatStrainContext(matchedStrains, constraints);
 
         // P1: surface a gentle spelling correction ("cali mist" -> Kali Mist).
@@ -485,23 +567,36 @@ export async function handler(event) {
           strainBlock += `\n\n[POSSIBLE MATCH — the user wrote "${correction.wrote}"; the closest known strain is "${sugg}". If relevant, gently confirm the spelling instead of assuming, and don't silently swap it.]`;
         }
 
+        // A named/asked-about strain that resolved nothing is a MISS: a real
+        // query ran and came back empty.
+        //
+        // GATED on the turn actually naming/asking about a strain.
+        // classifyTopic returns STRAIN as a catch-all, so this branch is also
+        // reached by "hey what's up" and "thanks man" — and telling the model
+        // "you do not know this strain" on a greeting contradicts plant.js
+        // ("you don't have to talk weed every message"). No strain named means
+        // no absence to declare, which is now a state of its own rather than
+        // silence.
+        if (lookupState === "not_attempted" && (asksAboutAStrain(userContent) || correction)) {
+          lookupState = "miss";
+        }
+
         if (strainBlock) {
-          content_augmented = userContent + strainBlock;
-        } else if (asksAboutAStrain(userContent) || correction) {
-          // A lookup ran and found nothing. Say so explicitly — otherwise this
-          // turn is identical to one where no lookup happened, and the model
-          // fills the silence. See the honest-miss block in character.js.
-          //
-          // GATED on the turn actually naming/asking about a strain. classifyTopic
-          // returns STRAIN as a catch-all, so this branch is also reached by
-          // "hey what's up" and "thanks man" — and telling the model "you do not
-          // know this strain" on a greeting contradicts plant.js ("you don't have
-          // to talk weed every message"). No strain named means no absence to
-          // declare.
-          content_augmented = userContent +
-            "\n\n[GROUNDING: searched the strain database for this turn. No match found. " +
-            "You do not know this strain. Say so plainly — do not hedge, do not say you " +
-            "have heard the name, do not describe effects or lineage.]";
+          content_augmented = userContent + strainBlock + formatLookupState(lookupState, { carried, rechecked });
+        } else if (lookupState === "miss") {
+          content_augmented = userContent + formatLookupState("miss", { rechecked });
+        } else if (isStrainFollowUp(userContent) || rechecked) {
+          // A17: a follow-up question with nothing to attach it to. The old
+          // code emitted NOTHING here, which is indistinguishable from a miss
+          // and is how "brain candy's not ringing anything in the database"
+          // got said about a strain that was never searched for.
+          content_augmented = userContent + formatLookupState("not_attempted", { rechecked });
+        }
+
+        if (lookupState !== "hit" || carried || rechecked) {
+          console.log("strain lookup:", JSON.stringify({
+            thread_id, state: lookupState, carried, rechecked,
+          }));
         }
 
         // Extras (Part B): dab knowledge + slang origins. After strain
@@ -621,7 +716,51 @@ export async function handler(event) {
           thread_id, mode: safetyMode,
         }));
       }
-    } else if (finishReason === "length") {
+      // Fixed text is never truncated — clear the reason so the check below
+      // doesn't report a fallback as a cut-off completion. (Used to be an
+      // `else if`; the announce check now sits between them.)
+      finishReason = null;
+    }
+
+    // ── Age-announcement check (Addendum C1, belt and braces) ─────────
+    //
+    // Same principle as the safety card: a guarantee in code beats an
+    // instruction in prose. prompts/minor.js no longer states the fact at all,
+    // and lib/memoryFilter.js stops it being re-introduced through memory —
+    // but both of those are upstream of a model that has the whole thread in
+    // context and may have been told an age directly three turns ago.
+    //
+    // ONE regenerate, then ship whatever comes back. A loop here would trade a
+    // clumsy sentence for a timeout, and the sentence is not the emergency.
+    // EVERY occurrence is logged, including ones the retry fixes — the rate is
+    // the number worth having, not the catch.
+    if (reply && isMinor && ANNOUNCE_RE.test(reply)) {
+      const matched = reply.match(ANNOUNCE_RE)?.[0] || "";
+      console.warn("minor announce check tripped:", JSON.stringify({
+        thread_id, mode: safetyMode || "ordinary", matched,
+      }));
+
+      const suppressed = await callChatModel([
+        ...aiMessages,
+        { role: "system", content: ANNOUNCE_SUPPRESSION_NOTE },
+      ]);
+      if (suppressed.ok && suppressed.reply) {
+        const stillTrips = ANNOUNCE_RE.test(suppressed.reply);
+        console.warn("minor announce check retry:", JSON.stringify({
+          thread_id, resolved: !stillTrips,
+        }));
+        // Take the retry either way. Even when it trips again it was generated
+        // under the suppression note, so it is the better of the two; and
+        // silently keeping the first reply would make the log line a lie.
+        ({ reply, rawContent, finishReason, aiData } = suppressed);
+      } else {
+        console.error("minor announce check retry failed:", JSON.stringify({
+          thread_id, status: suppressed.status,
+        }));
+      }
+    }
+
+    if (reply && finishReason === "length") {
       // Answer was cut mid-sentence ("You mean to…"): the model spent its
       // output budget on hidden reasoning/scaffold before the real reply.
       // Log the TAIL too, so the truncation traces to what actually got cut.
