@@ -119,4 +119,202 @@ assert.strictEqual(classifyTopic("my plant looks sad and droopy"), "CULTIVATION"
 assert.strictEqual(classifyTopic("what's good for a lazy sunday"), "STRAIN", "V06-b: strain talk unchanged");
 assert.strictEqual(classifyTopic("I took too much of an edible"), "CONSUMPTION-SAFETY", "V06-c: overconsumption now routes to safety on plant too");
 
+// ═══════════════════════════════════════════════════════════════════
+// V07 — HISTORY INJECTION: the trigger requirement, actually enforced.
+// ═══════════════════════════════════════════════════════════════════
+//
+// The filter read `score >= 3` with a comment saying "Require at least a
+// trigger match." Nothing checked. A tag match (+1) plus a title-word match
+// (+2) reaches 3 with ZERO trigger hits, so a generic shared word pulled a
+// whole origin story. That is the July 26 diagnosis — written down, never
+// shipped.
+//
+// Each message below was verified against the real dataset to score >= 3 with
+// no trigger hit, so these are the actual false positives, not invented ones.
+const { formatHistoryContext, recentHistoryIds } = await import("../lib/historySearch.js");
+
+for (const [id, msg, why] of [
+  ["V07-a", "i love that old reggae music my dad played",
+    "hist_053 Bubba Kush — 'that' appears in the title"],
+  ["V07-b", "the whole medical thing is confusing to me honestly",
+    "hist_005 Prop 215 — one tag, one title word"],
+  ["V07-c", "hemp rope is stronger than i expected",
+    "hist_017 + hist_024 — 'hemp' in two titles"],
+]) {
+  assert.strictEqual(
+    searchHistory(msg).length, 0,
+    `${id}: "${msg}" must not inject history (was pulling ${why})`
+  );
+}
+
+// ...and the trigger path is untouched. A requirement that also breaks real
+// history questions has traded one bug for a worse one.
+for (const [id, msg] of [
+  ["V07-d", "who was Jack Herer"],
+  ["V07-e", "tell me about the war on drugs"],
+  ["V07-f", "what's the story with prop 215"],
+  ["V07-g", "where did og kush come from"],
+]) {
+  const hits = searchHistory(msg);
+  assert.ok(hits.length > 0, `${id}: "${msg}" must still match`);
+  assert.ok(hits.every((h) => h.triggerHits > 0), `${id}: ...on a real trigger`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// V08 — HISTORY INJECTION: repeat suppression.
+// ═══════════════════════════════════════════════════════════════════
+//
+// This is the actual "repeating." Nothing tracked which entries a user had
+// already seen, so the same top-scoring entry won every time a similar word
+// appeared. Scoring is deterministic — that's correct — which is exactly why
+// suppression has to exist separately. Even with V07 fixed, a real trigger
+// said twice surfaces the same entry twice.
+{
+  const first = searchHistory("tell me about the war on drugs");
+  assert.ok(first.length > 0, "V08: setup — the first turn must match something");
+
+  const block = formatHistoryContext(first);
+  assert.ok(
+    block.includes(`#${first[0].id}`),
+    "V08-a: the injected block must stamp the entry ids it served"
+  );
+
+  // Replayed out of the stored augmented message, the way chat-send does it.
+  const history = [
+    { role: "user", content: "tell me about the war on drugs", content_augmented: "tell me about the war on drugs" + block },
+    { role: "assistant", content: "man, that whole thing was never about the plant" },
+  ];
+  const seen = recentHistoryIds(history);
+  assert.deepStrictEqual(
+    seen, first.map((e) => e.id),
+    "V08-b: the served ids must replay out of history"
+  );
+
+  const second = searchHistory("so what else about the war on drugs", { exclude: seen });
+  assert.ok(
+    !second.some((e) => seen.includes(e.id)),
+    "V08-c: an entry already shown must not come back on the same trigger"
+  );
+
+  // Suppression is applied before scoring, so a suppressed top scorer cannot
+  // block the runner-up that should surface in its place.
+  const pool = searchHistory("tell me about the war on drugs", { exclude: ["definitely-not-an-id"] });
+  assert.deepStrictEqual(
+    pool.map((e) => e.id), first.map((e) => e.id),
+    "V08-d: an irrelevant exclusion changes nothing"
+  );
+
+  // Degenerate inputs — this runs on every plant and vibe turn.
+  assert.deepStrictEqual(recentHistoryIds([]), [], "V08-e: empty history");
+  assert.deepStrictEqual(
+    recentHistoryIds([{ role: "user", content: "hi" }]), [],
+    "V08-f: a message with no augmented column"
+  );
+  assert.deepStrictEqual(
+    recentHistoryIds([{ role: "user", content: "hi", content_augmented: "hi, no block here" }]), [],
+    "V08-g: augmented content with no history block"
+  );
+  // The /g regex is stateful; two calls must agree.
+  assert.deepStrictEqual(
+    recentHistoryIds(history), recentHistoryIds(history),
+    "V08-h: repeated calls must not drift on regex lastIndex"
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// V09 — ADDENDUM D. The first bug report from a real user.
+// ═══════════════════════════════════════════════════════════════════
+//
+// DJ Jedi, four days in, 50 messages on his heaviest day (previous single-day
+// record: 19), unprompted: "I do notice that the weed strain stories keep
+// repeating though." Volume made a latent bug visible.
+//
+// Reading historySearch turned up five defects, not one. The one that produced
+// the repeating was the smallest to describe: EVERY match in the file was a
+// substring test, and the OG Kush entry's `og` trigger matches inside
+// pr-og-ress, rec-og-nize and l-og-ic. One entry won constantly on two-letter
+// collisions, which is what "the same story keeps coming back" looks like from
+// the outside.
+
+// ── V09-a (D2): substring collisions. Each of these fired hist_001 (OG Kush)
+// on main. `og` inside three different ordinary words. ──
+for (const [id, msg, collision] of [
+  ["V09-a1", "I've been making progress on something big", "og in progress"],
+  ["V09-a2", "i recognize that feeling", "og in recognize"],
+  ["V09-a3", "logic says one thing but my gut says another", "og in logic"],
+  ["V09-a4", "that has a lot of potential honestly", "pot in potential"],
+  ["V09-a5", "i posted it with a hashtag", "hash in hashtag"],
+  ["V09-a6", "i found a place later that day", "la in place/later"],
+  ["V09-a7", "been doing therapy for a while now", "rap in therapy"],
+  ["V09-a8", "i saw it on facebook", "book in facebook"],
+  ["V09-a9", "we drove to the spot", "pot in spot"],
+]) {
+  assert.strictEqual(
+    searchHistory(msg).length, 0,
+    `${id}: "${msg}" must not inject history (substring collision: ${collision})`
+  );
+}
+
+// ── V09-b (C3): the July 26 mis-fire. A pure free-will/determinism question
+// pulled the Chemdawg / OG Kush / Sour Diesel origin story. ──
+assert.strictEqual(
+  searchHistory("if every decision is based on past experiences do we ever really have free will").length,
+  0,
+  "V09-b: a philosophy question must not pull cannabis history (C3)"
+);
+
+// ── V09-c (C6/B3): the regression guard. D1-D3 tighten scoring a lot, which
+// is the intent — but a tightening that also kills real history questions has
+// traded one bug for a worse one. This is the guard the build order calls out:
+// if these start failing, TITLE_BONUS_MAX is the dial to loosen first. ──
+for (const [id, msg] of [
+  ["V09-c1", "why is weed illegal in the first place"],   // B3, the named guard
+  ["V09-c2", "who was Jack Herer"],
+  ["V09-c3", "tell me about the war on drugs"],
+  ["V09-c4", "what's the story with prop 215"],
+  ["V09-c5", "where did og kush come from"],              // real `og kush`, not a collision
+  ["V09-c6", "what happened with nixon and weed"],
+  ["V09-c7", "tell me about the marihuana tax act"],
+  ["V09-c8", "what's the deal with the emerald triangle"],
+]) {
+  const hits = searchHistory(msg);
+  assert.ok(hits.length > 0, `${id}: "${msg}" must still match (C6/B3 regression guard)`);
+  assert.ok(hits.every((h) => h.triggerHits > 0), `${id}: ...on a real trigger`);
+}
+
+// ── V09-d (D3): the title contribution is capped. It used to add +2 PER
+// matching word with no ceiling, so a long message accumulated title points
+// indefinitely. Repeating a title's words many times must not out-score a
+// second trigger hit. ──
+{
+  const one = searchHistory("where did og kush come from");
+  // Every content word below appears in "The Origin of OG Kush"; under the old
+  // uncapped rule this would have scored far higher than the natural question.
+  const stuffed = searchHistory("og kush origin origin kush kush origin kush og");
+  const entry = one.find((e) => e.id === "hist_001");
+  const stuffedEntry = stuffed.find((e) => e.id === "hist_001");
+  assert.ok(entry && stuffedEntry, "V09-d: setup — hist_001 must match both phrasings");
+  assert.ok(
+    stuffedEntry.score - entry.score <= 4,
+    `V09-d: title points must be capped; word-stuffing moved the score by ${stuffedEntry.score - entry.score}`
+  );
+}
+
+// ── V09-e (D6): the injected block carries a no-invention clause. ──
+// The conversational framing is kept deliberately, so the guard against
+// confident elaboration has to be explicit — same instruction shape that
+// produced "The Loops ties it together with something sweet" on the strain
+// path. Assert both halves, because dropping either one is the failure.
+{
+  const block = formatHistoryContext(searchHistory("tell me about the war on drugs"));
+  assert.ok(
+    /like you lived through it/i.test(block),
+    "V09-e: the conversational framing must survive — the register is the product"
+  );
+  assert.ok(
+    /don't invent detail/i.test(block) && /that's all you have/i.test(block),
+    "V09-e: ...and it must be paired with the no-invention clause"
+  );
+}
+
 console.log("frame-check: all assertions passed");

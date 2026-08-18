@@ -37,7 +37,7 @@ import {
   pullPhilosophy,
   formatPhilosophyContext,
 } from "../lib/philosophyPull.js";
-import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
+import { searchHistory, formatHistoryContext, recentHistoryIds } from "../lib/historySearch.js";
 import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
 import {
   detectFrame,
@@ -215,9 +215,13 @@ export async function handler(event) {
     // the limit would mean a free user on message 51 gets LIMIT_MESSAGE
     // instead of a safety response — which is the exact hole edit 4a was
     // written to close, reopened through the side door.
+    // content_augmented comes along for repeat suppression: the history
+    // entries already injected in this thread are stamped into it, and
+    // recentHistoryIds() replays them back out. It is NEVER put in front of
+    // the model from here — aiMessages maps `content` only, below.
     const { data: recentHistory, error: historyError } = await supabaseAdmin
       .from("messages")
-      .select("role, content")
+      .select("role, content, content_augmented")
       .eq("thread_id", thread_id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -493,6 +497,11 @@ export async function handler(event) {
     const memBlock = formatSessionMemoryBlock(memories, { safetyMode: !!safetyMode }); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
+    // Which history entries this thread has already been shown. Computed once
+    // — both retrieval branches below use it, and neither should be able to
+    // re-serve an entry the other just did.
+    const seenHistoryIds = recentHistoryIds(history);
+
     // ── Build user message augmentation (plant tab) ──────────────────
     if (tab === "plant" && topic === "CULTIVATION") {
       // Only pull a diagnosis reference when the message actually describes a
@@ -607,9 +616,12 @@ export async function handler(event) {
         }
       }
 
-      // History retrieval — gated the same way.
+      // History retrieval — frame-gated like strain context, minus whatever
+      // this thread has already been shown (see recentHistoryIds). The vibe
+      // branch below is deliberately NOT frame-gated; the long note there
+      // explains why, and why that reasoning only became true with D1/D2.
       if (fGate("history", frame, confidence) && !suppressInjection) {
-        const matchedHistory = searchHistory(userContent);
+        const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
         const historyBlock = formatHistoryContext(matchedHistory);
         if (historyBlock) {
           content_augmented = (content_augmented || userContent) + historyBlock;
@@ -618,12 +630,30 @@ export async function handler(event) {
     } else if (tab === "vibe" && !handoff && !vibeSafety && !suppressInjection) {
       // Cannabis history/culture is age-neutral and allowed on vibe — and when
       // the database has the answer, it must be the source, not training
-      // memory. NOT frame-gated: searchHistory requires an explicit trigger
-      // match, so this only fires when they actually asked about a history
-      // topic, and a grounded answer should never be withheld then. Skipped
-      // on handoff turns (he's redirecting, not answering) and safety turns
-      // (don't stuff trivia into a help moment).
-      const matchedHistory = searchHistory(userContent);
+      // memory. Skipped on handoff turns (he's redirecting, not answering) and
+      // safety turns (don't stuff trivia into a help moment).
+      //
+      // NOT FRAME-GATED, and read this before deciding it should be
+      // (Addendum D5). The justification here used to be "searchHistory
+      // requires an explicit trigger match, so this only fires when they
+      // actually asked about a history topic." That was FALSE when it was
+      // written: historySearch's trigger requirement lived in a comment and
+      // nothing enforced it, so the vibe tab's frame gate had been removed on
+      // the strength of a guarantee that did not exist — two false comments in
+      // two files, the second citing the first as grounds for dropping a
+      // safeguard. On this tab, on the day of the July 26 mis-fire, there was
+      // no gate on history injection at all.
+      //
+      // The premise now HOLDS: historySearch requires triggerHits > 0 and
+      // matches on word boundaries (D1, D2). So the reasoning is sound and the
+      // tab stays ungated deliberately — fGate BLOCKS history on three of six
+      // frames (routine, grounding, friction), and withholding a grounded
+      // answer to a direct question about cannabis history is a worse failure
+      // than the one being fixed.
+      //
+      // If historySearch's gate is ever loosened, THIS is the call site that
+      // silently loses its only protection.
+      const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
       const historyBlock = formatHistoryContext(matchedHistory);
       if (historyBlock) {
         content_augmented = userContent + historyBlock;
