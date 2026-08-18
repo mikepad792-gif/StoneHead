@@ -300,4 +300,21 @@ for (const [id, msg] of [
   );
 }
 
+// ── V09-e (D6): the injected block carries a no-invention clause. ──
+// The conversational framing is kept deliberately, so the guard against
+// confident elaboration has to be explicit — same instruction shape that
+// produced "The Loops ties it together with something sweet" on the strain
+// path. Assert both halves, because dropping either one is the failure.
+{
+  const block = formatHistoryContext(searchHistory("tell me about the war on drugs"));
+  assert.ok(
+    /like you lived through it/i.test(block),
+    "V09-e: the conversational framing must survive — the register is the product"
+  );
+  assert.ok(
+    /don't invent detail/i.test(block) && /that's all you have/i.test(block),
+    "V09-e: ...and it must be paired with the no-invention clause"
+  );
+}
+
 console.log("frame-check: all assertions passed");
