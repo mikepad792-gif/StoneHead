@@ -37,7 +37,7 @@ import {
   pullPhilosophy,
   formatPhilosophyContext,
 } from "../lib/philosophyPull.js";
-import { searchHistory, formatHistoryContext } from "../lib/historySearch.js";
+import { searchHistory, formatHistoryContext, recentHistoryIds } from "../lib/historySearch.js";
 import { lookupExtras, formatExtrasBlock } from "../lib/extrasLookup.js";
 import {
   detectFrame,
@@ -215,9 +215,13 @@ export async function handler(event) {
     // the limit would mean a free user on message 51 gets LIMIT_MESSAGE
     // instead of a safety response — which is the exact hole edit 4a was
     // written to close, reopened through the side door.
+    // content_augmented comes along for repeat suppression: the history
+    // entries already injected in this thread are stamped into it, and
+    // recentHistoryIds() replays them back out. It is NEVER put in front of
+    // the model from here — aiMessages maps `content` only, below.
     const { data: recentHistory, error: historyError } = await supabaseAdmin
       .from("messages")
-      .select("role, content")
+      .select("role, content, content_augmented")
       .eq("thread_id", thread_id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -493,6 +497,11 @@ export async function handler(event) {
     const memBlock = formatSessionMemoryBlock(memories, { safetyMode: !!safetyMode }); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
+    // Which history entries this thread has already been shown. Computed once
+    // — both retrieval branches below use it, and neither should be able to
+    // re-serve an entry the other just did.
+    const seenHistoryIds = recentHistoryIds(history);
+
     // ── Build user message augmentation (plant tab) ──────────────────
     if (tab === "plant" && topic === "CULTIVATION") {
       // Only pull a diagnosis reference when the message actually describes a
@@ -607,9 +616,10 @@ export async function handler(event) {
         }
       }
 
-      // History retrieval — gated the same way.
+      // History retrieval — gated the same way, minus whatever this thread
+      // has already been shown (see recentHistoryIds).
       if (fGate("history", frame, confidence) && !suppressInjection) {
-        const matchedHistory = searchHistory(userContent);
+        const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
         const historyBlock = formatHistoryContext(matchedHistory);
         if (historyBlock) {
           content_augmented = (content_augmented || userContent) + historyBlock;
@@ -623,7 +633,7 @@ export async function handler(event) {
       // topic, and a grounded answer should never be withheld then. Skipped
       // on handoff turns (he's redirecting, not answering) and safety turns
       // (don't stuff trivia into a help moment).
-      const matchedHistory = searchHistory(userContent);
+      const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
       const historyBlock = formatHistoryContext(matchedHistory);
       if (historyBlock) {
         content_augmented = userContent + historyBlock;

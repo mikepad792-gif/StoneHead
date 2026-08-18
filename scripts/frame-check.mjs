@@ -119,4 +119,106 @@ assert.strictEqual(classifyTopic("my plant looks sad and droopy"), "CULTIVATION"
 assert.strictEqual(classifyTopic("what's good for a lazy sunday"), "STRAIN", "V06-b: strain talk unchanged");
 assert.strictEqual(classifyTopic("I took too much of an edible"), "CONSUMPTION-SAFETY", "V06-c: overconsumption now routes to safety on plant too");
 
+// ═══════════════════════════════════════════════════════════════════
+// V07 — HISTORY INJECTION: the trigger requirement, actually enforced.
+// ═══════════════════════════════════════════════════════════════════
+//
+// The filter read `score >= 3` with a comment saying "Require at least a
+// trigger match." Nothing checked. A tag match (+1) plus a title-word match
+// (+2) reaches 3 with ZERO trigger hits, so a generic shared word pulled a
+// whole origin story. That is the July 26 diagnosis — written down, never
+// shipped.
+//
+// Each message below was verified against the real dataset to score >= 3 with
+// no trigger hit, so these are the actual false positives, not invented ones.
+const { formatHistoryContext, recentHistoryIds } = await import("../lib/historySearch.js");
+
+for (const [id, msg, why] of [
+  ["V07-a", "i love that old reggae music my dad played",
+    "hist_053 Bubba Kush — 'that' appears in the title"],
+  ["V07-b", "the whole medical thing is confusing to me honestly",
+    "hist_005 Prop 215 — one tag, one title word"],
+  ["V07-c", "hemp rope is stronger than i expected",
+    "hist_017 + hist_024 — 'hemp' in two titles"],
+]) {
+  assert.strictEqual(
+    searchHistory(msg).length, 0,
+    `${id}: "${msg}" must not inject history (was pulling ${why})`
+  );
+}
+
+// ...and the trigger path is untouched. A requirement that also breaks real
+// history questions has traded one bug for a worse one.
+for (const [id, msg] of [
+  ["V07-d", "who was Jack Herer"],
+  ["V07-e", "tell me about the war on drugs"],
+  ["V07-f", "what's the story with prop 215"],
+  ["V07-g", "where did og kush come from"],
+]) {
+  const hits = searchHistory(msg);
+  assert.ok(hits.length > 0, `${id}: "${msg}" must still match`);
+  assert.ok(hits.every((h) => h.triggerHits > 0), `${id}: ...on a real trigger`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// V08 — HISTORY INJECTION: repeat suppression.
+// ═══════════════════════════════════════════════════════════════════
+//
+// This is the actual "repeating." Nothing tracked which entries a user had
+// already seen, so the same top-scoring entry won every time a similar word
+// appeared. Scoring is deterministic — that's correct — which is exactly why
+// suppression has to exist separately. Even with V07 fixed, a real trigger
+// said twice surfaces the same entry twice.
+{
+  const first = searchHistory("tell me about the war on drugs");
+  assert.ok(first.length > 0, "V08: setup — the first turn must match something");
+
+  const block = formatHistoryContext(first);
+  assert.ok(
+    block.includes(`#${first[0].id}`),
+    "V08-a: the injected block must stamp the entry ids it served"
+  );
+
+  // Replayed out of the stored augmented message, the way chat-send does it.
+  const history = [
+    { role: "user", content: "tell me about the war on drugs", content_augmented: "tell me about the war on drugs" + block },
+    { role: "assistant", content: "man, that whole thing was never about the plant" },
+  ];
+  const seen = recentHistoryIds(history);
+  assert.deepStrictEqual(
+    seen, first.map((e) => e.id),
+    "V08-b: the served ids must replay out of history"
+  );
+
+  const second = searchHistory("so what else about the war on drugs", { exclude: seen });
+  assert.ok(
+    !second.some((e) => seen.includes(e.id)),
+    "V08-c: an entry already shown must not come back on the same trigger"
+  );
+
+  // Suppression is applied before scoring, so a suppressed top scorer cannot
+  // block the runner-up that should surface in its place.
+  const pool = searchHistory("tell me about the war on drugs", { exclude: ["definitely-not-an-id"] });
+  assert.deepStrictEqual(
+    pool.map((e) => e.id), first.map((e) => e.id),
+    "V08-d: an irrelevant exclusion changes nothing"
+  );
+
+  // Degenerate inputs — this runs on every plant and vibe turn.
+  assert.deepStrictEqual(recentHistoryIds([]), [], "V08-e: empty history");
+  assert.deepStrictEqual(
+    recentHistoryIds([{ role: "user", content: "hi" }]), [],
+    "V08-f: a message with no augmented column"
+  );
+  assert.deepStrictEqual(
+    recentHistoryIds([{ role: "user", content: "hi", content_augmented: "hi, no block here" }]), [],
+    "V08-g: augmented content with no history block"
+  );
+  // The /g regex is stateful; two calls must agree.
+  assert.deepStrictEqual(
+    recentHistoryIds(history), recentHistoryIds(history),
+    "V08-h: repeated calls must not drift on regex lastIndex"
+  );
+}
+
 console.log("frame-check: all assertions passed");
