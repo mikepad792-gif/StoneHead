@@ -221,4 +221,83 @@ for (const [id, msg] of [
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// V09 — ADDENDUM D. The first bug report from a real user.
+// ═══════════════════════════════════════════════════════════════════
+//
+// DJ Jedi, four days in, 50 messages on his heaviest day (previous single-day
+// record: 19), unprompted: "I do notice that the weed strain stories keep
+// repeating though." Volume made a latent bug visible.
+//
+// Reading historySearch turned up five defects, not one. The one that produced
+// the repeating was the smallest to describe: EVERY match in the file was a
+// substring test, and the OG Kush entry's `og` trigger matches inside
+// pr-og-ress, rec-og-nize and l-og-ic. One entry won constantly on two-letter
+// collisions, which is what "the same story keeps coming back" looks like from
+// the outside.
+
+// ── V09-a (D2): substring collisions. Each of these fired hist_001 (OG Kush)
+// on main. `og` inside three different ordinary words. ──
+for (const [id, msg, collision] of [
+  ["V09-a1", "I've been making progress on something big", "og in progress"],
+  ["V09-a2", "i recognize that feeling", "og in recognize"],
+  ["V09-a3", "logic says one thing but my gut says another", "og in logic"],
+  ["V09-a4", "that has a lot of potential honestly", "pot in potential"],
+  ["V09-a5", "i posted it with a hashtag", "hash in hashtag"],
+  ["V09-a6", "i found a place later that day", "la in place/later"],
+  ["V09-a7", "been doing therapy for a while now", "rap in therapy"],
+  ["V09-a8", "i saw it on facebook", "book in facebook"],
+  ["V09-a9", "we drove to the spot", "pot in spot"],
+]) {
+  assert.strictEqual(
+    searchHistory(msg).length, 0,
+    `${id}: "${msg}" must not inject history (substring collision: ${collision})`
+  );
+}
+
+// ── V09-b (C3): the July 26 mis-fire. A pure free-will/determinism question
+// pulled the Chemdawg / OG Kush / Sour Diesel origin story. ──
+assert.strictEqual(
+  searchHistory("if every decision is based on past experiences do we ever really have free will").length,
+  0,
+  "V09-b: a philosophy question must not pull cannabis history (C3)"
+);
+
+// ── V09-c (C6/B3): the regression guard. D1-D3 tighten scoring a lot, which
+// is the intent — but a tightening that also kills real history questions has
+// traded one bug for a worse one. This is the guard the build order calls out:
+// if these start failing, TITLE_BONUS_MAX is the dial to loosen first. ──
+for (const [id, msg] of [
+  ["V09-c1", "why is weed illegal in the first place"],   // B3, the named guard
+  ["V09-c2", "who was Jack Herer"],
+  ["V09-c3", "tell me about the war on drugs"],
+  ["V09-c4", "what's the story with prop 215"],
+  ["V09-c5", "where did og kush come from"],              // real `og kush`, not a collision
+  ["V09-c6", "what happened with nixon and weed"],
+  ["V09-c7", "tell me about the marihuana tax act"],
+  ["V09-c8", "what's the deal with the emerald triangle"],
+]) {
+  const hits = searchHistory(msg);
+  assert.ok(hits.length > 0, `${id}: "${msg}" must still match (C6/B3 regression guard)`);
+  assert.ok(hits.every((h) => h.triggerHits > 0), `${id}: ...on a real trigger`);
+}
+
+// ── V09-d (D3): the title contribution is capped. It used to add +2 PER
+// matching word with no ceiling, so a long message accumulated title points
+// indefinitely. Repeating a title's words many times must not out-score a
+// second trigger hit. ──
+{
+  const one = searchHistory("where did og kush come from");
+  // Every content word below appears in "The Origin of OG Kush"; under the old
+  // uncapped rule this would have scored far higher than the natural question.
+  const stuffed = searchHistory("og kush origin origin kush kush origin kush og");
+  const entry = one.find((e) => e.id === "hist_001");
+  const stuffedEntry = stuffed.find((e) => e.id === "hist_001");
+  assert.ok(entry && stuffedEntry, "V09-d: setup — hist_001 must match both phrasings");
+  assert.ok(
+    stuffedEntry.score - entry.score <= 4,
+    `V09-d: title points must be capped; word-stuffing moved the score by ${stuffedEntry.score - entry.score}`
+  );
+}
+
 console.log("frame-check: all assertions passed");

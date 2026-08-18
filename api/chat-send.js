@@ -616,8 +616,10 @@ export async function handler(event) {
         }
       }
 
-      // History retrieval — gated the same way, minus whatever this thread
-      // has already been shown (see recentHistoryIds).
+      // History retrieval — frame-gated like strain context, minus whatever
+      // this thread has already been shown (see recentHistoryIds). The vibe
+      // branch below is deliberately NOT frame-gated; the long note there
+      // explains why, and why that reasoning only became true with D1/D2.
       if (fGate("history", frame, confidence) && !suppressInjection) {
         const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
         const historyBlock = formatHistoryContext(matchedHistory);
@@ -628,11 +630,29 @@ export async function handler(event) {
     } else if (tab === "vibe" && !handoff && !vibeSafety && !suppressInjection) {
       // Cannabis history/culture is age-neutral and allowed on vibe — and when
       // the database has the answer, it must be the source, not training
-      // memory. NOT frame-gated: searchHistory requires an explicit trigger
-      // match, so this only fires when they actually asked about a history
-      // topic, and a grounded answer should never be withheld then. Skipped
-      // on handoff turns (he's redirecting, not answering) and safety turns
-      // (don't stuff trivia into a help moment).
+      // memory. Skipped on handoff turns (he's redirecting, not answering) and
+      // safety turns (don't stuff trivia into a help moment).
+      //
+      // NOT FRAME-GATED, and read this before deciding it should be
+      // (Addendum D5). The justification here used to be "searchHistory
+      // requires an explicit trigger match, so this only fires when they
+      // actually asked about a history topic." That was FALSE when it was
+      // written: historySearch's trigger requirement lived in a comment and
+      // nothing enforced it, so the vibe tab's frame gate had been removed on
+      // the strength of a guarantee that did not exist — two false comments in
+      // two files, the second citing the first as grounds for dropping a
+      // safeguard. On this tab, on the day of the July 26 mis-fire, there was
+      // no gate on history injection at all.
+      //
+      // The premise now HOLDS: historySearch requires triggerHits > 0 and
+      // matches on word boundaries (D1, D2). So the reasoning is sound and the
+      // tab stays ungated deliberately — fGate BLOCKS history on three of six
+      // frames (routine, grounding, friction), and withholding a grounded
+      // answer to a direct question about cannabis history is a worse failure
+      // than the one being fixed.
+      //
+      // If historySearch's gate is ever loosened, THIS is the call site that
+      // silently loses its only protection.
       const matchedHistory = searchHistory(userContent, { exclude: seenHistoryIds });
       const historyBlock = formatHistoryContext(matchedHistory);
       if (historyBlock) {
