@@ -98,6 +98,37 @@ assert(userPrompt().includes("STRAIN CONTEXT"), "B03c: a hit must carry retrieve
 assert(!userPrompt().includes("STRAIN LOOKUP: MISS"), "B03d: a hit must NOT be marked a miss");
 assert(systemPrompt().includes("ONE-SHOT LOOKUP"), "B03e: the Discord note must be in the system prompt");
 
+// ── B03f: the output budget stays above the documented floor ────────
+//
+// MAX_TOKENS' documentation sets a floor of ~600: a model that front-loads
+// hidden reasoning scaffold spends the budget before the real reply starts, so
+// a LOW ceiling causes the truncation it looks like it prevents. This endpoint
+// shipped at 500 once. The clamp and this assertion are why it can't again.
+assert(
+  lastRequest.max_tokens >= 600,
+  `B03f: max_tokens must stay >= 600, got ${lastRequest.max_tokens}`
+);
+assert.equal(
+  lastRequest.reasoning?.enabled,
+  false,
+  "B03g: reasoning must be disabled at the source"
+);
+
+// An override under the floor is clamped up, not honored — a silent truncation
+// bug is worse than an ignored env var.
+process.env.BOT_MAX_TOKENS = "120";
+const { handler: reHandler } = await import("../api/strain-lookup.js?clamp");
+await reHandler({
+  httpMethod: "POST",
+  headers: SECRET_HEADERS,
+  body: JSON.stringify(LOOKUP),
+});
+assert(
+  lastRequest.max_tokens >= 600,
+  `B03h: BOT_MAX_TOKENS=120 must clamp up to the floor, got ${lastRequest.max_tokens}`
+);
+delete process.env.BOT_MAX_TOKENS;
+
 // ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
 //
 // searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-

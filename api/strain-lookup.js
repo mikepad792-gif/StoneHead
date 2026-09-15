@@ -51,14 +51,26 @@ const MAX_QUERY_CHARS = 200;
 
 const AI_TEMPERATURE = 0.75;
 
-// Lower than chat's 700. Discord embed descriptions cap at 4096 chars and the
-// bot trims to ~1400 anyway, so the extra budget only buys text nobody reads.
+// Matches chat's 700, and deliberately so. MAX_TOKENS' own documentation sets
+// a floor of ~600 because the model can front-load hidden reasoning scaffold
+// that eats the budget before the real reply starts — a low ceiling CAUSES the
+// truncation it looks like it prevents. `reasoning: { enabled: false }` below
+// asks the provider to stop that at the source, but OpenRouter only passes the
+// flag along and a provider is free to ignore it, so the budget still has to
+// survive the case where it is ignored.
 //
-// Deliberately NOT dropped near the ~250 that config.js warns about: the
-// model can front-load hidden scaffold and truncate the real reply before it
-// starts. `reasoning: { enabled: false }` below kills that at the source, and
-// 500 leaves room for a clean finish even where a provider ignores the flag.
-const BOT_MAX_TOKENS = parseInt(process.env.BOT_MAX_TOKENS, 10) || 500;
+// This is a CEILING, not a target. The prompt is what keeps replies short, and
+// the bot trims to ~1400 chars regardless, so a reply that ends on its own
+// costs the same at 700 as at 500 — the only thing a lower number buys is the
+// chance of cutting a good answer off mid-sentence.
+//
+// An override below the floor is ignored rather than honored: getting this
+// wrong is silent, and it looks like a model problem, not a config one.
+const BOT_MAX_TOKENS_FLOOR = 600;
+const BOT_MAX_TOKENS = Math.max(
+  BOT_MAX_TOKENS_FLOOR,
+  parseInt(process.env.BOT_MAX_TOKENS, 10) || 700
+);
 
 // Starting points — see the spec. The guild counter is the one protecting the
 // OpenRouter balance: it caps the blast radius of a single server finding the
