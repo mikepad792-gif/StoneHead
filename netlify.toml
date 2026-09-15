@@ -174,6 +174,15 @@
   to = "/.netlify/functions/backfill-titles"
   status = 200
 
+# Public Discord bot lookup (Stonehead_bot). Unauthenticated by design — it is
+# guarded by the X-Bot-Secret shared secret and its own rate limiter, not by a
+# session token. Flat path, not /api/strains/lookup, so it reads as the one
+# route that is not part of the app's authenticated strain surface.
+[[redirects]]
+  from = "/api/strain-lookup"
+  to = "/.netlify/functions/strain-lookup"
+  status = 200
+
 # Legal pages. Static HTML generated from docs/*.md by scripts/build-legal.mjs.
 # These MUST sit above the SPA fallback or /privacy resolves to the app shell
 # and a link from a signup form goes nowhere.
