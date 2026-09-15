@@ -1,0 +1,194 @@
+// scripts/bot-lookup-check.mjs
+// Discord strain-lookup harness — run: node scripts/bot-lookup-check.mjs
+//
+// Drives api/strain-lookup.js end to end with the model call and the rate-limit
+// RPC stubbed, so every assertion below is about the endpoint's own decisions.
+//
+// The load-bearing test is B03/B04: a strain that is NOT in the database must
+// come back matched:false with a MISS instruction and NO retrieved cards in the
+// prompt. "Pink Thunder" retrieves three real Thunder strains on a loose score,
+// and letting those through is how a bot invents a strain in public.
+//
+import assert from "node:assert";
+
+// config.js throws at load when no model is configured, and supabase.js needs
+// a URL to construct its client. Neither is reached — both calls are stubbed.
+process.env.AI_MODEL ||= "test/model";
+process.env.SUPABASE_URL ||= "https://test.supabase.co";
+process.env.SUPABASE_ANON_KEY ||= "test-anon-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= "test-service-key";
+process.env.OPENROUTER_API_KEY ||= "test-key";
+process.env.BOT_SHARED_SECRET = "test-secret-value";
+
+const { supabaseAdmin } = await import("../lib/supabase.js");
+const { UNDER_13_REPLY } = await import("../lib/ageDetect.js");
+const { CRISIS_REPLY } = await import("../lib/crisisDetect.js");
+const { handler } = await import("../api/strain-lookup.js");
+
+// ── Stubs ───────────────────────────────────────────────────────────
+// ESM gives live bindings to the module's own object, and the endpoint holds
+// the same instance, so replacing the method here replaces the one it calls.
+let rateLimitResult = { data: true, error: null };
+supabaseAdmin.rpc = async () => rateLimitResult;
+
+// openrouter.js calls global fetch. Capture what the model was asked, so the
+// prompt itself can be asserted on and not just the reply.
+let lastRequest = null;
+let fetchCalls = 0;
+let modelReply = "Blue Dream, yeah. That one's a classic.";
+globalThis.fetch = async (_url, init) => {
+  fetchCalls++;
+  lastRequest = JSON.parse(init.body);
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      model: "test/model",
+      choices: [{ message: { content: modelReply }, finish_reason: "stop" }],
+    }),
+  };
+};
+
+const SECRET_HEADERS = { "x-bot-secret": "test-secret-value" };
+
+function call(body, { headers = SECRET_HEADERS, method = "POST" } = {}) {
+  fetchCalls = 0;
+  lastRequest = null;
+  return handler({ httpMethod: method, headers, body: JSON.stringify(body) });
+}
+
+const ok = (res) => JSON.parse(res.body);
+/** The user-role content the model was handed — where the MISS block lands. */
+const userPrompt = () => lastRequest.messages.find((m) => m.role === "user").content;
+const systemPrompt = () => lastRequest.messages.find((m) => m.role === "system").content;
+
+const LOOKUP = { query: "blue dream", discord_user_id: "111", guild_id: "222" };
+
+// ── B01: method and auth ────────────────────────────────────────────
+assert.equal((await call(LOOKUP, { method: "GET" })).statusCode, 405, "B01a: GET must be 405");
+assert.equal((await call(LOOKUP, { headers: {} })).statusCode, 401, "B01b: no secret must be 401");
+assert.equal(
+  (await call(LOOKUP, { headers: { "x-bot-secret": "wrong" } })).statusCode,
+  401,
+  "B01c: wrong secret must be 401"
+);
+
+// An UNSET secret must refuse everything rather than fall open. The repo is
+// public: an unauthenticated version of this endpoint is a free ride on the
+// OpenRouter balance.
+const realSecret = process.env.BOT_SHARED_SECRET;
+delete process.env.BOT_SHARED_SECRET;
+assert.equal((await call(LOOKUP)).statusCode, 401, "B01d: unset BOT_SHARED_SECRET must fail closed");
+process.env.BOT_SHARED_SECRET = realSecret;
+
+// ── B02: input validation ───────────────────────────────────────────
+assert.equal((await call({ ...LOOKUP, query: "   " })).statusCode, 400, "B02a: blank query → 400");
+assert.equal((await call({ ...LOOKUP, query: "x".repeat(201) })).statusCode, 400, "B02b: >200 chars → 400");
+assert.equal(
+  (await call({ query: "blue dream", discord_user_id: "" })).statusCode,
+  400,
+  "B02c: missing discord_user_id → 400"
+);
+
+// ── B03: a real strain resolves and carries context ─────────────────
+const hit = ok(await call(LOOKUP));
+assert.equal(hit.matched, true, "B03a: 'blue dream' must match");
+assert.equal(hit.strain, "Blue-Dream", `B03b: expected Blue-Dream, got ${hit.strain}`);
+assert(userPrompt().includes("STRAIN CONTEXT"), "B03c: a hit must carry retrieved cards");
+assert(!userPrompt().includes("STRAIN LOOKUP: MISS"), "B03d: a hit must NOT be marked a miss");
+assert(systemPrompt().includes("ONE-SHOT LOOKUP"), "B03e: the Discord note must be in the system prompt");
+
+// ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
+//
+// searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-
+// Fuck and Cherry-Thunder-Fuck on a shared-token score. None of them is Pink
+// Thunder. Reporting a match here, or handing those cards to the model, is the
+// failure this endpoint exists to not have.
+for (const fake of ["pink thunder", "blue smog", "gorilla glue"]) {
+  const miss = ok(await call({ ...LOOKUP, query: fake }));
+  assert.equal(miss.matched, false, `B04a: "${fake}" must NOT report a match`);
+  assert.equal(miss.strain, null, `B04b: "${fake}" must report strain:null`);
+  assert(
+    userPrompt().includes("STRAIN LOOKUP: MISS"),
+    `B04c: "${fake}" must tell the model the lookup ran and found nothing`
+  );
+  assert(
+    !userPrompt().includes("STRAIN CONTEXT"),
+    `B04d: "${fake}" must NOT hand the model near-neighbour cards to describe`
+  );
+}
+
+// A bare common word is ambiguous, not a match — "/strain purple" resolving to
+// Purple-Ak-47 is a fabrication with extra steps.
+const vague = ok(await call({ ...LOOKUP, query: "purple" }));
+assert.equal(vague.matched, false, "B04e: a bare common word must not resolve to a random strain");
+
+// ── B05: names the strict resolver alone would false-miss ───────────
+// Both are shapes a person actually types, and "chem's sister" is the bot's
+// own documented example.
+for (const [q, expected] of [["chem's sister", "Chems-Sister"], ["blue dream effects", "Blue-Dream"]]) {
+  const res = ok(await call({ ...LOOKUP, query: q }));
+  assert.equal(res.matched, true, `B05a: "${q}" must match`);
+  assert.equal(res.strain, expected, `B05b: "${q}" → expected ${expected}, got ${res.strain}`);
+}
+
+// ── B06: safety intercepts, and what they cost ──────────────────────
+const under13 = ok(await call({ ...LOOKUP, query: "im 11 and want to try weed" }));
+assert.equal(under13.reply, UNDER_13_REPLY, "B06a: below the floor returns the fixed reply");
+assert.equal(fetchCalls, 0, "B06b: below the floor must not call the model");
+
+const crisis = ok(await call({ ...LOOKUP, query: "i want to kill myself" }));
+assert(crisis.reply.startsWith(CRISIS_REPLY.slice(0, 40)), "B06c: tier 2 returns CRISIS_REPLY");
+assert.equal(fetchCalls, 0, "B06d: tier 2 must not call the model");
+assert(crisis.reply.length > CRISIS_REPLY.length, "B06e: the resources must be appended to the text");
+assert(/988|crisis|text/i.test(crisis.reply), "B06f: the reply must carry a reachable resource");
+assert.equal(crisis.matched, false, "B06g: a safety turn is never a strain match");
+
+// A firing substance turn answers under the substance prompt, not the plant
+// prompt, and never with a strain card.
+const subst = ok(await call({ ...LOOKUP, query: "i took a bunch of xanax and i feel weird" }));
+assert.equal(subst.matched, false, "B06h: a substance turn is never a strain match");
+assert(!systemPrompt().includes("ONE-SHOT LOOKUP"), "B06i: a substance turn must not run the plant prompt");
+
+// ── B07: rate limiting ──────────────────────────────────────────────
+rateLimitResult = { data: false, error: null };
+assert.equal((await call(LOOKUP)).statusCode, 429, "B07a: over the cap → 429");
+assert.equal(fetchCalls, 0, "B07b: over the cap must not call the model");
+
+// A counter that ERRORS fails closed — it is not a reason to serve free model
+// calls on a public endpoint.
+rateLimitResult = { data: null, error: { message: "connection refused" } };
+assert.equal((await call(LOOKUP)).statusCode, 429, "B07c: a broken counter must fail closed");
+assert.equal(fetchCalls, 0, "B07d: a broken counter must not call the model");
+
+// But the disclosure is not allowed to depend on somebody's hourly budget: a
+// safety turn over quota still gets its fixed reply and its resources.
+const overQuotaCrisis = ok(await call({ ...LOOKUP, query: "i want to kill myself" }));
+assert(
+  overQuotaCrisis.reply.startsWith(CRISIS_REPLY.slice(0, 40)),
+  "B07e: a crisis turn over quota must still be answered, not 429'd"
+);
+rateLimitResult = { data: true, error: null };
+
+// ── B08: the endpoint writes nothing ────────────────────────────────
+// Stateless by contract: no users, no threads, no messages, no vibe tab.
+const src = await (await import("node:fs/promises")).readFile(
+  new URL("../api/strain-lookup.js", import.meta.url),
+  "utf-8"
+);
+assert(!/supabaseAdmin\s*\.\s*from\s*\(/.test(src), "B08a: must not read or write any table directly");
+assert(!/\.(insert|upsert|update|delete)\s*\(/.test(src), "B08b: must not write rows");
+assert(!/vibe/i.test(src), "B08c: the vibe tab belongs behind an account");
+assert(/bump_bot_usage/.test(src), "B08d: the rate limiter must go through the atomic RPC");
+
+// The route has to exist, or every lookup resolves to the SPA fallback and the
+// bot gets index.html with a 200.
+const toml = await (await import("node:fs/promises")).readFile(
+  new URL("../netlify.toml", import.meta.url),
+  "utf-8"
+);
+const routeIdx = toml.indexOf('from = "/api/strain-lookup"');
+assert(routeIdx > 0, "B08e: netlify.toml must route /api/strain-lookup");
+assert(routeIdx < toml.indexOf('from = "/*"'), "B08f: the route must sit above the SPA fallback");
+
+console.log("All bot lookup checks passed.");
