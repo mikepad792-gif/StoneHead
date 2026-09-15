@@ -129,6 +129,51 @@ assert(
 );
 delete process.env.BOT_MAX_TOKENS;
 
+// ── B03i: the bot rides its own model variable ──────────────────────
+//
+// AI_MODEL_BOT exists so the free public bot and the signed-in product can
+// diverge on cost without a code change. Unset, it inherits AI_MODEL — which
+// is the state it shipped in, and the assertion that keeps "separate variable"
+// from quietly meaning "separate default".
+assert.equal(
+  lastRequest.model,
+  process.env.AI_MODEL,
+  `B03i: blank AI_MODEL_BOT must inherit AI_MODEL, got ${lastRequest.model}`
+);
+
+// The override has to be checked in a FRESH PROCESS. config.js resolves every
+// model at module load on purpose — a misconfigured deploy should fail loudly
+// at cold start rather than serve traffic on an unintended endpoint — so an
+// env var set after import is not read, and a same-process test would assert
+// something Netlify never does. A subprocess is a cold start.
+const { execFileSync } = await import("node:child_process");
+const probe = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const c = await import("${new URL("../lib/config.js", import.meta.url).href}");
+       console.log(JSON.stringify({ bot: c.AI_MODEL_BOT, chat: c.AI_MODEL_CHAT }));`,
+    ],
+    {
+      env: { ...process.env, AI_MODEL_BOT: "some-vendor/cheap-model" },
+      encoding: "utf-8",
+    }
+  )
+);
+
+assert.equal(
+  probe.bot,
+  "some-vendor/cheap-model",
+  `B03j: AI_MODEL_BOT must override, got ${probe.bot}`
+);
+assert.equal(
+  probe.chat,
+  process.env.AI_MODEL,
+  `B03k: setting AI_MODEL_BOT must not move the chat model, got ${probe.chat}`
+);
+
 // ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
 //
 // searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-

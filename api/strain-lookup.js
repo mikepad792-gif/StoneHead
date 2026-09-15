@@ -43,7 +43,7 @@ import { CHARACTER_CORE } from "../prompts/character.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { stripModelTags } from "../lib/sanitize.js";
 import { openrouterChat } from "../lib/openrouter.js";
-import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
+import { AI_MODEL_BOT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
 
 // Longer than this is not a strain question. Mirrors the bot's own 200-char
 // guard, so a client that skips its check still can't send an essay.
@@ -213,7 +213,7 @@ function resolveNamedStrain(query, retrieved) {
 /** Model call + sanitize. Mirrors callChatModel in chat-send. */
 async function callLookupModel(messages) {
   const aiData = await openrouterChat(
-    AI_MODEL_CHAT,
+    AI_MODEL_BOT,
     messages,
     {
       temperature: AI_TEMPERATURE,
