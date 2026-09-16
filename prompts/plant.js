@@ -53,13 +53,13 @@ export function buildPlantPrompt(liked_strains) {
   const list = liked_strains
     .map((s) => {
       let entry = `- ${s.strain_name} (${s.strain_type})`;
-      if (s.notes) entry += ` — ${s.notes}`;
+      if (s.notes) entry += ` (${s.notes})`;
       return entry;
     })
     .join("\n");
 
   return (
     PLANT_PROMPT +
-    `\n\n[USER'S LIKED STRAINS — they've told you about these before, reference them naturally when relevant]\n${list}`
+    `\n\n[USER'S LIKED STRAINS: they've told you about these before, reference them naturally when relevant]\n${list}`
   );
 }
