@@ -21,6 +21,7 @@
 
 import { errorResponse, jsonResponse, safeEqual } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { loadDataFile } from "../lib/dataFile.js";
 import {
   searchStrains,
   resolveStrainName,
@@ -155,6 +156,60 @@ async function checkRateLimits(discordUserId, guildId) {
   if (!userRes.data) return { allowed: false, reason: "user" };
   if (!guildRes.data) return { allowed: false, reason: "guild" };
   return { allowed: true, reason: null };
+}
+
+// Source records by name, for the structured block the Discord bot renders as
+// embed fields. Read from the source file rather than reusing searchStrains'
+// normalized rows, for two reasons: `resolved` can come from the strict
+// resolver, which reads a different cache, so the matched strain is not
+// guaranteed to be among `retrieved` at all; and normalizeList() lowercases
+// for matching, which is right for scoring and wrong for a field somebody
+// reads ("Relaxed, Happy", not "relaxed, happy").
+let strainsByName = null;
+
+function strainRecord(name) {
+  if (!strainsByName) {
+    strainsByName = new Map(
+      loadDataFile("strains.json").map((s) => [String(s.Strain || "").trim(), s])
+    );
+  }
+  return strainsByName.get(name) || null;
+}
+
+/**
+ * Split a comma-separated source field into trimmed strings, preserving case.
+ *
+ * "None" and "" both mean absent in this dataset — 87 records have no effects
+ * and 156 no flavor — and absent travels as an EMPTY ARRAY rather than a
+ * string, so the bot skips the field instead of rendering an empty box.
+ */
+function splitList(value) {
+  if (typeof value !== "string") return [];
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "None") return [];
+  return trimmed
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * The matched record's displayable fields, or null when the name resolves to
+ * nothing in the source file.
+ *
+ * Rating is passed through as-is, INCLUDING 0. 71 records carry a 0, which
+ * means unrated rather than terrible — the bot skips a falsy rating rather
+ * than posting "0/5" next to a strain nobody scored.
+ */
+function buildStrainData(name) {
+  const record = strainRecord(name);
+  if (!record) return null;
+  return {
+    type: typeof record.Type === "string" && record.Type.trim() ? record.Type.trim() : null,
+    rating: typeof record.Rating === "number" ? record.Rating : null,
+    effects: splitList(record.Effects),
+    flavor: splitList(record.Flavor),
+  };
 }
 
 /**
@@ -482,6 +537,10 @@ export async function handler(event) {
       reply,
       matched: hit,
       strain: resolved,
+      // Additive only. reply/matched/strain keep their exact shape — the bot
+      // in production depends on all three, and a bot deploy does not land at
+      // the same moment as a function deploy.
+      strain_data: hit ? buildStrainData(resolved) : null,
     });
   } catch (err) {
     console.error("[strain-lookup] error:", err);

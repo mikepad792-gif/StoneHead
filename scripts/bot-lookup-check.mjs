@@ -174,6 +174,51 @@ assert.equal(
   `B03k: setting AI_MODEL_BOT must not move the chat model, got ${probe.chat}`
 );
 
+// ── B03l: strain_data carries the record the bot renders ────────────
+//
+// Additive to the response. reply/matched/strain keep their shape, because a
+// bot deploy and a function deploy do not land at the same moment.
+const dataHit = ok(await call({ ...LOOKUP, query: "blue dream" }));
+assert.equal(dataHit.strain, "Blue-Dream", "B03l: sanity — the fixture still resolves");
+assert.equal(dataHit.strain_data.type, "hybrid", "B03m: type comes from the record");
+assert.equal(dataHit.strain_data.rating, 4.4, "B03n: rating comes from the record");
+assert.deepEqual(
+  dataHit.strain_data.effects,
+  ["Relaxed", "Happy", "Uplifted", "Euphoric", "Creative"],
+  "B03o: effects split on commas, case preserved"
+);
+assert.deepEqual(
+  dataHit.strain_data.flavor,
+  ["Blueberry", "Berry", "Sweet"],
+  "B03p: flavor split on commas"
+);
+
+// Case matters: normalizeList() lowercases for scoring, which is right there
+// and wrong in a field a person reads.
+assert(
+  dataHit.strain_data.effects.every((e) => e[0] === e[0].toUpperCase()),
+  "B03q: effects must NOT be lowercased for display"
+);
+
+// A sparse record still produces a usable object. 87 records carry
+// Effects:"None" and 156 an absent Flavor; those travel as empty arrays so the
+// bot skips the field rather than rendering an empty box.
+const sparse = ok(await call({ ...LOOKUP, query: "3 bears og" }));
+if (sparse.matched) {
+  assert.deepEqual(sparse.strain_data.effects, [], "B03r: Effects:'None' becomes []");
+  assert.deepEqual(sparse.strain_data.flavor, [], "B03s: absent Flavor becomes []");
+  assert.equal(sparse.strain_data.rating, 0, "B03t: an unrated record keeps its 0");
+}
+
+// A miss carries null, never a half-filled object.
+const dataMiss = ok(await call({ ...LOOKUP, query: "pink thunder" }));
+assert.equal(dataMiss.strain_data, null, "B03u: no match → strain_data is null");
+
+// The three keys the deployed bot already depends on are untouched.
+for (const key of ["reply", "matched", "strain"]) {
+  assert(key in dataHit, `B03v: ${key} must still be present`);
+}
+
 // ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
 //
 // searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-
