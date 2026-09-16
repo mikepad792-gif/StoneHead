@@ -85,7 +85,7 @@ const DISCORD_LOOKUP_NOTE = `
 ONE-SHOT LOOKUP
 You're answering a single /strain command in a Discord channel, not holding a
 conversation. You have no memory of this person and there is no earlier turn to
-refer back to. Answer what was asked and stop — a couple of paragraphs, no
+refer back to. Answer what was asked and stop. A couple of paragraphs, no
 more. Don't ask a follow-up question you won't be around to hear the answer to,
 and don't invite them to tell you more.`;
 
