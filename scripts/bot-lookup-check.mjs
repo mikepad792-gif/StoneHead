@@ -98,6 +98,82 @@ assert(userPrompt().includes("STRAIN CONTEXT"), "B03c: a hit must carry retrieve
 assert(!userPrompt().includes("STRAIN LOOKUP: MISS"), "B03d: a hit must NOT be marked a miss");
 assert(systemPrompt().includes("ONE-SHOT LOOKUP"), "B03e: the Discord note must be in the system prompt");
 
+// ── B03f: the output budget stays above the documented floor ────────
+//
+// MAX_TOKENS' documentation sets a floor of ~600: a model that front-loads
+// hidden reasoning scaffold spends the budget before the real reply starts, so
+// a LOW ceiling causes the truncation it looks like it prevents. This endpoint
+// shipped at 500 once. The clamp and this assertion are why it can't again.
+assert(
+  lastRequest.max_tokens >= 600,
+  `B03f: max_tokens must stay >= 600, got ${lastRequest.max_tokens}`
+);
+assert.equal(
+  lastRequest.reasoning?.enabled,
+  false,
+  "B03g: reasoning must be disabled at the source"
+);
+
+// An override under the floor is clamped up, not honored — a silent truncation
+// bug is worse than an ignored env var.
+process.env.BOT_MAX_TOKENS = "120";
+const { handler: reHandler } = await import("../api/strain-lookup.js?clamp");
+await reHandler({
+  httpMethod: "POST",
+  headers: SECRET_HEADERS,
+  body: JSON.stringify(LOOKUP),
+});
+assert(
+  lastRequest.max_tokens >= 600,
+  `B03h: BOT_MAX_TOKENS=120 must clamp up to the floor, got ${lastRequest.max_tokens}`
+);
+delete process.env.BOT_MAX_TOKENS;
+
+// ── B03i: the bot rides its own model variable ──────────────────────
+//
+// AI_MODEL_BOT exists so the free public bot and the signed-in product can
+// diverge on cost without a code change. Unset, it inherits AI_MODEL — which
+// is the state it shipped in, and the assertion that keeps "separate variable"
+// from quietly meaning "separate default".
+assert.equal(
+  lastRequest.model,
+  process.env.AI_MODEL,
+  `B03i: blank AI_MODEL_BOT must inherit AI_MODEL, got ${lastRequest.model}`
+);
+
+// The override has to be checked in a FRESH PROCESS. config.js resolves every
+// model at module load on purpose — a misconfigured deploy should fail loudly
+// at cold start rather than serve traffic on an unintended endpoint — so an
+// env var set after import is not read, and a same-process test would assert
+// something Netlify never does. A subprocess is a cold start.
+const { execFileSync } = await import("node:child_process");
+const probe = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const c = await import("${new URL("../lib/config.js", import.meta.url).href}");
+       console.log(JSON.stringify({ bot: c.AI_MODEL_BOT, chat: c.AI_MODEL_CHAT }));`,
+    ],
+    {
+      env: { ...process.env, AI_MODEL_BOT: "some-vendor/cheap-model" },
+      encoding: "utf-8",
+    }
+  )
+);
+
+assert.equal(
+  probe.bot,
+  "some-vendor/cheap-model",
+  `B03j: AI_MODEL_BOT must override, got ${probe.bot}`
+);
+assert.equal(
+  probe.chat,
+  process.env.AI_MODEL,
+  `B03k: setting AI_MODEL_BOT must not move the chat model, got ${probe.chat}`
+);
+
 // ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
 //
 // searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-
