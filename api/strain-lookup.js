@@ -42,7 +42,7 @@ import { buildCrisisPrompt } from "../prompts/crisis.js";
 import { appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
-import { stripModelTags } from "../lib/sanitize.js";
+import { stripModelTags, stripLongDashes } from "../lib/sanitize.js";
 import { openrouterChat } from "../lib/openrouter.js";
 import { AI_MODEL_BOT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
 
@@ -194,6 +194,30 @@ function splitList(value) {
 }
 
 /**
+ * A retrieval-shaped card built straight from a source record.
+ *
+ * Needed because searchStrains scores loosely: asked for "Northern-Lights" it
+ * returns Northern-Lights--5 and two cousins and NOT the record of that exact
+ * name. On the corrected-spelling path that would mean announcing one strain
+ * and handing the model cards for another, which is the embed disagreeing with
+ * the prose. Lowercased to match normalizeList, since these sit alongside
+ * cards that went through it.
+ */
+function cardFromRecord(record) {
+  return {
+    strain_name: String(record.Strain || "").trim(),
+    strain_type: String(record.Type || "").toLowerCase().trim(),
+    rating: typeof record.Rating === "number" ? record.Rating : 0,
+    effects: splitList(record.Effects).map((e) => e.toLowerCase()),
+    flavor: splitList(record.Flavor).map((f) => f.toLowerCase()),
+    description:
+      record.Description && record.Description !== "None"
+        ? String(record.Description).trim()
+        : "",
+  };
+}
+
+/**
  * The matched record's displayable fields, or null when the name resolves to
  * nothing in the source file.
  *
@@ -296,7 +320,10 @@ async function callLookupModel(messages) {
       .replace(/\s+/g, " ")
       .trim();
   }
-  return reply;
+  // Last, so it catches the recovery path above too. The character file asks
+  // him not to use long dashes and the ask does not hold on its own, so the
+  // guarantee lives here instead. See stripLongDashes.
+  return stripLongDashes(reply);
 }
 
 export async function handler(event) {
@@ -470,7 +497,7 @@ export async function handler(event) {
     // Same shape as the tab === "plant" && topic === "STRAIN" branch, minus
     // the carry/recheck states, which need a thread this endpoint doesn't have.
     const constraints = parseConstraints(query);
-    const retrieved = searchStrains(query, constraints);
+    let retrieved = searchStrains(query, constraints);
 
     // ── Honest miss ───────────────────────────────────────────────────
     //
@@ -484,21 +511,75 @@ export async function handler(event) {
     // chat-send there is no greeting to mistake for one and no "not attempted"
     // state: the lookup always ran, and it either found the strain or it
     // didn't. See resolveNamedStrain for what counts as finding it.
-    const resolved = resolveNamedStrain(query, retrieved);
-    const hit = resolved !== null;
+    let resolved = resolveNamedStrain(query, retrieved);
+    let hit = resolved !== null;
 
     // On a miss the retrieved cards are DROPPED, not passed along as
     // near-neighbours. Three Thunder strains in the context window next to a
     // "say you don't know this one" instruction is a contradiction, and the
     // cards win it — the model writes about Alaska-Thunder-Grape and the reader
-    // sees an answer about Pink Thunder. The spelling suggestion below is the
-    // one hint that survives, because it names itself as a guess.
+    // sees an answer about Pink Thunder.
+    //
+    // WHAT PINK THUNDER ACTUALLY WAS, because the distinction decides the
+    // branch below: the failure was a SILENT SUBSTITUTION. Cards for a strain
+    // the user never named, handed over with nothing saying a swap had
+    // happened, so the reply read as an answer about the thing they asked for.
+    //
+    // An ANNOUNCED correction is a different act. When the reply opens by
+    // naming the swap, and the cards are the real record for the strain being
+    // named, the user can see exactly what happened and disagree. Nothing is
+    // being passed off as something else, which is the part that made Pink
+    // Thunder a lie rather than a mistake.
+    const correction = suggestStrainCorrection(query);
+
+    // Above this, a correction is confident enough to answer through. Below
+    // it, confirming first is the right call. suggestStrainCorrection never
+    // returns anything under 0.8, so the confirm band is 0.8 to 0.92.
+    //
+    // The cost of confirming is not zero: a Discord user gets 10 lookups an
+    // hour, and "did you mean X?" spends one of them to say nothing. That is
+    // what earns the high band, not a belief that the matcher is infallible.
+    const HIGH_CONFIDENCE_CORRECTION = 0.92;
+
+    let correctedFrom = null;
+    if (!hit && correction && correction.similarity >= HIGH_CONFIDENCE_CORRECTION) {
+      // Re-run retrieval against the corrected name. The cards have to be the
+      // real record for the strain actually being answered, or the embed
+      // fields and the prose describe different strains.
+      //
+      // Only when the lookup MISSED. A query that already resolved named a
+      // real strain, and a correction pointing somewhere else is then the
+      // thing that is wrong, not the query.
+      // The suggestion IS a database name — closestStrainName only ever
+      // returns one — so it is what gets announced, rather than whatever
+      // loose retrieval happens to rank first.
+      const record = strainRecord(correction.suggestion);
+      if (record) {
+        let cards = searchStrains(correction.suggestion, constraints);
+        // Guarantee the announced strain's own card is in the block, and
+        // first. Without this, "Northern-Lights" retrieves Northern-Lights--5
+        // and two cousins, and the reply would describe a strain the embed
+        // fields do not.
+        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
+          cards = [cardFromRecord(record), ...cards].slice(0, 3);
+        }
+        resolved = correction.suggestion;
+        retrieved = cards;
+        hit = true;
+        correctedFrom = correction.wrote;
+      }
+    }
+
     let strainBlock = hit ? formatStrainContext(retrieved, constraints) : "";
 
-    // Read-only spelling suggestion ("cali mist" → Kali Mist), never a silent
-    // swap.
-    const correction = suggestStrainCorrection(query);
-    if (correction) {
+    if (correctedFrom) {
+      const sugg = resolved.replace(/-+/g, " ");
+      strainBlock += `\n\n[SPELLING, AND YOU SAY SO. They typed "${correctedFrom}". You are reading that as "${sugg}", and the record above is ${sugg}. Open by naming that, plainly and in your own words, then answer for ${sugg} in full. Do not stop to ask them to confirm, and do not write as though they had typed it correctly — they didn't, and saying so is the honest part.]`;
+    } else if (correction) {
+      // Read-only spelling suggestion ("cali mist" → Kali Mist), never a
+      // silent swap. Below the high bar the lookup did not resolve, so there
+      // are no cards here either way; this note is the only hint, and it
+      // names itself as a guess.
       const sugg = correction.suggestion.replace(/-+/g, " ");
       strainBlock += `\n\n[POSSIBLE MATCH — the user wrote "${correction.wrote}"; the closest known strain is "${sugg}". If relevant, gently confirm the spelling instead of assuming, and don't silently swap it.]`;
     }
@@ -529,6 +610,8 @@ export async function handler(event) {
         matched: hit,
         strain: resolved,
         corrected: correction ? correction.suggestion : null,
+        corrected_from: correctedFrom,
+        correction_similarity: correction ? Number(correction.similarity.toFixed(3)) : null,
         query_len: query.length,
       })
     );

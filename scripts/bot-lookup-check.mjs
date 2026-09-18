@@ -219,6 +219,76 @@ for (const key of ["reply", "matched", "strain"]) {
   assert(key in dataHit, `B03v: ${key} must still be present`);
 }
 
+// ── B03w: a confident misspelling is answered, and announced ────────
+//
+// "northen lights" scores 0.933. Above the 0.92 bar the lookup answers for
+// the corrected strain instead of spending one of the user's ten hourly
+// lookups on "did you mean".
+const corrected = ok(await call({ ...LOOKUP, query: "northen lights" }));
+assert.equal(corrected.matched, true, "B03w: a high-confidence correction must resolve");
+assert(corrected.strain, "B03x: it must report the corrected strain");
+assert(
+  /northern/i.test(corrected.strain),
+  `B03y: expected a Northern Lights record, got ${corrected.strain}`
+);
+
+// The invariant that keeps this from being Pink Thunder again: the prompt is
+// TOLD to announce the swap, and the cards are the real record for the strain
+// being answered, so the embed fields cannot describe a different strain
+// from the prose.
+assert(
+  /SPELLING, AND YOU SAY SO/.test(userPrompt()),
+  "B03z: a corrected answer must instruct the model to name the correction"
+);
+assert(
+  userPrompt().includes("northen lights"),
+  "B03aa: the note must carry what the user actually typed"
+);
+assert(userPrompt().includes("STRAIN CONTEXT"), "B03ab: real cards must be retrieved");
+assert(
+  corrected.strain_data && corrected.strain_data.type,
+  "B03ac: strain_data must describe the strain actually answered"
+);
+
+// ── B03ad: below the bar, confirm first, exactly as before ──────────
+//
+// "gorilla glue" scores 0.846 against Godzilla-Glue, which is close enough to
+// mention and nowhere near close enough to answer through.
+const unsure = ok(await call({ ...LOOKUP, query: "gorilla glue" }));
+assert.equal(unsure.matched, false, "B03ae: a low-confidence correction must NOT resolve");
+assert.equal(unsure.strain_data, null, "B03af: and must not carry a record");
+assert(/POSSIBLE MATCH/.test(userPrompt()), "B03ag: it keeps the confirm-first note");
+assert(
+  !/SPELLING, AND YOU SAY SO/.test(userPrompt()),
+  "B03ah: and must not get the answer-through note"
+);
+assert(!userPrompt().includes("STRAIN CONTEXT"), "B03ai: no cards below the bar");
+
+// A real miss with no near-neighbour stays a miss.
+const stillMiss = ok(await call({ ...LOOKUP, query: "pink thunder" }));
+assert.equal(stillMiss.matched, false, "B03aj: pink thunder is still a miss");
+assert(/STRAIN LOOKUP: MISS/.test(userPrompt()), "B03ak: and still says so");
+
+// ── B03al: long dashes never reach the user ─────────────────────────
+//
+// The prompt rule did not hold in production, so the guarantee is in code.
+modelReply = "that one's a classic — hits fast, hits hard — and the diesel is real.";
+const dashed = ok(await call(LOOKUP));
+assert(
+  !/[\u2014\u2013]/.test(dashed.reply),
+  `B03am: no em or en dash may survive, got ${JSON.stringify(dashed.reply)}`
+);
+assert(
+  dashed.reply.includes("a classic, hits fast"),
+  `B03an: the dash becomes the comma it stood for, got ${JSON.stringify(dashed.reply)}`
+);
+
+modelReply = "trailing off... stays, and a 4\u20136 hour range stays a range.";
+const kept = ok(await call(LOOKUP));
+assert(kept.reply.includes("..."), "B03ao: ellipses are part of the voice and survive");
+assert(kept.reply.includes("4-6 hour"), `B03ap: a numeric range becomes a hyphen, got ${JSON.stringify(kept.reply)}`);
+modelReply = "Blue Dream, yeah. That one's a classic.";
+
 // ── B04: THE ONE THAT MATTERS — a strain that does not exist ────────
 //
 // searchStrains("pink thunder") returns Alaska-Thunder-Grape, Dutch-Thunder-
