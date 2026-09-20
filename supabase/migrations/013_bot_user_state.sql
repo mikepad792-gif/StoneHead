@@ -25,7 +25,7 @@ alter table public.bot_usage
 
 comment on column public.bot_usage.intro_shown is
   'True once the bot has introduced itself to this Discord user. Claimed '
-  'atomically by claim_bot_intro() so a burst of first lookups still only '
+  'atomically by begin_bot_lookup() so a burst of first lookups still only '
   'introduces once. Durable: unlike count, it never resets.';
 
 comment on column public.bot_usage.recent_strains is

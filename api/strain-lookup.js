@@ -5,9 +5,15 @@
 // Reuses StoneHead's retrieval, safety layers, and voice; skips threads,
 // memory, liked strains, and the daily usage counter.
 //
-// Request:  { query, discord_user_id, guild_id }
+// Request:  { query, discord_user_id, guild_id }                 mode "lookup"
+//           { mode: "similar", source_strain, discord_user_id, guild_id }
 //           Header: X-Bot-Secret: <BOT_SHARED_SECRET>
-// Response: { reply, matched, strain }
+// Response: { reply, matched, strain, tier, strain_data }
+//
+// MODES, not endpoints. "similar" powers the "more like this" reaction and
+// shares the secret, the rate limiter, and the voice with the lookup. A second
+// function would duplicate all three to serve one extra prompt. /history and
+// /grow will land the same way.
 //
 // WHY NOT REUSE chat-send
 // chat-send requires authenticateRequest, a thread_id owned by that user, a
@@ -16,8 +22,17 @@
 // shape means fake rows, fake threads, and a memory bank filling up with
 // strangers.
 //
-// WRITES NOTHING. discord_user_id and guild_id reach the rate-limit counter
-// and the logs, and go no further — no new PII store.
+// WHAT IT STORES, because the privacy policy has to match this exactly.
+// discord_user_id reaches bot_usage and nothing else: an hourly counter, a
+// one-time intro flag, and the last 20 strain names shown to that person
+// (migrations 012 and 013). guild_id reaches the counter and the logs. The
+// query text is never stored — the logs carry its LENGTH, the strain answered
+// with, and the guild id, and no log line on any path carries the user id.
+//
+// This comment used to read "WRITES NOTHING", which was true until migration
+// 013 gave the bot somewhere to remember a person between lookups. Left
+// visible rather than silently swapped: the claim moved, and the policy text
+// moved with it.
 
 import { errorResponse, jsonResponse, safeEqual } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
@@ -42,6 +57,7 @@ import { buildCrisisPrompt } from "../prompts/crisis.js";
 import { appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
+import { buildSimilarPrompt } from "../prompts/similar.js";
 import { stripModelTags, stripLongDashes } from "../lib/sanitize.js";
 import { openrouterChat } from "../lib/openrouter.js";
 import { AI_MODEL_BOT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
@@ -194,6 +210,45 @@ function splitList(value) {
 }
 
 /**
+ * Is this name safe to put in front of somebody who did not ask for it?
+ *
+ * The two places below hand out a strain NOBODY NAMED — the no-match card and
+ * the "more like this" recommendation. The safety layers run on what a person
+ * typed, so they never see a name the endpoint chose on its own, and the
+ * database has at least one record ("Suicide-Girl") that trips the crisis
+ * detector on sight. Looking that strain up deliberately is intercepted by the
+ * layers like any other message; having the bot volunteer it, unprompted, into
+ * a channel is a different act, and there is no reading of it that is good.
+ *
+ * Written as a filter over the detectors rather than a list of names, so a
+ * rebuilt strains.json cannot quietly reintroduce the problem.
+ */
+function safeToVolunteer(name) {
+  const asText = String(name || "").replace(/-+/g, " ");
+  if (!asText.trim()) return false;
+  if (belowFloor(detectAge(asText).band)) return false;
+  if (detectCrisis(asText, []).tier > 0) return false;
+  if (detectSubstance(asText).tier > 0) return false;
+  return true;
+}
+
+// Precomputed profile neighbours, keyed by strain name. See
+// scripts/build-similar-strains.mjs — the point of the table is that the model
+// is HANDED a strain rather than asked to think of one, because a model asked
+// for "something similar" invents a name that was never in the database.
+let similarTable = null;
+
+function similarCandidates(name) {
+  if (!similarTable) similarTable = loadDataFile("similar-strains.json");
+  const rows = similarTable[name];
+  if (!Array.isArray(rows)) return [];
+  // The same guard as the no-match card, for the same reason: this is a strain
+  // the endpoint chose, not one anybody asked about. No entry currently trips
+  // it, which is exactly why it has to be enforced here and not assumed.
+  return rows.filter((r) => r && r.strain && safeToVolunteer(r.strain));
+}
+
+/**
  * Names eligible to be offered as a no-match card.
  *
  * The filter deliberately MATCHES scripts/build-similar-strains.mjs: a real
@@ -215,7 +270,8 @@ function unrelatedPool() {
           splitList(r.Flavor).length > 0
       )
       .map((r) => String(r.Strain || "").trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(safeToVolunteer);
   }
   return fullRecordPool;
 }
@@ -378,6 +434,135 @@ async function noteStrainShown(discordUserId, strain) {
   if (error) console.warn("[strain-lookup] note_strain_shown failed:", error.message);
 }
 
+/**
+ * mode: "similar" — the "more like this" reaction.
+ *
+ * WHO PICKS THE STRAIN. The endpoint does, from the precomputed table. The
+ * spec sketched `rec_strain` as a request field, but the table lives here and
+ * shipping 1.7MB of it to the bot to duplicate the pick would be the wrong
+ * half of the system doing the work. `rec_strain` is still accepted — the
+ * harness pins a candidate with it, and a future "tap again" can name the one
+ * it already used — and it is VALIDATED against that source's own candidate
+ * list. An arbitrary pair can therefore never be driven through this endpoint
+ * and described as similar, which is the guarantee the precompute exists for.
+ *
+ * A random pick among the candidates, not index 0: scores tie constantly at
+ * the top because effects and flavors are small sets, so tapping twice giving
+ * the same strain would read as a broken button.
+ *
+ * NO SAFETY DETECTORS HERE, and that is not an oversight. They read free text
+ * a person wrote, and this request contains none — both names must already be
+ * in the table or it is a 400. What this path does need is safeToVolunteer,
+ * applied inside similarCandidates, because the strain being handed over is
+ * one nobody asked for.
+ */
+async function handleSimilar(body, discordUserId, guildId) {
+  const sourceStrain = body.source_strain ? String(body.source_strain).trim() : "";
+  const askedRec = body.rec_strain ? String(body.rec_strain).trim() : "";
+
+  if (!sourceStrain) return errorResponse(400, "Missing source_strain");
+
+  const candidates = similarCandidates(sourceStrain);
+  if (!candidates.length) {
+    // Not an error state. 190 of 2,351 records have no profile to score, and
+    // the bot's job on this is to say nothing rather than to apologize.
+    return jsonResponse(404, { error: "No similar strains", source_strain: sourceStrain });
+  }
+
+  const chosen = askedRec
+    ? candidates.find((c) => c.strain === askedRec)
+    : candidates[Math.floor(Math.random() * candidates.length)];
+  if (!chosen) return errorResponse(400, "rec_strain is not a candidate for source_strain");
+
+  const record = strainRecord(chosen.strain);
+  if (!record) {
+    // The table and strains.json disagree, which means the table is stale.
+    console.error(
+      "[strain-lookup] similar table names a missing strain:",
+      JSON.stringify({ source: sourceStrain, rec: chosen.strain })
+    );
+    return errorResponse(500, "Strain lookup failed");
+  }
+
+  const limit = await checkRateLimits(discordUserId, guildId);
+  if (!limit.allowed) {
+    console.warn(
+      "[strain-lookup] rate limited:",
+      JSON.stringify({ mode: "similar", guild_id: guildId, reason: limit.reason })
+    );
+    return errorResponse(429, "Rate limited");
+  }
+
+  // Everything true of the recommendation that is NOT part of the overlap.
+  // The prompt needs the two lists SEPARATED: handed one merged profile the
+  // model narrates the whole thing as common ground, which is the invented
+  // similarity this feature is built to avoid.
+  const shared = new Set([...(chosen.shared_effects || []), ...(chosen.shared_flavor || [])]);
+  const uniqueToRec = [
+    ...splitList(record.Effects),
+    ...splitList(record.Flavor),
+  ].filter((v) => !shared.has(v));
+
+  const sourceName = sourceStrain.replace(/-+/g, " ");
+  const recName = chosen.strain.replace(/-+/g, " ");
+
+  const systemPrompt = CHARACTER_CORE + "\n\n" + DISCORD_LOOKUP_NOTE;
+  const userContent = buildSimilarPrompt({
+    sourceName,
+    recName,
+    recRecord: formatStrainContext([cardFromRecord(record)], null),
+    sharedEffects: chosen.shared_effects || [],
+    sharedFlavor: chosen.shared_flavor || [],
+    sameType: chosen.same_type || null,
+    uniqueToRec,
+  });
+
+  // Recorded for the same reason an ordinary card is: a strain seen through a
+  // recommendation is a stale no-match card five minutes later.
+  const noted = noteStrainShown(discordUserId, chosen.strain);
+
+  const [reply] = await Promise.all([
+    callLookupModel([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ]),
+    noted,
+  ]);
+
+  if (!reply) {
+    console.error(
+      "[strain-lookup] model returned nothing:",
+      JSON.stringify({ mode: "similar", guild_id: guildId })
+    );
+    return errorResponse(502, "Lookup unavailable");
+  }
+
+  console.log(
+    "[strain-lookup]",
+    JSON.stringify({
+      mode: "similar",
+      guild_id: guildId,
+      source: sourceStrain,
+      rec: chosen.strain,
+      score: chosen.score,
+      pinned: Boolean(askedRec),
+      candidates: candidates.length,
+    })
+  );
+
+  return jsonResponse(200, {
+    reply,
+    // The card IS the strain described, which is all `matched` has ever
+    // claimed. Nobody asked for this strain by name, so `tier` is what says
+    // where it came from.
+    matched: true,
+    strain: chosen.strain,
+    source_strain: sourceStrain,
+    tier: "similar",
+    strain_data: buildStrainData(chosen.strain),
+  });
+}
+
 /** Model call + sanitize. Mirrors callChatModel in chat-send. */
 async function callLookupModel(messages) {
   const aiData = await openrouterChat(
@@ -431,13 +616,27 @@ export async function handler(event) {
     return errorResponse(400, "Invalid JSON body");
   }
 
+  const mode = typeof body.mode === "string" ? body.mode.trim() : "lookup";
   const query = typeof body.query === "string" ? body.query.trim() : "";
   const discordUserId = body.discord_user_id ? String(body.discord_user_id) : "";
   const guildId = body.guild_id ? String(body.guild_id) : null;
 
+  if (!discordUserId) return errorResponse(400, "Missing discord_user_id");
+
+  // Checked BEFORE the query rules, which belong to the lookup mode alone —
+  // a reaction has no typed text to validate.
+  if (mode === "similar") {
+    try {
+      return await handleSimilar(body, discordUserId, guildId);
+    } catch (err) {
+      console.error("[strain-lookup] similar error:", err);
+      return errorResponse(500, "Strain lookup failed");
+    }
+  }
+  if (mode !== "lookup") return errorResponse(400, "Unknown mode");
+
   if (!query) return errorResponse(400, "Missing query");
   if (query.length > MAX_QUERY_CHARS) return errorResponse(400, "Query too long");
-  if (!discordUserId) return errorResponse(400, "Missing discord_user_id");
 
   try {
     // ── Safety layers, before anything else ───────────────────────────

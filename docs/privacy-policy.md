@@ -1,6 +1,6 @@
 # StoneHead AI — Privacy Policy
 
-**Last updated:** August 5, 2026
+**Last updated:** September 20, 2026
 
 StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.
 
@@ -15,6 +15,7 @@ StoneHead AI is built and operated by one person. This policy is written plainly
 - StoneHead remembers things about you across sessions — that's a feature, and you can delete it.
 - I don't sell your data. I don't run ads. There is no analytics tracker following you around.
 - You can delete your account and everything in it, at any time, from the app.
+- There's a Discord bot. It gets your Discord user ID and server ID and uses them to count requests and to avoid repeating itself. Nothing else. See [The Discord bot](#the-discord-bot).
 
 ---
 
@@ -54,6 +55,27 @@ This is what makes StoneHead feel like it knows you. It's also the most personal
 - No location data
 - No payment card details (there is currently no live payment system)
 - No date of birth (age is self-attested — I ask, you confirm)
+
+---
+
+## The Discord bot
+
+StoneHead AI runs a bot in Discord. If you've never used it, nothing in this section applies to you.
+
+When you run one of its commands, Discord hands me two numbers: your Discord user ID and the ID of the server you ran it in. Those are the numeric IDs Discord assigns. I don't get your Discord username, your email, or anything else from your profile, and in a DM there's no server ID at all.
+
+I use them for two internal operations, and nothing else:
+
+- **Usage limits.** Both IDs key an hourly counter, so one person or one busy server can't run the bot's costs up for everyone else.
+- **Not repeating myself.** Your user ID is stored with a flag saying the bot has already introduced itself to you, and with the names of the last 20 strains it has shown you, so it doesn't hand you the same suggestion twice. That's a list of strain names, not of anything you typed.
+
+**What the bot does not do.** What you type in a command isn't stored. It goes to the AI provider to generate the reply, and through the same safety layer described below that every message in the app goes through, and then it's gone. The bot's own logs record the server ID, the strain it answered with, and how many characters you typed — not your user ID and not your words. None of this builds a profile, none of it is used for advertising, and none of it is sold or shared.
+
+**Not linked to your account.** Bot activity isn't connected to a StoneHead account, even if you have one. Your Discord ID and your email address never meet.
+
+**Retention, specifically.** The hourly counter resets every hour. The intro flag and the recent-strain list stay on that row until they're removed — email me at stoneheadAI@gmail.com with your Discord user ID and I'll delete it. You don't need an account to ask.
+
+This is here because of the children's-privacy rule on persistent identifiers: collecting one for internal operations like rate limiting is allowed, but only if it's disclosed and only if it isn't used for anything else. The two bullets above are the whole of what it's used for.
 
 ---
 
@@ -175,6 +197,10 @@ If you find a security problem, please tell me. I'll fix it and I'll credit you.
 ## Changes
 
 If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.
+
+**September 20, 2026.** Added [The Discord bot](#the-discord-bot). The bot now stores two things against your Discord user ID that it didn't before: a flag saying it has already introduced itself to you, and the names of the last 20 strains it has shown you, so it doesn't repeat a suggestion. Nothing about what you type is stored, and none of it is linked to a StoneHead account. This is a new category of stored data, so you're being asked to accept the policy again — that's what the re-prompt is for, not a wording tweak.
+
+The Terms of Service are unchanged; their date moved with this one because a single version string covers both documents.
 
 ---
 

@@ -32,7 +32,7 @@
     <main>
       <a class="back" href="/">&larr; back to Stone Head</a>
       <h1 id="stonehead-ai-privacy-policy">StoneHead AI — Privacy Policy</h1>
-      <p><strong>Last updated:</strong> August 5, 2026</p>
+      <p><strong>Last updated:</strong> September 20, 2026</p>
       <p>StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.</p>
       <hr />
       <h2 id="the-short-version">The short version</h2>
@@ -44,6 +44,7 @@
       <li>StoneHead remembers things about you across sessions — that's a feature, and you can delete it.</li>
       <li>I don't sell your data. I don't run ads. There is no analytics tracker following you around.</li>
       <li>You can delete your account and everything in it, at any time, from the app.</li>
+      <li>There's a Discord bot. It gets your Discord user ID and server ID and uses them to count requests and to avoid repeating itself. Nothing else. See <a href="#the-discord-bot">The Discord bot</a>.</li>
       </ul>
       <hr />
       <h2 id="what-i-collect">What I collect</h2>
@@ -84,6 +85,19 @@
       <li>No payment card details (there is currently no live payment system)</li>
       <li>No date of birth (age is self-attested — I ask, you confirm)</li>
       </ul>
+      <hr />
+      <h2 id="the-discord-bot">The Discord bot</h2>
+      <p>StoneHead AI runs a bot in Discord. If you've never used it, nothing in this section applies to you.</p>
+      <p>When you run one of its commands, Discord hands me two numbers: your Discord user ID and the ID of the server you ran it in. Those are the numeric IDs Discord assigns. I don't get your Discord username, your email, or anything else from your profile, and in a DM there's no server ID at all.</p>
+      <p>I use them for two internal operations, and nothing else:</p>
+      <ul>
+      <li><strong>Usage limits.</strong> Both IDs key an hourly counter, so one person or one busy server can't run the bot's costs up for everyone else.</li>
+      <li><strong>Not repeating myself.</strong> Your user ID is stored with a flag saying the bot has already introduced itself to you, and with the names of the last 20 strains it has shown you, so it doesn't hand you the same suggestion twice. That's a list of strain names, not of anything you typed.</li>
+      </ul>
+      <p><strong>What the bot does not do.</strong> What you type in a command isn't stored. It goes to the AI provider to generate the reply, and through the same safety layer described below that every message in the app goes through, and then it's gone. The bot's own logs record the server ID, the strain it answered with, and how many characters you typed — not your user ID and not your words. None of this builds a profile, none of it is used for advertising, and none of it is sold or shared.</p>
+      <p><strong>Not linked to your account.</strong> Bot activity isn't connected to a StoneHead account, even if you have one. Your Discord ID and your email address never meet.</p>
+      <p><strong>Retention, specifically.</strong> The hourly counter resets every hour. The intro flag and the recent-strain list stay on that row until they're removed — email me at stoneheadAI@gmail.com with your Discord user ID and I'll delete it. You don't need an account to ask.</p>
+      <p>This is here because of the children's-privacy rule on persistent identifiers: collecting one for internal operations like rate limiting is allowed, but only if it's disclosed and only if it isn't used for anything else. The two bullets above are the whole of what it's used for.</p>
       <hr />
       <h2 id="the-safety-layer">The safety layer</h2>
       <p>Some things are too important to leave to an AI's judgment in the moment. So before your message is sent to the AI at all, the app checks it in code against lists of phrases.</p>
@@ -152,6 +166,8 @@
       <hr />
       <h2 id="changes">Changes</h2>
       <p>If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.</p>
+      <p><strong>September 20, 2026.</strong> Added <a href="#the-discord-bot">The Discord bot</a>. The bot now stores two things against your Discord user ID that it didn't before: a flag saying it has already introduced itself to you, and the names of the last 20 strains it has shown you, so it doesn't repeat a suggestion. Nothing about what you type is stored, and none of it is linked to a StoneHead account. This is a new category of stored data, so you're being asked to accept the policy again — that's what the re-prompt is for, not a wording tweak.</p>
+      <p>The Terms of Service are unchanged; their date moved with this one because a single version string covers both documents.</p>
       <hr />
       <h2 id="contact">Contact</h2>
       <p>Michael Padilla stoneheadAI@gmail.com</p>
