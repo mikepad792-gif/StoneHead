@@ -194,6 +194,53 @@ function splitList(value) {
 }
 
 /**
+ * Names eligible to be offered as a no-match card.
+ *
+ * The filter deliberately MATCHES scripts/build-similar-strains.mjs: a real
+ * description, and both an effects and a flavor list. Two reasons. A card with
+ * no profile is a worse outcome than the apology it replaces. And matching the
+ * filter means every strain offered here is also a key in similar-strains.json
+ * later, so the "more like this" tap works on a no-match card instead of dying
+ * on the one path most likely to be tapped.
+ */
+let fullRecordPool = null;
+
+function unrelatedPool() {
+  if (!fullRecordPool) {
+    fullRecordPool = loadDataFile("strains.json")
+      .filter(
+        (r) =>
+          String(r.Description ?? "").trim().length > 40 &&
+          splitList(r.Effects).length > 0 &&
+          splitList(r.Flavor).length > 0
+      )
+      .map((r) => String(r.Strain || "").trim())
+      .filter(Boolean);
+  }
+  return fullRecordPool;
+}
+
+/**
+ * Flat random from the pool, skipping anything this user has already seen.
+ *
+ * FLAT, not rating-weighted. Weighting collapses onto the same handful of
+ * famous strains, which makes the feature feel broken to anyone who taps it
+ * twice, and the point of the card is that it is worth reading rather than
+ * that it is popular.
+ */
+function pickUnrelatedStrain(recent) {
+  const pool = unrelatedPool();
+  if (!pool.length) return null;
+  const seen = new Set(recent || []);
+  const eligible = pool.filter((n) => !seen.has(n));
+  // If somebody has genuinely seen everything, repeating beats returning
+  // nothing. At 2,000+ records against a 20-name memory this cannot happen,
+  // but a silent null here would be an empty card.
+  const from = eligible.length ? eligible : pool;
+  return from[Math.floor(Math.random() * from.length)];
+}
+
+/**
  * A retrieval-shaped card built straight from a source record.
  *
  * Needed because searchStrains scores loosely: asked for "Northern-Lights" it
@@ -287,6 +334,48 @@ function resolveNamedStrain(query, retrieved) {
   if (strict.tier === "exact" || queryTokens.length >= 2) return strict.strain_name;
 
   return null;
+}
+
+/**
+ * Claim the one-time intro and read this user's recently shown strains.
+ *
+ * One RPC for both (migration 013), and it runs ALONGSIDE the rate-limit
+ * calls rather than after them, because this function still has to fit an 8s
+ * model call inside Netlify's 10s ceiling.
+ *
+ * Failure is not fatal. A database hiccup here should cost a personal touch
+ * and a repeated card, not the lookup itself — unlike the rate limiter, there
+ * is no money on the other side of this call.
+ */
+async function beginLookup(discordUserId) {
+  const { data, error } = await supabaseAdmin.rpc("begin_bot_lookup", {
+    p_user: discordUserId,
+  });
+  if (error) {
+    console.warn("[strain-lookup] begin_bot_lookup failed:", error.message);
+    return { introClaimed: false, recent: [] };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    introClaimed: Boolean(row?.intro_claimed),
+    recent: Array.isArray(row?.recent) ? row.recent : [],
+  };
+}
+
+/**
+ * Remember that a card was shown, so a later no-match does not repeat it.
+ *
+ * Every tier records, not just the no-match one: a strain seen through an
+ * ordinary lookup is just as stale a suggestion as one seen through a card.
+ *
+ * The caller starts this and awaits it with the model call, never before one.
+ */
+async function noteStrainShown(discordUserId, strain) {
+  const { error } = await supabaseAdmin.rpc("note_strain_shown", {
+    p_user: discordUserId,
+    p_strain: strain,
+  });
+  if (error) console.warn("[strain-lookup] note_strain_shown failed:", error.message);
 }
 
 /** Model call + sanitize. Mirrors callChatModel in chat-send. */
@@ -402,7 +491,13 @@ export async function handler(event) {
     // don't want to be here anymore'" — is kept, but paid for differently:
     // here the disclosure never depends on quota because it never costs a
     // model call, while the model call itself always respects the cap.
-    const limit = await checkRateLimits(discordUserId, guildId);
+    // Alongside the rate-limit calls, not after them. Both are round trips and
+    // this function still has a model call to fit inside Netlify's 10s.
+    const [limit, opened] = await Promise.all([
+      checkRateLimits(discordUserId, guildId),
+      beginLookup(discordUserId),
+    ]);
+    const { introClaimed, recent: recentStrains } = opened;
 
     // A remaining safety turn that is over quota still gets its fixed reply
     // and its resources, just without the generated prose. The resource
@@ -570,30 +665,101 @@ export async function handler(event) {
       }
     }
 
-    let strainBlock = hit ? formatStrainContext(retrieved, constraints) : "";
+    // ── Always a card ─────────────────────────────────────────────────
+    //
+    // A miss used to return prose and nothing else, which spends one of ten
+    // hourly lookups to say "no". Every tier below ends with a card.
+    //
+    // What makes that safe is the thing Pink Thunder got wrong. A card is not
+    // a claim. A card presented AS THEIR STRAIN when it isn't, is. So `hit`
+    // stays false on the two tiers where the card is not what they asked for,
+    // the prompt note carries the burden of saying so, and `tier` tells the
+    // caller which of the four this was.
+    //
+    //   exact      the query named a strain in the database
+    //   corrected  fuzzy >= 0.92, answered outright as the corrected strain
+    //   candidate  fuzzy 0.80..0.92, offered as a maybe, not claimed as theirs
+    //   unrelated  nothing close; a strain worth knowing, explicitly not theirs
+    let tier = hit ? (correctedFrom ? "corrected" : "exact") : null;
+
+    // Tier B. Close enough to be worth putting in front of them, not close
+    // enough to answer as though it were theirs. Below the 0.92 bar this used
+    // to be a bare "did you mean", which is the shape that costs a lookup and
+    // returns nothing.
+    if (!hit && correction) {
+      const record = strainRecord(correction.suggestion);
+      if (record) {
+        let cards = searchStrains(correction.suggestion, constraints);
+        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
+          cards = [cardFromRecord(record), ...cards].slice(0, 3);
+        }
+        resolved = correction.suggestion;
+        retrieved = cards;
+        tier = "candidate";
+      }
+    }
+
+    // Tier C. Nothing close at all. The card is a different strain and the
+    // reply has to be unmistakable about that.
+    let unrelatedPick = null;
+    if (!tier) {
+      unrelatedPick = pickUnrelatedStrain(recentStrains);
+      const record = unrelatedPick ? strainRecord(unrelatedPick) : null;
+      if (record) {
+        resolved = unrelatedPick;
+        retrieved = [cardFromRecord(record)];
+        tier = "unrelated";
+      }
+    }
+
+    const hasCard = tier !== null;
+    let strainBlock = hasCard ? formatStrainContext(retrieved, constraints) : "";
 
     if (correctedFrom) {
       const sugg = resolved.replace(/-+/g, " ");
       strainBlock += `\n\n[SPELLING, AND YOU SAY SO. They typed "${correctedFrom}". You are reading that as "${sugg}", and the record above is ${sugg}. Open by naming that, plainly and in your own words, then answer for ${sugg} in full. Do not stop to ask them to confirm, and do not write as though they had typed it correctly — they didn't, and saying so is the honest part.]`;
-    } else if (correction) {
-      // Read-only spelling suggestion ("cali mist" → Kali Mist), never a
-      // silent swap. Below the high bar the lookup did not resolve, so there
-      // are no cards here either way; this note is the only hint, and it
-      // names itself as a guess.
-      const sugg = correction.suggestion.replace(/-+/g, " ");
-      strainBlock += `\n\n[POSSIBLE MATCH — the user wrote "${correction.wrote}"; the closest known strain is "${sugg}". If relevant, gently confirm the spelling instead of assuming, and don't silently swap it.]`;
+    } else if (tier === "candidate") {
+      const sugg = resolved.replace(/-+/g, " ");
+      strainBlock += `\n\n[NO EXACT MATCH, ONE NEAR THING. They typed "${correction.wrote}". Nothing goes by that name. The record above is ${sugg}, the closest thing in the database, and you are NOT sure it is what they meant.\n\nSay you didn't find what they typed. Then offer ${sugg} as the near thing you do have, name it, and describe it from the record. Offering is not the same as answering: do not write as though ${sugg} is what they asked for.]`;
+    } else if (tier === "unrelated") {
+      const sugg = resolved.replace(/-+/g, " ");
+      strainBlock += `\n\n[NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE. They typed "${correction ? correction.wrote : query}". Nothing in the database is close to it and you do not know it. The record above is ${sugg}, picked because it is worth knowing. It has NOTHING to do with what they asked for.\n\nTwo halves, in this order, and the seam between them has to be obvious:\n1. You have never heard of what they typed. Say it plainly. No hedging, no "I think I've heard that one".\n2. Then, as a clearly separate offer, hand them ${sugg} — name it, and say outright that it is a different strain, not theirs.\n\nSomeone skimming sees a card sitting under their query and assumes it answers it. The second half has to make that impossible to believe.]`;
     }
 
-    const userContent = query + strainBlock + formatLookupState(hit ? "hit" : "miss");
+    // formatLookupState's MISS text forbids describing effects or lineage,
+    // which is right when there is no card and wrong on the two tiers that
+    // have one. Those carry their own note above, which says both halves: you
+    // do not know theirs, you do know this.
+    const lookupNote = hasCard
+      ? hit
+        ? formatLookupState("hit")
+        : ""
+      : formatLookupState("miss");
+
+    // First contact. One line, then the answer — the point is that it happens
+    // once, not that it is long.
+    const introNote = introClaimed
+      ? `\n\n[FIRST TIME. This person has never used this bot before. Before you answer, one short line saying who you are, in your own voice. One line. Then straight into the answer. Do not list commands and do not explain what you can do.]`
+      : "";
+
+    const userContent = query + strainBlock + lookupNote + introNote;
 
     // ── Prompt ────────────────────────────────────────────────────────
     // No liked-strains context — there is no user to have liked anything.
     const systemPrompt =
       CHARACTER_CORE + "\n\n" + buildPlantPrompt([]) + "\n\n" + DISCORD_LOOKUP_NOTE;
 
-    const reply = await callLookupModel([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
+    // Started BEFORE the model call and awaited with it, so remembering the
+    // card costs no wall clock. It is also not allowed to fail the lookup:
+    // a dropped write means one possible repeat, which is not worth a 500.
+    const noted = hasCard && resolved ? noteStrainShown(discordUserId, resolved) : null;
+
+    const [reply] = await Promise.all([
+      callLookupModel([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ]),
+      noted,
     ]);
 
     if (!reply) {
@@ -610,6 +776,8 @@ export async function handler(event) {
         matched: hit,
         strain: resolved,
         corrected: correction ? correction.suggestion : null,
+        tier,
+        intro: introClaimed,
         corrected_from: correctedFrom,
         correction_similarity: correction ? Number(correction.similarity.toFixed(3)) : null,
         query_len: query.length,
@@ -618,12 +786,20 @@ export async function handler(event) {
 
     return jsonResponse(200, {
       reply,
+      // Unchanged meaning: true only when the card IS the strain they asked
+      // for. The two tiers that offer something else keep it false, which is
+      // what stops an offer reading as an answer.
       matched: hit,
       strain: resolved,
+      tier,
       // Additive only. reply/matched/strain keep their exact shape — the bot
       // in production depends on all three, and a bot deploy does not land at
       // the same moment as a function deploy.
-      strain_data: hit ? buildStrainData(resolved) : null,
+      // Keyed off the CARD, not off `hit`. Tiers B and C return a strain the
+      // person did not ask for, and its record still has to travel: the embed
+      // renders these as its fields, and a card with a name and no fields is
+      // the empty box this update exists to stop returning.
+      strain_data: hasCard ? buildStrainData(resolved) : null,
     });
   } catch (err) {
     console.error("[strain-lookup] error:", err);

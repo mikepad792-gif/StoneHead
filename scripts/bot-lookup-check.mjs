@@ -29,7 +29,20 @@ const { handler } = await import("../api/strain-lookup.js");
 // ESM gives live bindings to the module's own object, and the endpoint holds
 // the same instance, so replacing the method here replaces the one it calls.
 let rateLimitResult = { data: true, error: null };
-supabaseAdmin.rpc = async () => rateLimitResult;
+let introClaimed = false;   // what begin_bot_lookup reports
+let recentStrains = [];     // what it hands back as already-seen
+let notedStrains = [];      // what note_strain_shown was asked to record
+
+supabaseAdmin.rpc = async (fn, args) => {
+  if (fn === "begin_bot_lookup") {
+    return { data: [{ intro_claimed: introClaimed, recent: recentStrains }], error: null };
+  }
+  if (fn === "note_strain_shown") {
+    notedStrains.push(args.p_strain);
+    return { data: null, error: null };
+  }
+  return rateLimitResult;
+};
 
 // openrouter.js calls global fetch. Capture what the model was asked, so the
 // prompt itself can be asserted on and not just the reply.
@@ -210,9 +223,25 @@ if (sparse.matched) {
   assert.equal(sparse.strain_data.rating, 0, "B03t: an unrated record keeps its 0");
 }
 
-// A miss carries null, never a half-filled object.
+// SUPERSEDED BY ALWAYS-A-CARD. A miss used to carry strain_data:null because
+// it carried no card at all. It now carries a tier C card, so the invariant
+// moves: strain_data is never a HALF-FILLED object, and it always describes
+// whatever `strain` names. Those two together are what stop the embed fields
+// and the prose disagreeing — which was the original point of the assertion.
 const dataMiss = ok(await call({ ...LOOKUP, query: "pink thunder" }));
-assert.equal(dataMiss.strain_data, null, "B03u: no match → strain_data is null");
+assert.equal(dataMiss.matched, false, "B03u: a miss still reports matched:false");
+assert(
+  dataMiss.strain && dataMiss.strain_data,
+  "B03u2: and now carries a real card rather than an apology"
+);
+assert(
+  dataMiss.strain_data.type,
+  "B03u3: the card is populated, not a shell with a name on it"
+);
+
+// A safety turn is the case that still carries nothing, and must.
+const safetyNoCard = ok(await call({ ...LOOKUP, query: "i want to kill myself" }));
+assert.equal(safetyNoCard.strain_data, null, "B03u4: a safety turn carries no record");
 
 // The three keys the deployed bot already depends on are untouched.
 for (const key of ["reply", "matched", "strain"]) {
@@ -250,24 +279,37 @@ assert(
   "B03ac: strain_data must describe the strain actually answered"
 );
 
-// ── B03ad: below the bar, confirm first, exactly as before ──────────
+// ── B03ad: below the bar, offered but not claimed ───────────────────
 //
-// "gorilla glue" scores 0.846 against Godzilla-Glue, which is close enough to
-// mention and nowhere near close enough to answer through.
+// SUPERSEDED BY ALWAYS-A-CARD. "gorilla glue" scores 0.846 against
+// Godzilla-Glue: still nowhere near enough to answer through, but no longer a
+// bare "did you mean". It now comes back as a candidate WITH a card, because
+// a question that spends one of ten hourly lookups and returns nothing is a
+// worse outcome than an offer the reply is honest about.
+//
+// What carried over from the old assertions is the half that matters: it does
+// not resolve, and it does not get the answer-through note.
 const unsure = ok(await call({ ...LOOKUP, query: "gorilla glue" }));
 assert.equal(unsure.matched, false, "B03ae: a low-confidence correction must NOT resolve");
-assert.equal(unsure.strain_data, null, "B03af: and must not carry a record");
-assert(/POSSIBLE MATCH/.test(userPrompt()), "B03ag: it keeps the confirm-first note");
+assert.equal(unsure.tier, "candidate", `B03af: it is a candidate, got ${unsure.tier}`);
+assert(
+  /NO EXACT MATCH, ONE NEAR THING/.test(userPrompt()),
+  "B03ag: it is offered as a near thing, not claimed"
+);
 assert(
   !/SPELLING, AND YOU SAY SO/.test(userPrompt()),
   "B03ah: and must not get the answer-through note"
 );
-assert(!userPrompt().includes("STRAIN CONTEXT"), "B03ai: no cards below the bar");
+assert(
+  unsure.strain && unsure.strain_data,
+  "B03ai: the candidate card is real, not an apology"
+);
 
-// A real miss with no near-neighbour stays a miss.
+// A real miss with no near-neighbour is still a miss in the only sense that
+// counts: matched stays false and the card is announced as something else.
 const stillMiss = ok(await call({ ...LOOKUP, query: "pink thunder" }));
-assert.equal(stillMiss.matched, false, "B03aj: pink thunder is still a miss");
-assert(/STRAIN LOOKUP: MISS/.test(userPrompt()), "B03ak: and still says so");
+assert.equal(stillMiss.matched, false, "B03aj: pink thunder is still not a match");
+assert.equal(stillMiss.tier, "unrelated", `B03ak: and lands on tier C, got ${stillMiss.tier}`);
 
 // ── B03al: long dashes never reach the user ─────────────────────────
 //
@@ -295,19 +337,43 @@ modelReply = "Blue Dream, yeah. That one's a classic.";
 // Fuck and Cherry-Thunder-Fuck on a shared-token score. None of them is Pink
 // Thunder. Reporting a match here, or handing those cards to the model, is the
 // failure this endpoint exists to not have.
+//
+// UPDATED for always-a-card. These queries now DO return a card, so the old
+// "strain must be null" and "no cards" assertions are gone — deliberately,
+// they described the apology this update replaced. What has NOT changed, and
+// is the whole point, is that none of these is reported as the strain the
+// person asked for, and the loose near-neighbours never reach the model.
 for (const fake of ["pink thunder", "blue smog", "gorilla glue"]) {
   const miss = ok(await call({ ...LOOKUP, query: fake }));
   assert.equal(miss.matched, false, `B04a: "${fake}" must NOT report a match`);
-  assert.equal(miss.strain, null, `B04b: "${fake}" must report strain:null`);
   assert(
-    userPrompt().includes("STRAIN LOOKUP: MISS"),
-    `B04c: "${fake}" must tell the model the lookup ran and found nothing`
+    miss.tier === "candidate" || miss.tier === "unrelated",
+    `B04b: "${fake}" must land on an offering tier, got ${miss.tier}`
   );
   assert(
-    !userPrompt().includes("STRAIN CONTEXT"),
-    `B04d: "${fake}" must NOT hand the model near-neighbour cards to describe`
+    /NO EXACT MATCH, ONE NEAR THING|NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE/.test(
+      userPrompt()
+    ),
+    `B04c: "${fake}" must carry a note saying the card is not their strain`
   );
 }
+
+// The actual Pink Thunder mechanism, closed: three Thunder cards sitting in
+// the context window under the user's query, one of which gets described as
+// theirs. Tier C hands over exactly the card it picked and drops every loose
+// near-neighbour searchStrains found.
+//
+// Asserted structurally rather than by naming the Thunder strains, because the
+// pick is random and naming them would flake once every few thousand runs.
+const thunder = ok(await call({ ...LOOKUP, query: "pink thunder" }));
+const cardNames = [
+  ...userPrompt().matchAll(/\n([A-Za-z0-9-]+) \((indica|sativa|hybrid)\)/g),
+].map((m) => m[1]);
+assert.deepEqual(
+  cardNames,
+  [thunder.strain],
+  `B04d: tier C must hand over only its own card, got ${JSON.stringify(cardNames)}`
+);
 
 // A bare common word is ambiguous, not a match — "/strain purple" resolving to
 // Purple-Ak-47 is a fabrication with extra steps.
@@ -381,5 +447,121 @@ const toml = await (await import("node:fs/promises")).readFile(
 const routeIdx = toml.indexOf('from = "/api/strain-lookup"');
 assert(routeIdx > 0, "B08e: netlify.toml must route /api/strain-lookup");
 assert(routeIdx < toml.indexOf('from = "/*"'), "B08f: the route must sit above the SPA fallback");
+
+// ── B09: every tier returns a card ──────────────────────────────────
+//
+// A miss used to spend one of ten hourly lookups to return an apology. Each
+// tier now ends with a card, and each keeps `matched` honest about whether
+// that card is the strain the person asked for.
+for (const [q, wantTier, wantMatched] of [
+  ["blue dream", "exact", true],
+  ["northen lights", "corrected", true],
+  ["skittlez", "candidate", false],
+  ["fhqwhgads", "unrelated", false],
+]) {
+  const res = ok(await call({ ...LOOKUP, query: q }));
+  assert.equal(res.tier, wantTier, `B09a: "${q}" should be tier ${wantTier}, got ${res.tier}`);
+  assert.equal(res.matched, wantMatched, `B09b: "${q}" matched should be ${wantMatched}`);
+  assert(res.strain, `B09c: "${q}" must return a card, got strain=${res.strain}`);
+  assert(res.strain_data, `B09d: "${q}" must return strain_data`);
+  assert(userPrompt().includes("STRAIN CONTEXT"), `B09e: "${q}" must get real cards`);
+}
+
+// ── B10: an offer is never dressed as an answer ─────────────────────
+//
+// The Pink Thunder line, restated for the tiers that hand over a strain the
+// person did not ask for. A card is not a claim. A card presented as THEIR
+// strain when it isn't, is.
+ok(await call({ ...LOOKUP, query: "skittlez" }));
+assert(
+  /NO EXACT MATCH, ONE NEAR THING/.test(userPrompt()),
+  "B10a: a candidate must be told to offer, not answer"
+);
+assert(userPrompt().includes("skittlez"), "B10b: the note carries what they typed");
+
+ok(await call({ ...LOOKUP, query: "fhqwhgads" }));
+assert(
+  /NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE/.test(userPrompt()),
+  "B10c: an unrelated card must break the two halves apart"
+);
+assert(
+  /NOTHING to do with what they asked for/.test(userPrompt()),
+  "B10d: and say outright the card is not their strain"
+);
+
+// ── B11: the no-match card does not repeat ──────────────────────────
+recentStrains = [];
+const picked = [];
+for (let i = 0; i < 12; i++) {
+  const res = ok(await call({ ...LOOKUP, query: `zzqqxx${i}` }));
+  picked.push(res.strain);
+  recentStrains = [res.strain, ...recentStrains].slice(0, 20);
+}
+assert.equal(
+  new Set(picked).size,
+  picked.length,
+  `B11a: no-match cards must not repeat inside the memory, got ${JSON.stringify(picked)}`
+);
+
+// Every tier records what it showed, not just the no-match one: a strain seen
+// through an ordinary lookup is just as stale a suggestion later.
+notedStrains = [];
+ok(await call({ ...LOOKUP, query: "blue dream" }));
+assert(
+  notedStrains.includes("Blue-Dream"),
+  `B11b: an exact hit is recorded as shown too, got ${JSON.stringify(notedStrains)}`
+);
+
+// ── B12: the intro is claimed, never decided locally ────────────────
+//
+// begin_bot_lookup claims it atomically, so a burst of first lookups still
+// introduces once. The endpoint only reports what the claim returned.
+introClaimed = true;
+ok(await call({ ...LOOKUP, query: "blue dream" }));
+assert(/FIRST TIME/.test(userPrompt()), "B12a: a claimed intro reaches the prompt");
+introClaimed = false;
+ok(await call({ ...LOOKUP, query: "blue dream" }));
+assert(!/FIRST TIME/.test(userPrompt()), "B12b: an unclaimed intro does not");
+
+// ── B13: safety turns never get a card ──────────────────────────────
+//
+// A random strain stapled to a crisis reply would be grotesque. These paths
+// return before any tier logic runs; this keeps it that way.
+for (const q of ["i want to kill myself", "im 11 and want to try weed"]) {
+  const res = ok(await call({ ...LOOKUP, query: q }));
+  assert.equal(fetchCalls, 0, `B13a: "${q}" must not call the model`);
+  assert.equal(res.strain, null, `B13b: "${q}" must carry no strain`);
+  assert(!res.tier, `B13c: "${q}" must carry no tier, got ${res.tier}`);
+}
+ok(await call({ ...LOOKUP, query: "i took a bunch of xanax and i feel weird" }));
+assert(
+  !/STRAIN CONTEXT/.test(userPrompt()),
+  "B13d: a substance turn must not be handed strain cards"
+);
+
+// ── B14: a no-match card can always be tapped for more ──────────────
+//
+// The pool filter matches build-similar-strains.mjs on purpose, so every
+// strain offered here is also a key in the similar table. Without that,
+// "more like this" would die on the path most likely to be tapped.
+const { readFile } = await import("node:fs/promises");
+const similarRaw = await readFile(
+  new URL("../data/similar-strains.json", import.meta.url),
+  "utf-8"
+).catch(() => null);
+if (similarRaw) {
+  const similarTable = JSON.parse(similarRaw);
+  recentStrains = [];
+  const orphans = [];
+  for (let i = 0; i < 40; i++) {
+    const res = ok(await call({ ...LOOKUP, query: `qqzz${i}` }));
+    if (res.strain && !similarTable[res.strain]) orphans.push(res.strain);
+  }
+  assert.equal(
+    orphans.length,
+    0,
+    `B14a: every no-match card needs similar-strains entries, missing: ${JSON.stringify(orphans.slice(0, 5))}`
+  );
+}
 
 console.log("All bot lookup checks passed.");
