@@ -338,10 +338,64 @@ const RENAMED = [
   );
 }
 
+// ── Sibilant folding: the z-for-s spelling the industry runs on ─────
+//
+// REPORTED: /strain skittles answered "never heard of that one" and handed
+// over an unrelated strain, about one of the better known names in the file.
+// Zkittlez is two edits from "skittles" — 0.75, under the 0.84 bar — because
+// swapping s for z is a naming convention here, not a typo. Zour Apple,
+// Zweet Tooth, Runtz, and 138 names in all carry a z.
+{
+  const { suggestStrainCorrection, closestStrainName } = await import("../lib/strainSearch.js");
+
+  for (const [typed, want] of [
+    ["skittles", "Zkittlez"],
+    ["skittlez", "Zkittlez"],
+    ["zour apple", "Sour-Apple"],
+  ]) {
+    const hit = suggestStrainCorrection(typed);
+    assert(hit, `Z1: "${typed}" must resolve to a correction, got none`);
+    assert.equal(hit.suggestion, want, `Z2: "${typed}" should suggest ${want}, got ${hit.suggestion}`);
+  }
+
+  // A correctly-typed name is still never "corrected" into something else.
+  for (const typed of ["zkittlez", "blue dream", "sour diesel", "gelato", "runtz"]) {
+    assert.equal(
+      suggestStrainCorrection(typed),
+      null,
+      `Z3: "${typed}" is already a real name and must not be corrected`
+    );
+  }
+
+  // THE SAFETY PROPERTY, re-derived rather than trusted: folding z to s must
+  // never make two DIFFERENT strains look like each other. If a future
+  // strains.json breaks this, the fold stops being safe and this fails.
+  const { loadDataFile } = await import("../lib/dataFile.js");
+  const names = [...new Set(
+    loadDataFile("strains.json").map((r) => String(r.Strain || "").trim()).filter(Boolean)
+  )];
+  const folded = new Map();
+  for (const n of names) {
+    const key = n.toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/z/g, "s");
+    if (!folded.has(key)) folded.set(key, []);
+    folded.get(key).push(n);
+  }
+  const collisions = [...folded.values()].filter((v) => v.length > 1);
+  assert.equal(
+    collisions.length,
+    0,
+    `Z4: folding z to s collides these distinct strains, so it is no longer safe: ${JSON.stringify(collisions.slice(0, 5))}`
+  );
+
+  // And the fold must not drag an unrelated name into range.
+  assert.equal(closestStrainName("qqzzxx"), null, "Z5: nonsense must still match nothing");
+}
+
 console.log(
   `strain-match-check: OK — ${SPLIT_JOIN.length} split/join cases, ` +
   `${fChecks} Addendum C2 assertions, ` +
   `${STILL_MATCHES.length} regression cases, ${MUST_NOT_MATCH.length} false-positive cases, ` +
   `${USED.size} names confirmed present in strains.json, ` +
-  `${RENAMED.length} renamed keys held`
+  `${RENAMED.length} renamed keys held, ` +
+  `sibilant folding held across ${new Set(loadDataFile('strains.json').map((r) => String(r.Strain || '').trim())).size} names`
 );
