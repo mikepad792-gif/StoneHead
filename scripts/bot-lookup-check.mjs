@@ -456,7 +456,7 @@ assert(routeIdx < toml.indexOf('from = "/*"'), "B08f: the route must sit above t
 for (const [q, wantTier, wantMatched] of [
   ["blue dream", "exact", true],
   ["northen lights", "corrected", true],
-  ["skittlez", "candidate", false],
+  ["blu dream", "candidate", false],
   ["fhqwhgads", "unrelated", false],
 ]) {
   const res = ok(await call({ ...LOOKUP, query: q }));
@@ -472,12 +472,12 @@ for (const [q, wantTier, wantMatched] of [
 // The Pink Thunder line, restated for the tiers that hand over a strain the
 // person did not ask for. A card is not a claim. A card presented as THEIR
 // strain when it isn't, is.
-ok(await call({ ...LOOKUP, query: "skittlez" }));
+ok(await call({ ...LOOKUP, query: "blu dream" }));
 assert(
   /NO EXACT MATCH, ONE NEAR THING/.test(userPrompt()),
   "B10a: a candidate must be told to offer, not answer"
 );
-assert(userPrompt().includes("skittlez"), "B10b: the note carries what they typed");
+assert(userPrompt().includes("blu dream"), "B10b: the note carries what they typed");
 
 ok(await call({ ...LOOKUP, query: "fhqwhgads" }));
 assert(
@@ -659,7 +659,7 @@ if (similarRaw) {
 {
   recentStrains = [];
   for (const [query, expectTier] of [
-    ["skittlez", "candidate"],
+    ["blu dream", "candidate"],
     ["fhqwhgads", "unrelated"],
     ["wedding", "family"],
   ]) {
@@ -769,7 +769,7 @@ if (similarRaw) {
   for (const [query, expectTier] of [
     ["blue dream", "exact"],
     ["northen lights", "corrected"],
-    ["skittlez", "candidate"],
+    ["blu dream", "candidate"],
     ["wedding", "family"],
     ["fhqwhgads", "unrelated"],
   ]) {
