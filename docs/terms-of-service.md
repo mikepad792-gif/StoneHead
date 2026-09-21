@@ -1,6 +1,6 @@
 # StoneHead AI — Terms of Service
 
-**Last updated:** August 5, 2026
+**Last updated:** September 20, 2026
 
 Plain language, because you should be able to read this.
 
