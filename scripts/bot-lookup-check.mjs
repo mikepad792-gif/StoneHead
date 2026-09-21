@@ -681,4 +681,116 @@ if (similarRaw) {
   assert.equal(exact.tier, "exact", "B17d: fixture must be an exact hit");
 }
 
+// ── B18: a picker tap answers about ONE strain ──────────────────────
+//
+// THE BUG. Tapping [Dutch] produced a card with the right title and the right
+// Type/Effects/Flavour/Rating, whose PROSE described Alaskan, Matanuska and
+// Cherry, never mentioned Dutch, and closed with "which one you leaning
+// toward". The bot was sending the right key and the endpoint was resolving
+// it correctly — searchStrains scores loosely enough that asking it for
+// "Dutch-Thunder-Fuck" returned three cousins AND NOT DUTCH.
+//
+// It read as a working card because the fields and the prose came from
+// DIFFERENT PATHS: strain_data is built straight from the source record, the
+// context block came from retrieval. Same failure shape as Pink Thunder,
+// wearing a correct-looking title.
+{
+  recentStrains = [];
+  const picker = ok(await call({ ...LOOKUP, query: "thunder fuck og" }));
+  const candidates = picker.candidates.map((c) => c.strain);
+  assert.equal(candidates.length, 5, `B18a: fixture expects 5 candidates, got ${candidates.length}`);
+
+  // Every button, not just the one that was reported.
+  for (const picked of candidates) {
+    const res = ok(await call({ ...LOOKUP, query: picked }));
+    const prompt = userPrompt();
+
+    assert.equal(res.strain, picked, `B18b: tapping ${picked} must answer about ${picked}, got ${res.strain}`);
+    assert.equal(res.matched, true, `B18c: ${picked} is an exact name and must come back matched`);
+    assert(res.strain_data, `B18d: ${picked} must carry its record`);
+
+    // No other candidate may appear ANYWHERE in what the model is handed.
+    // A card is enough for the model to describe it; a mention is enough for
+    // the model to compare against it.
+    for (const other of candidates) {
+      if (other === picked) continue;
+      assert(
+        !prompt.includes(other),
+        `B18e: the ${picked} card must not mention ${other} — that is the family drift this fixes`
+      );
+    }
+
+    // Exactly one card in the block.
+    const cards = prompt
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^[A-Z][A-Za-z0-9-]*\s\((indica|sativa|hybrid)\)$/.test(l));
+    assert.equal(cards.length, 1, `B18f: ${picked} must get exactly one card, got ${cards.length}: ${cards}`);
+    assert.equal(cards[0], `${picked} (${res.strain_data.type})`, `B18g: the one card must BE ${picked}`);
+
+    // The card in the block and the fields in the embed have to be the same
+    // record. This is the assertion that would have caught the bug: both were
+    // individually plausible and they disagreed.
+    const effects = (res.strain_data.effects || []).map((e) => e.toLowerCase());
+    if (effects.length) {
+      const line = prompt.split("\n").find((l) => l.trim().startsWith("Effects:"));
+      assert(line, `B18h: ${picked}'s card must list its effects`);
+      for (const effect of effects) {
+        assert(
+          line.toLowerCase().includes(effect),
+          `B18i: ${picked} embed field says "${effect}" but the card the model reads does not`
+        );
+      }
+    }
+
+    // The choice was already made by the tap. Nothing in the block may ask
+    // the person to choose between strains again.
+    assert(
+      !/which one|which of|leaning toward|pick one|take your pick/i.test(prompt),
+      `B18j: the ${picked} card must not re-open the choice the tap already made`
+    );
+
+    // And the strain has to be named, or the prose is about nothing.
+    assert(
+      prompt.includes(picked) || prompt.includes(picked.replace(/-+/g, " ")),
+      `B18k: the block must name ${picked} at least once`
+    );
+  }
+}
+
+// ── B19: one card on EVERY tier, not just the picked one ────────────
+//
+// The same looseness reaches every tier that announces a strain: the block
+// used to lead with the right record and carry cousins behind it, which is
+// the same invitation with better odds. The endpoint renders one embed for
+// one strain, so it hands over one card.
+{
+  recentStrains = [];
+  for (const [query, expectTier] of [
+    ["blue dream", "exact"],
+    ["northen lights", "corrected"],
+    ["skittlez", "candidate"],
+    ["wedding", "family"],
+    ["fhqwhgads", "unrelated"],
+  ]) {
+    const res = ok(await call({ ...LOOKUP, query }));
+    assert.equal(res.tier, expectTier, `B19a: ${query} expected ${expectTier}, got ${res.tier}`);
+
+    const cards = userPrompt()
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^[A-Z][A-Za-z0-9-]*\s\((indica|sativa|hybrid)\)$/.test(l));
+    assert.equal(
+      cards.length,
+      1,
+      `B19b: ${expectTier} must hand over exactly one card, got ${cards.length}: ${cards}`
+    );
+    assert.equal(
+      cards[0],
+      `${res.strain} (${res.strain_data.type})`,
+      `B19c: the ${expectTier} card must be ${res.strain}, got ${cards[0]}`
+    );
+  }
+}
+
 console.log("All bot lookup checks passed.");

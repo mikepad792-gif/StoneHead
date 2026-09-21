@@ -853,16 +853,7 @@ export async function handler(event) {
       // loose retrieval happens to rank first.
       const record = strainRecord(correction.suggestion);
       if (record) {
-        let cards = searchStrains(correction.suggestion, constraints);
-        // Guarantee the announced strain's own card is in the block, and
-        // first. Without this, "Northern-Lights" retrieves Northern-Lights--5
-        // and two cousins, and the reply would describe a strain the embed
-        // fields do not.
-        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
-          cards = [cardFromRecord(record), ...cards].slice(0, 3);
-        }
         resolved = correction.suggestion;
-        retrieved = cards;
         hit = true;
         correctedFrom = correction.wrote;
       }
@@ -1032,12 +1023,7 @@ export async function handler(event) {
       if (family.length === 1) {
         const record = strainRecord(family[0]);
         if (record) {
-          let cards = searchStrains(family[0], constraints);
-          if (!cards.some((c) => c.strain_name === family[0])) {
-            cards = [cardFromRecord(record), ...cards].slice(0, 3);
-          }
           resolved = family[0];
-          retrieved = cards;
           hit = true;
           familyFrom = query;
         }
@@ -1068,12 +1054,7 @@ export async function handler(event) {
     if (!hit && correction) {
       const record = strainRecord(correction.suggestion);
       if (record) {
-        let cards = searchStrains(correction.suggestion, constraints);
-        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
-          cards = [cardFromRecord(record), ...cards].slice(0, 3);
-        }
         resolved = correction.suggestion;
-        retrieved = cards;
         tier = "candidate";
       }
     }
@@ -1086,9 +1067,31 @@ export async function handler(event) {
       const record = unrelatedPick ? strainRecord(unrelatedPick) : null;
       if (record) {
         resolved = unrelatedPick;
-        retrieved = [cardFromRecord(record)];
         tier = "unrelated";
       }
+    }
+
+    // ── ONE CARD, AND IT IS THE ONE BEING ANNOUNCED ───────────────────
+    //
+    // THE BUG THIS EXISTS TO STOP, because it is invisible from the outside:
+    // ask for Dutch-Thunder-Fuck and searchStrains scores loosely enough to
+    // return Cherry, Alaskan and Matanuska AND NOT DUTCH AT ALL. `resolved`
+    // was right, `strain_data` was right (it is read straight from the source
+    // record), the embed title and fields were right — and the prose described
+    // three strains the person had not asked about, then asked which one they
+    // were leaning toward.
+    //
+    // Fields and prose came from DIFFERENT PATHS, which is exactly why it read
+    // as a working card. The single normalization here is what makes them the
+    // same record by construction rather than by three separate guards that
+    // each had to remember.
+    //
+    // This endpoint renders ONE embed for ONE strain. Any extra card in the
+    // block is an invitation to describe a strain the embed does not show,
+    // which is the Pink Thunder shape wearing a correct-looking title.
+    if (resolved) {
+      const announced = strainRecord(resolved);
+      if (announced) retrieved = [cardFromRecord(announced)];
     }
 
     const hasCard = tier !== null;
