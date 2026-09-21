@@ -210,6 +210,105 @@ function splitList(value) {
 }
 
 /**
+ * Family-name matching: every significant token of the query appears in the name.
+ *
+ * WHY EDIT DISTANCE IS NOT ENOUGH. "thunder fuck og" came back "never heard of
+ * that one" while the file holds Alaskan, Matanuska, Hawaiian, Dutch and Cherry
+ * Thunder Fuck. Distance punishes a missing prefix and an extra suffix, so the
+ * family name never clears 0.80 and never reaches the near-miss tier. People
+ * type family names without the geographic prefix constantly.
+ *
+ * Containment, not substring. Substring returns NOTHING for "thunder fuck og"
+ * (no name contains "og" inside it the way the query does) and 227 rows for
+ * "og" alone. Tokens ask the right question: is every word they typed in this
+ * name, wherever it sits.
+ *
+ * TWO GUARDS, and the second one is the interesting one:
+ *
+ *   1. Tokens under 3 characters are dropped before matching. That is what
+ *      lets "thunder fuck og" match five names that contain no OG at all,
+ *      and it is why "og" on its own matches nothing rather than everything.
+ *
+ *   2. The result has to be SELECTIVE. Two or more significant tokens is
+ *      selective by construction. A single token is not — "sour" is in 62
+ *      names, "kush" in 173 — so a lone token only counts when it lands on a
+ *      handful. "zkittlez" is one token and finds exactly Zkittlez and Blue
+ *      Zkittlez, which is the behaviour the spec's own table asks for; "sour"
+ *      finds 62 and is refused.
+ *
+ * The spec wrote guard 2 as a flat "at least 2 significant tokens", which its
+ * own test table contradicts on the zkittlez row. Selectivity is what that
+ * guard was reaching for: it satisfies every row of the table, and it keeps
+ * the case the flat rule would lose (a one-word family name like "wedding",
+ * which finds Wedding Cake and nothing else).
+ */
+const FAMILY_MIN_TOKEN = 3;
+const FAMILY_MAX_CANDIDATES = 5;
+
+let nameTokenIndex = null;
+
+function familyIndex() {
+  if (!nameTokenIndex) {
+    nameTokenIndex = loadDataFile("strains.json")
+      .map((r) => String(r.Strain || "").trim())
+      .filter(Boolean)
+      .map((name) => ({
+        name,
+        tokens: new Set(name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)),
+      }));
+  }
+  return nameTokenIndex;
+}
+
+/** The query's tokens that are long enough to mean anything. */
+function familyTokens(query) {
+  return String(query || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= FAMILY_MIN_TOKEN);
+}
+
+/**
+ * Strain names containing every significant token, or [] when the query is
+ * not selective enough to ask with.
+ *
+ * Shortest-first, because a cap of five on a bigger set should keep the
+ * canonical names: "Blue-Dream" before "Super-Blue-Dream-Haze".
+ */
+function familyMatches(query) {
+  const tokens = familyTokens(query);
+  if (!tokens.length) return [];
+
+  const hits = familyIndex()
+    .filter((entry) => tokens.every((t) => entry.tokens.has(t)))
+    .map((entry) => entry.name);
+
+  // A single token has to earn its place. Over the cap it is a category
+  // ("kush", "purple"), not a family, and a category is not an answer.
+  if (tokens.length < 2 && hits.length > FAMILY_MAX_CANDIDATES) return [];
+
+  return hits
+    .sort((a, b) => a.length - b.length || a.localeCompare(b))
+    .slice(0, FAMILY_MAX_CANDIDATES);
+}
+
+/**
+ * The part of a family name that tells it apart from the others.
+ *
+ * "Alaskan-Thunder-Fuck" next to a query of "thunder fuck og" becomes
+ * "Alaskan". A button labelled with the whole name is five identical buttons.
+ * Falls back to the full display name when stripping leaves nothing, which
+ * happens when the query IS the name.
+ */
+function familyLabel(name, query) {
+  const shared = new Set(familyTokens(query));
+  const kept = String(name)
+    .split(/-+/)
+    .filter((part) => part && !shared.has(part.toLowerCase()));
+  return (kept.length ? kept : String(name).split(/-+/)).join(" ");
+}
+
+/**
  * Is this name safe to put in front of somebody who did not ask for it?
  *
  * The two places below hand out a strain NOBODY NAMED — the no-match card and
@@ -692,6 +791,137 @@ export async function handler(event) {
     // model call, while the model call itself always respects the cap.
     // Alongside the rate-limit calls, not after them. Both are round trips and
     // this function still has a model call to fit inside Netlify's 10s.
+    // ── Retrieval ─────────────────────────────────────────────────────
+    // Same shape as the tab === "plant" && topic === "STRAIN" branch, minus
+    // the carry/recheck states, which need a thread this endpoint doesn't have.
+    const constraints = parseConstraints(query);
+    let retrieved = searchStrains(query, constraints);
+
+    // ── Honest miss ───────────────────────────────────────────────────
+    //
+    // THE most important behavior in this file. A named strain that resolved
+    // nothing is a MISS — a real query ran and came back empty — and the
+    // prompt has to say so, or the model fills the silence. That is the
+    // Longbottom-Leaf / "Pink Thunder" failure, and a fabricated strain in
+    // someone else's Discord is public and screenshotted.
+    //
+    // Every /strain invocation is a strain query by construction, so unlike
+    // chat-send there is no greeting to mistake for one and no "not attempted"
+    // state: the lookup always ran, and it either found the strain or it
+    // didn't. See resolveNamedStrain for what counts as finding it.
+    let resolved = resolveNamedStrain(query, retrieved);
+    let hit = resolved !== null;
+
+    // On a miss the retrieved cards are DROPPED, not passed along as
+    // near-neighbours. Three Thunder strains in the context window next to a
+    // "say you don't know this one" instruction is a contradiction, and the
+    // cards win it — the model writes about Alaska-Thunder-Grape and the reader
+    // sees an answer about Pink Thunder.
+    //
+    // WHAT PINK THUNDER ACTUALLY WAS, because the distinction decides the
+    // branch below: the failure was a SILENT SUBSTITUTION. Cards for a strain
+    // the user never named, handed over with nothing saying a swap had
+    // happened, so the reply read as an answer about the thing they asked for.
+    //
+    // An ANNOUNCED correction is a different act. When the reply opens by
+    // naming the swap, and the cards are the real record for the strain being
+    // named, the user can see exactly what happened and disagree. Nothing is
+    // being passed off as something else, which is the part that made Pink
+    // Thunder a lie rather than a mistake.
+    const correction = suggestStrainCorrection(query);
+
+    // Above this, a correction is confident enough to answer through. Below
+    // it, confirming first is the right call. suggestStrainCorrection never
+    // returns anything under 0.8, so the confirm band is 0.8 to 0.92.
+    //
+    // The cost of confirming is not zero: a Discord user gets 10 lookups an
+    // hour, and "did you mean X?" spends one of them to say nothing. That is
+    // what earns the high band, not a belief that the matcher is infallible.
+    const HIGH_CONFIDENCE_CORRECTION = 0.92;
+
+    let correctedFrom = null;
+    if (!hit && correction && correction.similarity >= HIGH_CONFIDENCE_CORRECTION) {
+      // Re-run retrieval against the corrected name. The cards have to be the
+      // real record for the strain actually being answered, or the embed
+      // fields and the prose describe different strains.
+      //
+      // Only when the lookup MISSED. A query that already resolved named a
+      // real strain, and a correction pointing somewhere else is then the
+      // thing that is wrong, not the query.
+      // The suggestion IS a database name — closestStrainName only ever
+      // returns one — so it is what gets announced, rather than whatever
+      // loose retrieval happens to rank first.
+      const record = strainRecord(correction.suggestion);
+      if (record) {
+        let cards = searchStrains(correction.suggestion, constraints);
+        // Guarantee the announced strain's own card is in the block, and
+        // first. Without this, "Northern-Lights" retrieves Northern-Lights--5
+        // and two cousins, and the reply would describe a strain the embed
+        // fields do not.
+        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
+          cards = [cardFromRecord(record), ...cards].slice(0, 3);
+        }
+        resolved = correction.suggestion;
+        retrieved = cards;
+        hit = true;
+        correctedFrom = correction.wrote;
+      }
+    }
+
+    // ── Family picker ─────────────────────────────────────────────────
+    //
+    // Before the rate limiter ON PURPOSE. This branch makes NO MODEL CALL: it
+    // is a token scan over names already in memory, and the reply is a fixed
+    // line. The hourly limit exists to cap the OpenRouter balance, and a
+    // response that never reaches OpenRouter has no balance to protect.
+    //
+    // That is also what makes the spec's "the pick is not charged again" true
+    // without a second uncharged endpoint: the PICKER is the free half, and
+    // the card the button produces is an ordinary lookup that spends the one
+    // slot. Charging both would make the bot's own ambiguity cost the person
+    // two of their ten.
+    //
+    // Guarded on the safety detectors because they are computed above and this
+    // returns before the intercept below. A crisis message that happens to
+    // contain two strain-ish words must not be answered with a button row.
+    //
+    // AFTER the exact and >= 0.92 tiers, which is the spec's order and not a
+    // detail: "blue dream" and "white widow" both contain two significant
+    // tokens shared with several names, so a picker that ran first would
+    // answer an exact hit with a row of buttons asking which one they meant.
+    // `hit` above is already true in that case and this never runs.
+    if (!hit && crisis.tier === 0 && substanceHit.tier === 0) {
+      const family = familyMatches(query);
+      if (family.length >= 2) {
+        console.log(
+          "[strain-lookup]",
+          JSON.stringify({
+            tier: "family_picker",
+            guild_id: guildId,
+            candidates: family.length,
+            query_len: query.length,
+          })
+        );
+        return jsonResponse(200, {
+          // Hand-written, not generated. Every other fixed line this bot says
+          // is written rather than modelled, and a list of buttons does not
+          // need prose around it — see the bot's own "Give me a strain name."
+          reply: `${query} isn't one I know, but I've got a few in that family.`,
+          matched: false,
+          strain: null,
+          tier: "family_picker",
+          strain_data: null,
+          // Echoed so the bot can label the buttons with the distinguishing
+          // part of each name without re-deriving which tokens were shared.
+          query,
+          candidates: family.map((name) => ({
+            strain: name,
+            label: familyLabel(name, query),
+          })),
+        });
+      }
+    }
+
     const [limit, opened] = await Promise.all([
       checkRateLimits(discordUserId, guildId),
       beginLookup(discordUserId),
@@ -787,80 +1017,30 @@ export async function handler(event) {
       });
     }
 
-    // ── Retrieval ─────────────────────────────────────────────────────
-    // Same shape as the tab === "plant" && topic === "STRAIN" branch, minus
-    // the carry/recheck states, which need a thread this endpoint doesn't have.
-    const constraints = parseConstraints(query);
-    let retrieved = searchStrains(query, constraints);
 
-    // ── Honest miss ───────────────────────────────────────────────────
+    // Family tier. Every word they typed is in this name, and it is the ONLY
+    // name that fits, so there is nothing to choose between — the two-or-more
+    // case returned a button row well above this. "wedding" lands here and
+    // answers Wedding Cake.
     //
-    // THE most important behavior in this file. A named strain that resolved
-    // nothing is a MISS — a real query ran and came back empty — and the
-    // prompt has to say so, or the model fills the silence. That is the
-    // Longbottom-Leaf / "Pink Thunder" failure, and a fabricated strain in
-    // someone else's Discord is public and screenshotted.
-    //
-    // Every /strain invocation is a strain query by construction, so unlike
-    // chat-send there is no greeting to mistake for one and no "not attempted"
-    // state: the lookup always ran, and it either found the strain or it
-    // didn't. See resolveNamedStrain for what counts as finding it.
-    let resolved = resolveNamedStrain(query, retrieved);
-    let hit = resolved !== null;
-
-    // On a miss the retrieved cards are DROPPED, not passed along as
-    // near-neighbours. Three Thunder strains in the context window next to a
-    // "say you don't know this one" instruction is a contradiction, and the
-    // cards win it — the model writes about Alaska-Thunder-Grape and the reader
-    // sees an answer about Pink Thunder.
-    //
-    // WHAT PINK THUNDER ACTUALLY WAS, because the distinction decides the
-    // branch below: the failure was a SILENT SUBSTITUTION. Cards for a strain
-    // the user never named, handed over with nothing saying a swap had
-    // happened, so the reply read as an answer about the thing they asked for.
-    //
-    // An ANNOUNCED correction is a different act. When the reply opens by
-    // naming the swap, and the cards are the real record for the strain being
-    // named, the user can see exactly what happened and disagree. Nothing is
-    // being passed off as something else, which is the part that made Pink
-    // Thunder a lie rather than a mistake.
-    const correction = suggestStrainCorrection(query);
-
-    // Above this, a correction is confident enough to answer through. Below
-    // it, confirming first is the right call. suggestStrainCorrection never
-    // returns anything under 0.8, so the confirm band is 0.8 to 0.92.
-    //
-    // The cost of confirming is not zero: a Discord user gets 10 lookups an
-    // hour, and "did you mean X?" spends one of them to say nothing. That is
-    // what earns the high band, not a belief that the matcher is infallible.
-    const HIGH_CONFIDENCE_CORRECTION = 0.92;
-
-    let correctedFrom = null;
-    if (!hit && correction && correction.similarity >= HIGH_CONFIDENCE_CORRECTION) {
-      // Re-run retrieval against the corrected name. The cards have to be the
-      // real record for the strain actually being answered, or the embed
-      // fields and the prose describe different strains.
-      //
-      // Only when the lookup MISSED. A query that already resolved named a
-      // real strain, and a correction pointing somewhere else is then the
-      // thing that is wrong, not the query.
-      // The suggestion IS a database name — closestStrainName only ever
-      // returns one — so it is what gets announced, rather than whatever
-      // loose retrieval happens to rank first.
-      const record = strainRecord(correction.suggestion);
-      if (record) {
-        let cards = searchStrains(correction.suggestion, constraints);
-        // Guarantee the announced strain's own card is in the block, and
-        // first. Without this, "Northern-Lights" retrieves Northern-Lights--5
-        // and two cousins, and the reply would describe a strain the embed
-        // fields do not.
-        if (!cards.some((c) => c.strain_name === correction.suggestion)) {
-          cards = [cardFromRecord(record), ...cards].slice(0, 3);
+    // Answered outright like a confident correction rather than offered like a
+    // near miss: containment is not a guess. It is still not an exact hit, so
+    // the note below makes the reply name what they typed. See §4.
+    let familyFrom = null;
+    if (!hit) {
+      const family = familyMatches(query);
+      if (family.length === 1) {
+        const record = strainRecord(family[0]);
+        if (record) {
+          let cards = searchStrains(family[0], constraints);
+          if (!cards.some((c) => c.strain_name === family[0])) {
+            cards = [cardFromRecord(record), ...cards].slice(0, 3);
+          }
+          resolved = family[0];
+          retrieved = cards;
+          hit = true;
+          familyFrom = query;
         }
-        resolved = correction.suggestion;
-        retrieved = cards;
-        hit = true;
-        correctedFrom = correction.wrote;
       }
     }
 
@@ -879,7 +1059,7 @@ export async function handler(event) {
     //   corrected  fuzzy >= 0.92, answered outright as the corrected strain
     //   candidate  fuzzy 0.80..0.92, offered as a maybe, not claimed as theirs
     //   unrelated  nothing close; a strain worth knowing, explicitly not theirs
-    let tier = hit ? (correctedFrom ? "corrected" : "exact") : null;
+    let tier = hit ? (correctedFrom ? "corrected" : familyFrom ? "family" : "exact") : null;
 
     // Tier B. Close enough to be worth putting in front of them, not close
     // enough to answer as though it were theirs. Below the 0.92 bar this used
@@ -914,15 +1094,23 @@ export async function handler(event) {
     const hasCard = tier !== null;
     let strainBlock = hasCard ? formatStrainContext(retrieved, constraints) : "";
 
-    if (correctedFrom) {
+    // §4. EVERY TIER THAT IS NOT AN EXACT HIT NAMES THE QUERY IN THE REPLY.
+    // A card screenshotted on its own hides the miss: the title says one
+    // strain, the body describes it, and nothing on screen records that the
+    // person asked for something else. Quoting what they typed is what makes
+    // the substitution auditable by whoever reads it later.
+    if (familyFrom) {
+      const sugg = resolved.replace(/-+/g, " ");
+      strainBlock += `\n\n[FAMILY NAME, AND YOU SAY SO. They typed "${familyFrom}". Every word of that is in ${sugg}, and it is the only strain in the database that fits, so that is what you are answering. Open by quoting what they typed back at them and naming ${sugg} as what you are reading it as. Then answer for ${sugg} in full from the record above. Do not ask them to confirm.]`;
+    } else if (correctedFrom) {
       const sugg = resolved.replace(/-+/g, " ");
       strainBlock += `\n\n[SPELLING, AND YOU SAY SO. They typed "${correctedFrom}". You are reading that as "${sugg}", and the record above is ${sugg}. Open by naming that, plainly and in your own words, then answer for ${sugg} in full. Do not stop to ask them to confirm, and do not write as though they had typed it correctly — they didn't, and saying so is the honest part.]`;
     } else if (tier === "candidate") {
       const sugg = resolved.replace(/-+/g, " ");
-      strainBlock += `\n\n[NO EXACT MATCH, ONE NEAR THING. They typed "${correction.wrote}". Nothing goes by that name. The record above is ${sugg}, the closest thing in the database, and you are NOT sure it is what they meant.\n\nSay you didn't find what they typed. Then offer ${sugg} as the near thing you do have, name it, and describe it from the record. Offering is not the same as answering: do not write as though ${sugg} is what they asked for.]`;
+      strainBlock += `\n\n[NO EXACT MATCH, ONE NEAR THING. They typed "${correction.wrote}". Nothing goes by that name. The record above is ${sugg}, the closest thing in the database, and you are NOT sure it is what they meant.\n\nSay you didn't find what they typed, and QUOTE IT BACK to them so it is on the screen. Then offer ${sugg} as the near thing you do have, name it, and describe it from the record. Offering is not the same as answering: do not write as though ${sugg} is what they asked for.]`;
     } else if (tier === "unrelated") {
       const sugg = resolved.replace(/-+/g, " ");
-      strainBlock += `\n\n[NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE. They typed "${correction ? correction.wrote : query}". Nothing in the database is close to it and you do not know it. The record above is ${sugg}, picked because it is worth knowing. It has NOTHING to do with what they asked for.\n\nTwo halves, in this order, and the seam between them has to be obvious:\n1. You have never heard of what they typed. Say it plainly. No hedging, no "I think I've heard that one".\n2. Then, as a clearly separate offer, hand them ${sugg} — name it, and say outright that it is a different strain, not theirs.\n\nSomeone skimming sees a card sitting under their query and assumes it answers it. The second half has to make that impossible to believe.]`;
+      strainBlock += `\n\n[NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE. They typed "${correction ? correction.wrote : query}". Nothing in the database is close to it and you do not know it. The record above is ${sugg}, picked because it is worth knowing. It has NOTHING to do with what they asked for.\n\nTwo halves, in this order, and the seam between them has to be obvious:\n1. You have never heard of what they typed. Say it plainly, and QUOTE THE WORDS THEY TYPED back at them so the card cannot be screenshotted without the miss being visible. No hedging, no "I think I've heard that one".\n2. Then, as a clearly separate offer, hand them ${sugg} — name it, and say outright that it is a different strain, not theirs.\n\nSomeone skimming sees a card sitting under their query and assumes it answers it. The second half has to make that impossible to believe.]`;
     }
 
     // formatLookupState's MISS text forbids describing effects or lineage,
