@@ -564,4 +564,121 @@ if (similarRaw) {
   );
 }
 
+// ── B15: family-name matching ───────────────────────────────────────
+//
+// The bug this tier exists for: "thunder fuck og" came back "never heard of
+// that one" while the file holds five Thunder Fucks. Edit distance punishes a
+// missing prefix and an extra suffix, so the family name never reached the
+// near-miss tier at all.
+{
+  recentStrains = [];
+  const picker = ok(await call({ ...LOOKUP, query: "thunder fuck og" }));
+
+  assert.equal(picker.tier, "family_picker", `B15a: 'thunder fuck og' must not miss, got tier=${picker.tier}`);
+  assert.notEqual(picker.tier, "unrelated", "B15b: a family query must never reach tier C");
+  assert(Array.isArray(picker.candidates), "B15c: a picker must carry its candidates");
+  assert(picker.candidates.length >= 2, `B15d: a picker with fewer than 2 candidates should have been a card, got ${picker.candidates.length}`);
+  assert(picker.candidates.length <= 5, `B15e: candidates are capped at 5, got ${picker.candidates.length}`);
+
+  // Every candidate is a real strain, and every one actually contains the
+  // words that were typed. A picker offering something that does not match is
+  // the same silent-substitution failure wearing a button.
+  for (const c of picker.candidates) {
+    const name = String(c.strain || "").toLowerCase();
+    assert(name, "B15f: every candidate needs a strain key");
+    for (const token of ["thunder", "fuck"]) {
+      assert(
+        name.includes(token),
+        `B15g: ${c.strain} does not contain "${token}" and must not be offered for it`
+      );
+    }
+    assert(c.label && c.label.length <= 80, `B15h: ${c.strain} needs a button label within Discord's limit`);
+  }
+
+  // The labels have to differ, or the row is five identical buttons.
+  const labels = new Set(picker.candidates.map((c) => c.label));
+  assert.equal(labels.size, picker.candidates.length, "B15i: button labels must tell the candidates apart");
+
+  // A picker makes no model call, which is what lets it be free. If this ever
+  // starts calling the model, the "not charged again" promise breaks silently.
+  assert.equal(fetchCalls, 0, "B15j: a picker must not spend a model call");
+
+  // No card. The person has not chosen yet, and a card under the buttons
+  // would be the endpoint answering its own question.
+  assert.equal(picker.strain, null, "B15k: a picker names no strain");
+  assert.equal(picker.strain_data, null, "B15l: a picker carries no record");
+  assert.equal(picker.matched, false, "B15m: a picker has matched:false");
+
+  // §4: the reply has to say what they typed, or a screenshot hides the miss.
+  assert(
+    picker.reply.toLowerCase().includes("thunder fuck og"),
+    `B15n: the picker must echo the query, got: ${picker.reply}`
+  );
+}
+
+// ── B16: the guards, which are the whole reason this tier is safe ───
+{
+  recentStrains = [];
+
+  // "og" is two characters and drops out before matching. Without the length
+  // filter it is in 227 names and the picker becomes a menu of the database.
+  const og = ok(await call({ ...LOOKUP, query: "og" }));
+  assert.notEqual(og.tier, "family_picker", "B16a: 'og' must not produce a picker");
+
+  // "sour d" reduces to one token, and "sour" is in 62 names. A lone token
+  // only counts when it lands on a handful.
+  const sour = ok(await call({ ...LOOKUP, query: "sour d" }));
+  assert.notEqual(sour.tier, "family_picker", "B16b: 'sour d' must not produce a picker");
+
+  // ...and a category word is not a family either.
+  for (const wide of ["kush", "purple"]) {
+    const res = ok(await call({ ...LOOKUP, query: wide }));
+    assert.notEqual(res.tier, "family_picker", `B16c: '${wide}' is a category, not a family`);
+  }
+
+  // An exact hit outranks the family tier. "blue dream" shares two tokens
+  // with three names; answering it with buttons would ask somebody which
+  // Blue Dream they meant when they named one exactly.
+  const exact = ok(await call({ ...LOOKUP, query: "blue dream" }));
+  assert.equal(exact.tier, "exact", `B16d: an exact hit must outrank the picker, got ${exact.tier}`);
+  assert.equal(exact.strain, "Blue-Dream", "B16e: 'blue dream' still resolves to Blue-Dream");
+
+  // One candidate is a card, never a picker. A single button is a question
+  // with one answer.
+  const one = ok(await call({ ...LOOKUP, query: "wedding" }));
+  assert.equal(one.tier, "family", `B16f: a single family match must be a card, got ${one.tier}`);
+  assert.equal(one.strain, "Wedding-Cake", `B16g: expected Wedding-Cake, got ${one.strain}`);
+  assert(one.strain_data, "B16h: a family card carries its record");
+  assert.equal(one.candidates, undefined, "B16i: a card must not also offer candidates");
+}
+
+// ── B17: §4, the query is named on every tier that is not an exact hit ──
+//
+// A card screenshotted alone hides the miss: the title names one strain, the
+// body describes it, and nothing records that somebody asked for another.
+{
+  recentStrains = [];
+  for (const [query, expectTier] of [
+    ["skittlez", "candidate"],
+    ["fhqwhgads", "unrelated"],
+    ["wedding", "family"],
+  ]) {
+    const res = ok(await call({ ...LOOKUP, query }));
+    assert.equal(res.tier, expectTier, `B17a: ${query} expected ${expectTier}, got ${res.tier}`);
+    const prompt = userPrompt().toLowerCase();
+    assert(
+      prompt.includes(query.toLowerCase()),
+      `B17b: the ${expectTier} note must hand the model the query verbatim`
+    );
+    assert(
+      /quote/i.test(userPrompt()) || /they typed/i.test(userPrompt()),
+      `B17c: the ${expectTier} note must instruct the reply to name what was typed`
+    );
+  }
+
+  // An exact hit is exempt: there is nothing to disclose.
+  const exact = ok(await call({ ...LOOKUP, query: "blue dream" }));
+  assert.equal(exact.tier, "exact", "B17d: fixture must be an exact hit");
+}
+
 console.log("All bot lookup checks passed.");
