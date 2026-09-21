@@ -301,9 +301,47 @@ for (const t of ["What's it lineage", "whats the flavor", "lineage?", "is it ind
 fCheck(() => assert.strictEqual(asksAboutAStrain("hey what's up"), false, "F4: greeting is not a strain ask"));
 fCheck(() => assert.strictEqual(asksAboutAStrain("heard of blue dream?"), true, "F4: 'heard of' is"));
 
+// ── Misspelled keys stay fixed (migration 014) ──────────────────────
+//
+// Five keys were renamed in one pass because renaming is an app change:
+// liked_strains and bot_usage.recent_strains store strain names as STRINGS,
+// so each old spelling that comes back orphans the rows pointing at it.
+// A regenerated strains.json is the way it would come back, and it would come
+// back silently — the site would just start showing "Blue Champange" again.
+const RENAMED = [
+  ["Afgahni-Bullrider", "Afghani-Bullrider"],
+  ["Blue-Champange", "Blue-Champagne"],
+  ["Sour-Chees", "Sour-Cheese"],
+  ["Herojuana", "Herijuana"],
+  ["El-Jeffe", "El-Jefe"],
+];
+{
+  const { loadDataFile } = await import("../lib/dataFile.js");
+  const all = loadDataFile("strains.json");
+  const names = new Set(all.map((r) => String(r.Strain || "").trim()));
+
+  for (const [wrong, right] of RENAMED) {
+    assert(!names.has(wrong), `R1: "${wrong}" is back in strains.json — see migration 014`);
+    assert(names.has(right), `R2: "${right}" is missing from strains.json`);
+  }
+
+  // The same typo inside another record's prose. Anesthesia's description
+  // names this strain, and a file that calls it Herijuana in one place and
+  // Herojuana in another disagrees with itself.
+  const stillWrong = all.filter((r) =>
+    RENAMED.some(([wrong]) => String(r.Description || "").includes(wrong))
+  );
+  assert.equal(
+    stillWrong.length,
+    0,
+    `R3: old spellings left in descriptions of: ${stillWrong.map((r) => r.Strain).join(", ")}`
+  );
+}
+
 console.log(
   `strain-match-check: OK — ${SPLIT_JOIN.length} split/join cases, ` +
   `${fChecks} Addendum C2 assertions, ` +
   `${STILL_MATCHES.length} regression cases, ${MUST_NOT_MATCH.length} false-positive cases, ` +
-  `${USED.size} names confirmed present in strains.json`
+  `${USED.size} names confirmed present in strains.json, ` +
+  `${RENAMED.length} renamed keys held`
 );
