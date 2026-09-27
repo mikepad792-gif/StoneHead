@@ -1,6 +1,6 @@
 # StoneHead AI — Terms of Service
 
-**Last updated:** September 26, 2026
+**Last updated:** September 27, 2026
 
 Plain language, because you should be able to read this.
 
@@ -133,7 +133,7 @@ When a pass ends, you're back on the free tier. Nothing else changes.
 
 **Rollover photos, in plain words.** On each day you have a pass, if you don't use all of that day's photos, 1 photo goes into your rollover, however many you left unused. Days you don't open the app count as unused. Photos come out of today's allowance first and only then out of rollover, and the app asks before it uses a rollover photo (you can turn that warning off in your profile). On the 1st and the 16th of every month, half of your rollover expires, rounded in your favor (7 becomes 4, 1 stays 1). If your pass ends, your rollover stays: it stops growing, keeps halving on the 1st and 16th, and gets used after your free daily photos run out. Rollover can't be bought, has **no cash value**, can't be transferred, and is deleted with your account. Daily photo counts reset at midnight UTC; the app shows you when that is in your time zone.
 
-**Refunds.** If you change your mind, ask within **3 days** of buying and I'll refund the pass in full. After 3 days, email me and I'll review it case by case. Email stoneheadAI@gmail.com with the email address you bought it with. A refunded pass ends when the refund goes through; if you'd stacked another pass after it, that one moves up to start right away. Rollover you've already earned stays.
+**Refunds.** If you change your mind, ask within **3 days** of buying and I'll refund the pass in full. After 3 days, email me and I'll review it case by case. Email stoneheadAI@gmail.com with the email address you bought it with. A refunded pass ends when the refund goes through; if you'd stacked another pass after it, that one moves up to start right away. Rollover you've already earned stays. After a refund, you can't buy another pass for **21 days**, so passes can't be bought, used, and refunded over and over.
 
 **Payments** are handled by Stripe. Your card details go to Stripe, not to me; see the Privacy Policy.
 
@@ -176,6 +176,8 @@ If any part of these terms turns out to be unenforceable, the rest still stands.
 ## Changes to these terms
 
 If I change these terms meaningfully, I'll say so in the app and in the Discord.
+
+**September 27, 2026.** Refunds: after a refunded pass, a new one can't be bought for 21 days (the **Money** section).
 
 **September 26, 2026.** Added passes, photo limits, rollover photos, and the refund policy (the **Money** section). Before this, the terms said nothing was for sale. Deleting your account now has one exception, covered under **Your account**.
 

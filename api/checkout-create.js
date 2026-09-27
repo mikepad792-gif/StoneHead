@@ -6,7 +6,9 @@
 // webhook (api/stripe-webhook.js) once Stripe says it's paid, never here.
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { PASSES, getStripe, siteUrl } from "../lib/stripe.js";
+import { REFUND_COOLDOWN_DAYS, refundCooldownUntil } from "../lib/passStatus.js";
 
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
@@ -28,6 +30,16 @@ export async function handler(event) {
   const pass = body?.pass;
   if (typeof pass !== "string" || !Object.prototype.hasOwnProperty.call(PASSES, pass)) {
     return errorResponse(400, 'pass must be "7day" or "30day"');
+  }
+
+  // A refunded pass blocks buying another for a while (buy, use, refund,
+  // repeat). Checked before Stripe is touched, so no session is created.
+  const blockedUntil = await refundCooldownUntil(supabaseAdmin, user_id);
+  if (blockedUntil) {
+    return jsonResponse(403, {
+      error: `after a refund, passes can't be bought for ${REFUND_COOLDOWN_DAYS} days. you can buy again ${blockedUntil.slice(0, 10)}`,
+      blocked_until: blockedUntil,
+    });
   }
 
   const stripe = getStripe();
