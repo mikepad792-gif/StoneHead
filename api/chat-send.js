@@ -2,11 +2,14 @@
 // POST /api/chat/send
 // Core chat endpoint for StoneHead AI
 //
-// Request:  { message, thread_id, tab }
-// Response: { reply, tokens_in, tokens_out, usage_remaining }
+// Request:  { message, thread_id, tab, photo_read_id? }
+// Response: { reply, tokens_in, tokens_out, usage_remaining, assistant_message_id, rateable, ... }
 //
 // tab="vibe" → Vibe prompt, no retrieval
 // tab="plant" → Plant prompt + strain retrieval + liked strains context
+// photo_read_id (plant only) → a photo turn. The read was made by
+//   api/plant-photo-read.js; this function injects it as text and the chat
+//   model replies. This model never sees the image. See lib/photoRead.js.
 // Both tabs  → periodic philosophy pull via tag matching
 //
 // Convention: Netlify Functions — export async function handler(event)
@@ -43,6 +46,7 @@ import {
   detectFrame,
   isProductSettled,
   classifyTopic,
+  classifyPlantTopic,
   hasDiagnosisCue,
   routeVibeTurn,
 } from "../lib/frameDetect.js";
@@ -64,7 +68,12 @@ import { MINOR_PROMPT, MINOR_CRISIS_NOTE, MINOR_SUBSTANCE_NUDGE } from "../promp
 import { buildCrisisPrompt } from "../prompts/crisis.js";
 import { buildSafetyCard, appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
-import { retrieveCultivation, buildCultivationContext } from "../lib/cultivationSearch.js";
+import {
+  retrieveCultivation,
+  buildCultivationContext,
+  retrievalForIds,
+  issueName,
+} from "../lib/cultivationSearch.js";
 import {
   CULTIVATION_MODE_PROMPT,
   CONSUMPTION_SAFETY_PROMPT,
@@ -74,13 +83,34 @@ import {
   fetchSessionMemories,
   formatSessionMemoryBlock,
 } from "../lib/sessionMemory.js";
-import { stripModelTags } from "../lib/sanitize.js";
+import { stripModelTags, stripLongDashes } from "../lib/sanitize.js";
+import { APP_VERSION } from "../src/version.js";
+import {
+  PHOTO_ONLY_TEXT,
+  formatPhotoReadBlock,
+  photoTurnLead,
+  isPhotoFollowUp,
+  carriedPhotoMatches,
+} from "../lib/photoRead.js";
+import { loadPhotoContext, linkPhotoRead } from "../lib/photoStore.js";
+import { PHOTO_TURN_PROMPT, PHOTO_MEMORY_NOTE, PHOTO_CARRY_NOTE } from "../prompts/photo.js";
 import { openrouterChat } from "../lib/openrouter.js";
 import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10) || 700;
 const AI_TEMPERATURE = 0.75;
+
+// photo_read_id is a photo_reads primary key (uuid_generate_v4).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// No photo state for this turn: vibe tab, or a plant turn before any lookup.
+const NO_PHOTOS = Object.freeze({
+  photoMessageIds: new Set(),
+  lastLinked: null,
+  turnRead: null,
+  turnError: null,
+});
 
 // asksAboutAStrain moved to lib/strainSearch.js (Addendum C2) — the follow-up
 // and re-check helpers need the same cue set, and two copies of a gate this
@@ -135,10 +165,23 @@ export async function handler(event) {
 
   const { message, thread_id, tab } = body;
 
-  if (!message || typeof message !== "string" || !message.trim()) {
+  // A photo turn (Talk the Plant only) carries the id of a read made by
+  // api/plant-photo-read.js, and it may have no text at all: the photo is the
+  // message. Past this validation it is an ordinary plant turn with one extra
+  // block of context.
+  const photo_read_id = body.photo_read_id ?? null;
+  if (photo_read_id !== null && (typeof photo_read_id !== "string" || !UUID_RE.test(photo_read_id))) {
+    return errorResponse(400, "photo_read_id is invalid");
+  }
+  if (message !== undefined && message !== null && typeof message !== "string") {
     return errorResponse(400, "message is required");
   }
-  if (message.length > 4000) {
+  const text = typeof message === "string" ? message : "";
+
+  if (!text.trim() && !photo_read_id) {
+    return errorResponse(400, "message is required");
+  }
+  if (text.length > 4000) {
     return errorResponse(400, "message too long (max 4000 characters)");
   }
   if (!thread_id) {
@@ -147,16 +190,49 @@ export async function handler(event) {
   if (!tab || (tab !== "vibe" && tab !== "plant")) {
     return errorResponse(400, 'tab must be "vibe" or "plant"');
   }
+  if (photo_read_id && tab !== "plant") {
+    return errorResponse(400, "photos are only read on Talk the Plant");
+  }
 
   try {
-    // ── Verify thread ownership ───────────────────────────────────────
-    const { data: thread, error: threadError } = await supabaseAdmin
-      .from("threads")
-      .select("id, user_id, tab, title")
-      .eq("id", thread_id)
-      .eq("user_id", user_id)
-      .single();
+    // ── Load everything the turn needs, in ONE round of parallel reads ─
+    // These four reads don't depend on each other, only on user_id and
+    // thread_id, which we already have. They used to run one after another,
+    // four network round trips before any real work started; now it is one.
+    // The checks below still run in the original order (thread 404, then
+    // user 404, then history 500), so every error response is unchanged.
+    // History for a thread this user doesn't own may get read, but it is
+    // never used or returned: the ownership check rejects first.
+    // fetchSessionMemories never throws (it logs and returns []), so starting
+    // it early is safe, and on the early-return paths it is simply unused.
+    const [
+      { data: thread, error: threadError },
+      { data: user, error: userError },
+      { data: recentHistory, error: historyError },
+      memories,
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("threads")
+        .select("id, user_id, tab, title")
+        .eq("id", thread_id)
+        .eq("user_id", user_id)
+        .single(),
+      supabaseAdmin
+        .from("users")
+        .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified, self_reported_age_band")
+        .eq("id", user_id)
+        .single(),
+      // History: see the LOADED BEFORE THE DAILY LIMIT note below.
+      supabaseAdmin
+        .from("messages")
+        .select("id, role, content, content_augmented")
+        .eq("thread_id", thread_id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      fetchSessionMemories(user_id),
+    ]);
 
+    // ── Verify thread ownership ───────────────────────────────────────
     if (threadError || !thread) {
       return errorResponse(404, "Thread not found");
     }
@@ -164,12 +240,6 @@ export async function handler(event) {
     // ── Check & manage usage counter ──────────────────────────────────
     // Read-side handled by Thread 1 (profile/get.js).
     // Write-side handled here: reset if new day, then check limit.
-    const { data: user, error: userError } = await supabaseAdmin
-      .from("users")
-      .select("daily_message_count, last_message_date, is_subscribed, subscription_expires, is_founder, age_verified, self_reported_age_band")
-      .eq("id", user_id)
-      .single();
-
     if (userError || !user) {
       return errorResponse(404, "User not found");
     }
@@ -219,20 +289,18 @@ export async function handler(event) {
     // entries already injected in this thread are stamped into it, and
     // recentHistoryIds() replays them back out. It is NEVER put in front of
     // the model from here — aiMessages maps `content` only, below.
-    const { data: recentHistory, error: historyError } = await supabaseAdmin
-      .from("messages")
-      .select("role, content, content_augmented")
-      .eq("thread_id", thread_id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
+    // id comes along so earlier photo turns can be recognized and labeled
+    // (lib/photoStore.js loadPhotoContext, below).
+    // (History is fetched in the parallel block above.)
     if (historyError) {
       return errorResponse(500, "Failed to load thread history");
     }
 
     const history = (recentHistory || []).slice().reverse();
 
-    let userContent = message.trim();
+    // A photo sent with no text is stored as PHOTO_ONLY_TEXT, which the UI
+    // hides behind the photo marker and the model sees as a labeled photo.
+    let userContent = text.trim() || PHOTO_ONLY_TEXT;
     let content_augmented = null;
 
     // ── Age self-identification (Addendum A2) ─────────────────────────
@@ -251,14 +319,16 @@ export async function handler(event) {
         ageBand = stated.band;
         // The BAND only. Never the number — the behavior doesn't need it, and
         // storing a child's exact age is collecting more than the job requires.
+        const agePatch = { self_reported_age_band: ageBand, age_band_set_at: new Date().toISOString() };
+        // Revoke a prior 21+ confirmation. It cannot stand next to this.
+        // Same row, same moment, so it rides the same UPDATE (was two).
+        if (blocksCannabis(ageBand) && user.age_verified) {
+          agePatch.age_verified = false;
+        }
         await supabaseAdmin
           .from("users")
-          .update({ self_reported_age_band: ageBand, age_band_set_at: new Date().toISOString() })
+          .update(agePatch)
           .eq("id", user_id);
-        // Revoke a prior 21+ confirmation. It cannot stand next to this.
-        if (blocksCannabis(ageBand) && user.age_verified) {
-          await supabaseAdmin.from("users").update({ age_verified: false }).eq("id", user_id);
-        }
         console.warn("age intercept:", JSON.stringify({
           band: ageBand, thread_id, signal: stated.signal,
         }));
@@ -272,8 +342,8 @@ export async function handler(event) {
     if (belowFloor(ageBand)) {
       console.error("under-13 account:", JSON.stringify({ user_id, thread_id }));
       await supabaseAdmin.from("messages").insert([
-        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0 },
-        { thread_id, role: "assistant", content: UNDER_13_REPLY, tokens_in: 0, tokens_out: 0 },
+        { thread_id, role: "user", content: userContent, tokens_in: 0, tokens_out: 0, app_version: APP_VERSION },
+        { thread_id, role: "assistant", content: UNDER_13_REPLY, tokens_in: 0, tokens_out: 0, app_version: APP_VERSION },
       ]);
       return jsonResponse(200, {
         reply: UNDER_13_REPLY,
@@ -290,6 +360,17 @@ export async function handler(event) {
     if (tab === "plant" && blocksCannabis(ageBand)) {
       return errorResponse(403, "Age verification required for Talk the Plant");
     }
+
+    // ── Photo context (Talk the Plant) ────────────────────────────────
+    // Which earlier user messages in this thread came with photos, the last
+    // read (for the one-turn carry below), and the validated read for THIS
+    // turn if it is a photo turn. Loaded here, but a bad read is not acted on
+    // until after the safety layer has run: a safety turn never looks at
+    // photos, so a stale photo id must not be able to stand between someone
+    // and that response.
+    const photoCtx = tab === "plant"
+      ? await loadPhotoContext(supabaseAdmin, { user_id, thread_id, photo_read_id })
+      : NO_PHOTOS;
 
     // ── Crisis intercept ──────────────────────────────────────────────
     // ONE call, scored with history so the post-crisis window can promote.
@@ -345,6 +426,20 @@ export async function handler(event) {
       }));
     }
 
+    // A photo that can't be used (expired, already sent, never finished) is an
+    // error for an ordinary turn and irrelevant to a safety turn.
+    if (photoCtx.turnError && !safetyMode) {
+      return jsonResponse(photoCtx.turnError.status, {
+        error: photoCtx.turnError.error,
+        code: photoCtx.turnError.code,
+      });
+    }
+    // THIS turn is a photo turn: a validated read, and no safety state. In
+    // safety mode the crisis prompt replaces the plant prompt entirely and the
+    // photo is not discussed (it is still linked below, because it was sent).
+    const photoTurn = !!photoCtx.turnRead && !safetyMode;
+    const photoRead = photoTurn ? photoCtx.turnRead.read : null;
+
     // Enforce limit for free-tier users — but NEVER on a safety turn.
     // Someone out of messages is still someone, and LIMIT_MESSAGE is not an
     // acceptable answer to "I don't want to be here anymore" or to "I think I
@@ -376,6 +471,21 @@ export async function handler(event) {
     // possible path.
     const suppressInjection =
       !!safetyMode || shouldSuppressInjection(crisis.tier) || postSubstance;
+
+    // ── The one-turn carry after a photo ──────────────────────────────
+    // "ok how do I fix it" right after a photo classifies as STRAIN (the
+    // catch-all) and would get no grow reference at all, so the model would
+    // answer the most important follow-up from memory. When the turn right
+    // before this one was a photo that matched something, and this message
+    // reads like a follow-up on it, that photo's matched records ride along
+    // once. The cue list is narrow on purpose (lib/photoRead.js); a missed
+    // carry costs some grounding, a false one drags a new topic back to the
+    // photo.
+    const carryIds =
+      tab === "plant" && !photoTurn && !suppressInjection &&
+      isPhotoFollowUp(userContent) && !asksAboutAStrain(userContent)
+        ? carriedPhotoMatches(history, photoCtx.lastLinked)
+        : null;
 
     // ── Build system prompt ───────────────────────────────────────────
     let systemPrompt;
@@ -420,10 +530,19 @@ export async function handler(event) {
       systemPrompt = CHARACTER_CORE + "\n\n" + buildPlantPrompt(liked_strains);
 
       // Topic routing (silent — never surfaced as a mode switch).
-      topic = classifyTopic(userContent);
+      // Photo turns, and the one carried turn after them, are about a plant
+      // even when the words aren't ("is this safe to smoke?" under a photo of
+      // a bud): classifyPlantTopic routes them CULTIVATION, or
+      // CONSUMPTION-SAFETY when the words are about the person's head.
+      topic = photoTurn || carryIds ? classifyPlantTopic(userContent) : classifyTopic(userContent);
 
       if (topic === "CULTIVATION") systemPrompt += "\n\n" + CULTIVATION_MODE_PROMPT;
       else if (topic === "CONSUMPTION-SAFETY") systemPrompt += "\n\n" + CONSUMPTION_SAFETY_PROMPT;
+
+      // How to voice a photo read. And once a thread has photos in it, every
+      // later turn is told plainly that it can't see them.
+      if (photoTurn) systemPrompt += "\n\n" + PHOTO_TURN_PROMPT;
+      if (photoCtx.photoMessageIds.size > 0) systemPrompt += "\n\n" + PHOTO_MEMORY_NOTE;
     } else {
       systemPrompt = CHARACTER_CORE + "\n\n" + VIBE_MODE;
 
@@ -493,7 +612,7 @@ export async function handler(event) {
     // on crisis turns and that call stands; the C1 failure was an injected
     // memory surfacing at the worst moment, so the count drops to one and it
     // arrives labelled as context rather than as material.
-    const memories = await fetchSessionMemories(user_id);
+    // `memories` was fetched in the parallel block at the top of the handler.
     const memBlock = formatSessionMemoryBlock(memories, { safetyMode: !!safetyMode }); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
@@ -503,7 +622,21 @@ export async function handler(event) {
     const seenHistoryIds = recentHistoryIds(history);
 
     // ── Build user message augmentation (plant tab) ──────────────────
-    if (tab === "plant" && topic === "CULTIVATION") {
+    if (tab === "plant" && photoTurn) {
+      // A PHOTO TURN. The read is the chat model's only view of the photo, so
+      // it goes in whatever the topic. The reference records for what it
+      // matched ride along, through the same buildCultivationContext every
+      // text diagnosis uses, so a photo diagnosis and a typed one are voiced
+      // from identical facts. Not frame-gated and not suppressed: this is
+      // the answer to what they asked, not lore.
+      const matchIds = photoRead.status === "ok" ? photoRead.matches.map((m) => m.id) : [];
+      const referenceBlock = matchIds.length ? buildCultivationContext(retrievalForIds(matchIds)) : "";
+      content_augmented = photoTurnLead(userContent) + formatPhotoReadBlock(photoRead, issueName) + referenceBlock;
+    } else if (tab === "plant" && topic === "CULTIVATION" && carryIds) {
+      // The one-turn carry (see carryIds above).
+      const carryBlock = buildCultivationContext(retrievalForIds(carryIds));
+      if (carryBlock) content_augmented = userContent + PHOTO_CARRY_NOTE + carryBlock;
+    } else if (tab === "plant" && topic === "CULTIVATION") {
       // Only pull a diagnosis reference when the message actually describes a
       // SYMPTOM. A grow-trait / how-to question ("is Blue Dream hard to grow?")
       // has no symptom to diagnose — the cultivation prompt's per-strain
@@ -680,9 +813,16 @@ export async function handler(event) {
     }
 
     // ── Assemble messages array for AI ────────────────────────────────
+    // Earlier photo turns are labeled for the model, here and never in
+    // storage: content stays exactly what the user typed. The label is what
+    // PHOTO_MEMORY_NOTE points at. (The current photo turn labels itself,
+    // inside content_augmented.)
     const aiMessages = [
       { role: "system", content: systemPrompt },
-      ...history.map((m) => ({ role: m.role, content: m.content })),
+      ...history.map((m) => ({
+        role: m.role,
+        content: m.role === "user" && photoCtx.photoMessageIds.has(m.id) ? photoTurnLead(m.content) : m.content,
+      })),
       { role: "user", content: content_augmented || userContent },
     ];
 
@@ -811,24 +951,50 @@ export async function handler(event) {
     // ── Store user message ────────────────────────────────────────────
     // content = what the user sees (raw message)
     // content_augmented = message + strain/philosophy context (plant tab)
-    await supabaseAdmin.from("messages").insert({
-      thread_id,
-      role: "user",
-      content: userContent,
-      content_augmented: content_augmented || null,
-      tokens_in: 0,
-      tokens_out: 0,
-    });
+    const { data: userRow, error: userInsertError } = await supabaseAdmin
+      .from("messages")
+      .insert({
+        thread_id,
+        role: "user",
+        content: userContent,
+        content_augmented: content_augmented || null,
+        tokens_in: 0,
+        tokens_out: 0,
+        app_version: APP_VERSION,
+      })
+      .select("id")
+      .single();
+    if (userInsertError) {
+      console.error("user message insert failed:", userInsertError.message);
+    }
+
+    // Link the read to the message it came with. On a safety turn too: the
+    // photo was sent even though that turn didn't discuss it, and the thread
+    // should still show it came with one.
+    if (photoCtx.turnRead && userRow?.id) {
+      await linkPhotoRead(supabaseAdmin, photoCtx.turnRead.id, userRow.id);
+    }
 
     // ── Store assistant response ──────────────────────────────────────
-    await supabaseAdmin.from("messages").insert({
-      thread_id,
-      role: "assistant",
-      content: reply,
-      content_augmented: null,
-      tokens_in,
-      tokens_out,
-    });
+    // Stays sequential after the user-message insert (created_at order is
+    // what threads read back by). The id comes back so the reply can be
+    // rated before any reload.
+    const { data: assistantRow, error: assistantInsertError } = await supabaseAdmin
+      .from("messages")
+      .insert({
+        thread_id,
+        role: "assistant",
+        content: reply,
+        content_augmented: null,
+        tokens_in,
+        tokens_out,
+        app_version: APP_VERSION,
+      })
+      .select("id")
+      .single();
+    if (assistantInsertError) {
+      console.error("assistant message insert failed:", assistantInsertError.message);
+    }
 
     // ── Update thread timestamp ───────────────────────────────────────
     //
@@ -842,43 +1008,6 @@ export async function handler(event) {
     if (safetyMode) {
       threadPatch.title = tab === "plant" ? "new plant chat" : "new vibe";
     }
-    await supabaseAdmin
-      .from("threads")
-      .update(threadPatch)
-      .eq("id", thread_id);
-
-    // ── Post-response work → background function ─────────────────────
-    // Title, session memory, consolidation, and the conversational strain
-    // save run in api/chat-postwork-background.js — a sync Lambda freezes at
-    // return, so detached promises here are lost/deferred. The await below is
-    // only the 202 handshake (~100ms), not the work. The background function
-    // re-derives everything from the DB, which is authoritative because both
-    // messages were inserted above.
-    //
-    // SKIPPED ENTIRELY ON A SAFETY TURN. Under Addendum B these turns reach
-    // the model like any other, so all three of the Doc 3a exemptions would
-    // have silently come back on unless they were re-applied here. Decided
-    // deliberately (probe C1): "user was suicidal on Aug 5" must never be
-    // written into a memory profile and surfaced cheerfully three weeks later
-    // in a casual conversation. Title generation is suppressed with it — a
-    // thread titled after someone's worst night sits in their sidebar forever.
-    if (!safetyMode) {
-      try {
-        await fetch(
-          `${process.env.URL}/.netlify/functions/chat-postwork-background`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-internal-secret": process.env.INTERNAL_TASK_SECRET,
-            },
-            body: JSON.stringify({ user_id, thread_id, tab }),
-          }
-        );
-      } catch (e) {
-        console.error("postwork invoke failed (non-blocking):", e.message);
-      }
-    }
 
     // ── Increment usage counter ───────────────────────────────────────
     // Write-side daily reset: if new day, set to 1; otherwise increment.
@@ -888,32 +1017,78 @@ export async function handler(event) {
       ? currentCount
       : user.last_message_date !== today ? 1 : currentCount + 1;
 
-    if (!safetyMode) {
-      await supabaseAdmin
-        .from("users")
-        .update({
-          daily_message_count: newCount,
-          last_message_date: today,
-        })
-        .eq("id", user_id);
-    }
+    // ── The four post-insert writes run in parallel ───────────────────
+    // Thread timestamp, postwork handshake, usage counter, activity bump.
+    // They used to run one after another while the reply sat finished,
+    // four round trips the user waited through before seeing anything.
+    // None depends on another: they touch different tables, or different
+    // columns of different rows, and postwork only reads the messages
+    // (inserted above, still sequential so created_at keeps its order) and
+    // the thread title, which this patch only changes on safety turns,
+    // when postwork does not run. Error handling is unchanged: each one
+    // either logs and continues or is ignored, exactly as before.
+    await Promise.all([
+      // Update thread timestamp (and the safety-turn title reset above).
+      supabaseAdmin
+        .from("threads")
+        .update(threadPatch)
+        .eq("id", thread_id),
 
-    // ── Retention instrumentation (append-only, per-user per-day) ─────
-    // Counts for EVERYONE, founders included — like the counter above, the
-    // founder check skips the limit, not the increment. Dashboards exclude
-    // internal accounts via users.is_internal, not by skipping the write.
-    // Non-blocking: a metrics miss must never fail a chat message.
-    //
-    // Not on a safety turn. Someone's worst night is not a DAU.
-    if (!safetyMode) {
-      const { error: activityError } = await supabaseAdmin.rpc("bump_activity_day", {
-        p_user_id: user_id,
-        p_day: today,
-      });
-      if (activityError) {
-        console.error("bump_activity_day failed (non-blocking):", activityError.message);
-      }
-    }
+      // ── Post-response work → background function ─────────────────────
+      // Title, session memory, consolidation, and the conversational strain
+      // save run in api/chat-postwork-background.js — a sync Lambda freezes at
+      // return, so detached promises here are lost/deferred. The await is
+      // only the 202 handshake (~100ms), not the work. The background function
+      // re-derives everything from the DB, which is authoritative because both
+      // messages were inserted above.
+      //
+      // SKIPPED ENTIRELY ON A SAFETY TURN. Under Addendum B these turns reach
+      // the model like any other, so all three of the Doc 3a exemptions would
+      // have silently come back on unless they were re-applied here. Decided
+      // deliberately (probe C1): "user was suicidal on Aug 5" must never be
+      // written into a memory profile and surfaced cheerfully three weeks later
+      // in a casual conversation. Title generation is suppressed with it — a
+      // thread titled after someone's worst night sits in their sidebar forever.
+      !safetyMode
+        ? fetch(`${process.env.URL}/.netlify/functions/chat-postwork-background`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-secret": process.env.INTERNAL_TASK_SECRET,
+            },
+            body: JSON.stringify({ user_id, thread_id, tab }),
+          }).catch((e) => {
+            console.error("postwork invoke failed (non-blocking):", e.message);
+          })
+        : null,
+
+      !safetyMode
+        ? supabaseAdmin
+            .from("users")
+            .update({
+              daily_message_count: newCount,
+              last_message_date: today,
+            })
+            .eq("id", user_id)
+        : null,
+
+      // ── Retention instrumentation (append-only, per-user per-day) ─────
+      // Counts for EVERYONE, founders included — like the counter above, the
+      // founder check skips the limit, not the increment. Dashboards exclude
+      // internal accounts via users.is_internal, not by skipping the write.
+      // Non-blocking: a metrics miss must never fail a chat message.
+      //
+      // Not on a safety turn. Someone's worst night is not a DAU.
+      !safetyMode
+        ? supabaseAdmin
+            .rpc("bump_activity_day", { p_user_id: user_id, p_day: today })
+            .then(({ error: activityError }) => {
+              if (activityError) {
+                console.error("bump_activity_day failed (non-blocking):", activityError.message);
+              }
+            })
+        : null,
+    ]);
 
     // ── Calculate usage_remaining ─────────────────────────────────────
     // null if unlimited (founder or subscribed), integer if free tier.
@@ -948,6 +1123,9 @@ export async function handler(event) {
       handoff, // "plant" | null
       handoff_message: handoff ? userContent : null, // carried into the new thread
       safetyCard, // object | null — rendered below the message by the client
+      assistant_message_id: assistantRow?.id || null,
+      // Thumbs up/down: never on a safety turn (lib/feedbackEligibility.js).
+      rateable: !safetyMode && !!assistantRow?.id,
     });
   } catch (err) {
     console.error("chat/send error:", err);
@@ -1000,5 +1178,9 @@ async function callChatModel(aiMessages) {
       .replace(/\s+/g, " ")
       .trim();
   }
+  // Last, so it catches the recovery path above too. The character file asks
+  // him not to use long dashes and the ask does not hold on its own, so the
+  // guarantee lives here, same as the Discord bot (api/strain-lookup.js).
+  reply = stripLongDashes(reply);
   return { ok: true, reply, rawContent, finishReason, aiData };
 }

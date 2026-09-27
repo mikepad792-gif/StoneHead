@@ -9,3 +9,13 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Home-screen app support. Production only: a service worker in development
+// would cache files you're actively editing.
+if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("service worker registration failed:", err);
+    });
+  });
+}

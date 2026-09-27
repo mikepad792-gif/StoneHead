@@ -20,6 +20,13 @@ export async function handler(event) {
     return errorResponse(405, "Method not allowed");
   }
 
+  // Invite-only deploys (the test site): accounts are created in the Supabase
+  // dashboard, never through this endpoint. Hiding the button alone would not
+  // stop a direct POST.
+  if (process.env.DISABLE_SIGNUP === "true") {
+    return errorResponse(403, "Sign-up is disabled on this site");
+  }
+
   let body;
   try {
     body = JSON.parse(event.body);

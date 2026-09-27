@@ -32,18 +32,20 @@
     <main>
       <a class="back" href="/">&larr; back to Stone Head</a>
       <h1 id="stonehead-ai-privacy-policy">StoneHead AI — Privacy Policy</h1>
-      <p><strong>Last updated:</strong> September 20, 2026</p>
+      <p><strong>Last updated:</strong> September 26, 2026</p>
       <p>StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.</p>
       <hr />
       <h2 id="the-short-version">The short version</h2>
       <ul>
       <li>I store your email, your username, and your conversations, because the app doesn't work otherwise.</li>
       <li>Your messages are sent to third-party AI providers to generate replies. That's how the app works, and it's the part I control least.</li>
+      <li>Photos you send on Talk the Plant go to an AI to be looked at, and they're never saved. See <a href="#photos-talk-the-plant-only">Photos</a>.</li>
       <li>Before your message goes anywhere, the app checks it against a list of phrases that suggest a crisis or a drug emergency. See <a href="#the-safety-layer">The safety layer</a> — it's the one part of the app that reads your words before the AI does.</li>
       <li>I don't train AI models on your conversations. I also can't speak for what the AI providers do — see <a href="#about-training">Training</a> below, where I've been specific about that.</li>
+      <li>If you rate a reply with a thumbs up or down, I can read that one reply and your message before it, even if the thread's data toggle is off. A shared thumbs-up can become a test case for tuning StoneHead. See <a href="#reply-ratings">Reply ratings</a>.</li>
       <li>StoneHead remembers things about you across sessions — that's a feature, and you can delete it.</li>
       <li>I don't sell your data. I don't run ads. There is no analytics tracker following you around.</li>
-      <li>You can delete your account and everything in it, at any time, from the app.</li>
+      <li>You can delete your account and everything in it, at any time, from the app. One exception: memory summaries from chats where you turned the data toggle on are kept, with nothing that links them to you.</li>
       <li>There's a Discord bot. It gets your Discord user ID and server ID and uses them to count requests and to avoid repeating itself. Nothing else. See <a href="#the-discord-bot">The Discord bot</a>.</li>
       </ul>
       <hr />
@@ -54,7 +56,7 @@
       <li>Your username (shown in the app)</li>
       <li>Your password (stored as a secure hash — I cannot see your password)</li>
       <li>Whether you've confirmed you're 21+ (required for the Talk the Plant tab), and, if you've mentioned your age in conversation, which broad age band you said you were in — I store the band, never a birth date</li>
-      <li>Whether you have a subscription, and when it expires</li>
+      <li>Whether you have a pass, and when it ends</li>
       </ul>
       <p><strong>Your conversations</strong></p>
       <ul>
@@ -70,6 +72,31 @@
       <li><strong>Liked strains</strong> — strains you've saved, with any notes you added</li>
       </ul>
       <p>This is what makes StoneHead feel like it knows you. It's also the most personal data in the app. <strong>You can view and delete these at any time in the memory section of the app.</strong></p>
+      <h3 id="reply-ratings">Reply ratings</h3>
+      <p>Under each StoneHead reply there's a thumbs up and a thumbs down. If you use them, I save:</p>
+      <ul>
+      <li>which reply you rated, and whether it was up or down</li>
+      <li>the comment you wrote, if you wrote one (it's optional, on either thumb)</li>
+      <li>which version of StoneHead you were using</li>
+      <li>for a thumbs up, whether you chose "share it" (every saved thumbs-up has), and whether you asked not to see that prompt again</li>
+      </ul>
+      <p>Rating a reply is permission for me to read <strong>that reply and the message you sent right before it</strong>, even in a thread with the data toggle off. Only that one exchange, not the rest of the thread. That's what lets me see what went wrong behind a thumbs down.</p>
+      <p>A thumbs-up you share may be used to train and improve StoneHead. Here, that means one specific thing: the exchange can become a test case or an example I use when I tune StoneHead's prompts and reference material. It does not mean training an AI model. See <a href="#about-training">About training</a>.</p>
+      <p>Replies to messages that set off the <a href="#the-safety-layer">safety layer</a> can't be rated at all. Someone's worst night doesn't become test data.</p>
+      <p>You can take a rating back at any time by tapping the same thumb again, which deletes it. Ratings are also deleted when you delete the thread or your account.</p>
+      <h3 id="photos-talk-the-plant-only">Photos (Talk the Plant only)</h3>
+      <p>On Talk the Plant you can send a photo of your plant. Here's everything that happens to it:</p>
+      <ul>
+      <li>It goes through OpenRouter to <strong>Anthropic's Claude</strong>, which looks at it and writes a short text description of what's on the plant. StoneHead answers from that description. The model that writes StoneHead's replies can't see images, which is why a second AI is involved.</li>
+      <li><strong>The photo itself is never saved.</strong> It's on my server for the few seconds it takes to send, and it's never written to the database, to storage, or to logs.</li>
+      <li>What I do save: that text description, which conversation it belongs to, and which AI wrote it. It's deleted when you delete the thread or your account.</li>
+      <li>Before a photo leaves your phone, the app redraws it, which strips the hidden data phones attach to pictures, including GPS location. The server strips it again in case anything slipped through.</li>
+      <li>The photo request is sent with OpenRouter's setting that only allows providers who don't keep or train on what they're sent.</li>
+      <li>StoneHead is told to ignore people in photos, but whatever is in the frame still gets sent. Keep faces, and anything with your address on it, out of the shot.</li>
+      <li>There's a daily limit on photos, because each one costs real money to read. See the Terms for how the limit and rollover work.</li>
+      </ul>
+      <p><strong>Passes and payments</strong> If you buy a pass, you pay on Stripe's checkout page, and <strong>Stripe handles your card details</strong>. I never see or store your card number. Stripe tells me the purchase went through, and I keep a record of each pass: which pass, when it started and ends, and the amount and currency. Stripe emails you a receipt, so Stripe has your email for that. What Stripe does with payment information is covered by <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">Stripe's privacy policy</a>, not mine.</p>
+      <p><strong>Photo usage</strong> How many photo reads you used each day, and your rollover count. These are counts, not photos: photos are read once and never saved. They're kept per day so the daily limit works even if you delete a thread, and they're deleted with your account.</p>
       <p><strong>Technical data</strong></p>
       <ul>
       <li>Token counts per message (how much text was processed — used to understand costs)</li>
@@ -82,7 +109,7 @@
       <li>No advertising or tracking cookies</li>
       <li>No third-party analytics following you around the web</li>
       <li>No location data</li>
-      <li>No payment card details (there is currently no live payment system)</li>
+      <li>No payment card details. Card payments are handled by Stripe; I never see or store your card number</li>
       <li>No date of birth (age is self-attested — I ask, you confirm)</li>
       </ul>
       <hr />
@@ -118,14 +145,22 @@
       <p>I want to be precise about what this is, because a switch in an app can imply more than it delivers.</p>
       <p><strong>What it is:</strong> a permission record. Turning it on marks that thread as one I'm allowed to open when I'm trying to work out why StoneHead gave a bad answer — where it guessed, where the voice broke, where it got something wrong. Leaving it off means I don't.</p>
       <p><strong>What it is not:</strong> encryption. I have administrative access to the database that stores your messages, and this toggle does not take that access away. It is a commitment about what I do, not a technical lock on what I'm able to do.</p>
+      <p><strong>Photo descriptions follow the same rule.</strong> I only look at the description of a photo in a thread where the toggle is on.</p>
       <p><strong>One exception, stated plainly:</strong> the safety-layer records described above are operational logs, not thread content, and I look at them regardless of the toggle. That's how I find out the crisis check is failing. If that isn't acceptable to you, the honest answer is that this app isn't for you.</p>
+      <p><strong>Two things reach past the toggle, and you choose both:</strong></p>
+      <ul>
+      <li>Rating a reply lets me read that one exchange even with the toggle off. See <a href="#reply-ratings">Reply ratings</a>.</li>
+      <li>If you delete your account, memory summaries from threads where the toggle was <strong>on</strong> are kept, with no name, email, account, or thread attached. A summary is free text written by the AI, so it can still mention something like a name or a town you brought up; it isn't scrubbed of those. You agreed to review of that thread when you turned the toggle on, and this is the part of it that outlives the account.</li>
+      </ul>
       <p>I could have written this section to sound stronger. I'd rather you know exactly what you're getting: my word, and a default that starts at off so you're never opted in without choosing it.</p>
       <hr />
       <h2 id="who-else-sees-your-messages">Who else sees your messages</h2>
       <p><strong>The AI providers.</strong> To generate a reply, your message is sent over the internet to third-party AI services. Right now that means requests are routed through <a href="https://openrouter.ai/privacy" target="_blank" rel="noopener noreferrer">OpenRouter</a>, which passes them to the model that generates the reply — currently DeepSeek, with <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener noreferrer">Anthropic</a>'s Claude as a backup when the primary is unavailable.</p>
       <p>Your message text is transmitted to them, along with recent context from the conversation and any memory StoneHead has of you. Their handling of that data is governed by their own privacy policies, not mine. I don't control it. If that doesn't sit right with you, this might not be the right app for you yet — and I'd rather tell you that plainly than bury it.</p>
+      <p><strong>Photos are the one place a different AI is used.</strong> The model that writes replies can't see images, so photos go to Anthropic's Claude, through OpenRouter, to be described. Claude doesn't write your replies; it only reports what's in the picture. See <a href="#photos-talk-the-plant-only">Photos</a>.</p>
       <p><strong>The database provider.</strong> Your data is stored in a Supabase database (Postgres) and the app is hosted on Netlify. They store the data; they don't use it.</p>
-      <p><strong>Me.</strong> I can technically see the database. I don't read conversations for entertainment, and I don't go looking through people's threads. If you turn the data toggle <strong>on</strong>, you're giving me permission to read that thread to improve the app. If it's off, I leave it alone — with the safety-log exception named above.</p>
+      <p><strong>Stripe</strong>, only if you buy a pass. Stripe processes the payment and sends your receipt. It doesn't see your conversations.</p>
+      <p><strong>Me.</strong> I can technically see the database. I don't read conversations for entertainment, and I don't go looking through people's threads. If you turn the data toggle <strong>on</strong>, you're giving me permission to read that thread to improve the app. If it's off, I leave it alone, with two exceptions: the safety logs named above, and any single exchange you rated with a thumbs up or down.</p>
       <p><strong>Nobody else.</strong> I don't sell your data. I don't share it with advertisers. I don't have a business model that depends on it.</p>
       <hr />
       <h2 id="links-out">Links out</h2>
@@ -133,7 +168,8 @@
       <hr />
       <h2 id="about-training">About training</h2>
       <p>Earlier versions of this policy said your conversations were never used to train any AI model, "not mine, not anyone else's." The first half of that was true. The second half was a promise I wasn't in a position to make, and I'm correcting it rather than leaving it up.</p>
-      <p><strong>What I can tell you for certain:</strong> I don't train AI models. I don't fine-tune anything, and I have never exported anyone's conversations to build a dataset. StoneHead's knowledge comes from material I assembled myself — cultivation research from university extension services, strain data, cannabis history — not from what users type.</p>
+      <p><strong>What I can tell you for certain:</strong> I don't train AI models and I don't fine-tune anything. StoneHead's knowledge comes from material I assembled myself — cultivation research from university extension services, strain data, cannabis history — not from what users type.</p>
+      <p><strong>The one exception, since September 24, 2026:</strong> when you give a reply a thumbs-up and choose "share it", that reply and your message before it may be kept as a test case or example for tuning StoneHead's prompts and reference material. That's what "train and improve StoneHead" means in that prompt. Until this update, this section also said I had never exported anyone's conversations to build a dataset. That stays true for everything you haven't shared this way. If I ever fine-tune a model on shared exchanges, that's a new use, and I'll ask you to accept a new policy first.</p>
       <p><strong>What I can't control:</strong> the AI providers your messages pass through. Some model endpoints — particularly free ones — reserve the right to use what goes through them to improve their own systems. StoneHead has run on free endpoints for much of its life, which means messages sent before <strong>August 5, 2026</strong> may have been used that way by a provider, under their terms rather than mine.</p>
       <p>As of that date StoneHead runs on paid endpoints, where the providers' terms say inputs are not used for training. That's their commitment to me, and I'm passing it to you as exactly what it is — a contract with someone else, not something I can personally guarantee.</p>
       <p>If that ever changes, I'll say so here with the date it changed.</p>
@@ -145,7 +181,9 @@
       <p>You must be at least 13 to use StoneHead at all. If I learn that someone under 13 has created an account, I'll delete it.</p>
       <hr />
       <h2 id="how-long-i-keep-things">How long I keep things</h2>
-      <p>As long as you have an account. If you delete your account, your data — conversations, memories, everything linked to you — is deleted with it.</p>
+      <p>As long as you have an account. If you delete your account, your data — conversations, memories, reply ratings, photo reads, everything linked to you — is deleted with it, including your login.</p>
+      <p>Your pass records and photo usage counts are deleted with the account too. Stripe keeps its own record of the payment (it's required to, for tax and fraud reasons), under Stripe's policy.</p>
+      <p><strong>One exception:</strong> memory summaries from threads where you turned the data toggle on are copied out first and kept, with no account, email, username, or thread attached, and only the month they were written. Nothing in what's kept links back to you. See <a href="#the-data-toggle">The data toggle</a> for what a summary can still contain.</p>
       <hr />
       <h2 id="your-rights-over-your-data">Your rights over your data</h2>
       <p>You can, at any time:</p>
@@ -166,6 +204,13 @@
       <hr />
       <h2 id="changes">Changes</h2>
       <p>If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.</p>
+      <p><strong>September 26, 2026.</strong> Photos. On Talk the Plant you can send a photo of your plant; Anthropic's Claude reads it, the photo is never saved, and only a text description is kept (see <a href="#photos-talk-the-plant-only">Photos</a>). Also on this date: passes. You can buy a 7-day or 30-day pass through Stripe. Stripe handles card details; StoneHead keeps a record of each pass and a per-day count of photo reads (see <a href="#what-i-collect">What I collect</a>). Both are new kinds of stored data, so you're being asked to accept the policy again.</p>
+      <p><strong>September 24, 2026.</strong> Two changes, so you're being asked to accept the policy again.</p>
+      <ul>
+      <li><strong>Delete my account is now a real button</strong> in your profile. This policy already promised it; now it exists. It also changes one promise: memory summaries from threads where you turned the data toggle on now outlive your account, unlinked. Before this, the policy said everything was deleted with the account.</li>
+      <li><strong>Reply ratings.</strong> You can rate replies with a thumbs up or down. Rating a reply lets me read that one exchange even with the data toggle off, and a shared thumbs-up can become a test case for tuning StoneHead. That corrects what <a href="#about-training">About training</a> said before: that I had never exported anyone's conversations for a dataset. See <a href="#reply-ratings">Reply ratings</a>.</li>
+      </ul>
+      <p>The Terms of Service changed with it, to match.</p>
       <p><strong>September 20, 2026.</strong> Added <a href="#the-discord-bot">The Discord bot</a>. The bot now stores two things against your Discord user ID that it didn't before: a flag saying it has already introduced itself to you, and the names of the last 20 strains it has shown you, so it doesn't repeat a suggestion. Nothing about what you type is stored, and none of it is linked to a StoneHead account. This is a new category of stored data, so you're being asked to accept the policy again — that's what the re-prompt is for, not a wording tweak.</p>
       <p>The Terms of Service are unchanged; their date moved with this one because a single version string covers both documents.</p>
       <hr />
