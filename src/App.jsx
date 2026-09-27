@@ -178,6 +178,16 @@ async function preparePhoto(file) {
 // "Oct 26" and "5:00 PM" in the phone's own time zone.
 // The year only when it isn't this one ("Sep 23, 2027"), so a date a year out
 // never reads like one that already passed.
+// Time left, coarse to fine: "20d 23h", "5h 12m", "12m", "under a minute".
+function fmtCountdown(ms) {
+  if (ms <= 0) return "";
+  const mins = Math.floor(ms / 60000);
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return m > 0 ? `${m}m` : "under a minute";
+}
+
 function fmtDay(iso) {
   try {
     const d = new Date(iso);
@@ -1710,7 +1720,15 @@ function SubscriptionPage() {
   const active = !!profile?.pass_active;
   const limits = profile?.photo_limits || null;
   // After a refund the server refuses new passes for a while; say so up front.
-  const blockedUntil = profile?.pass_blocked_until && new Date(profile.pass_blocked_until) > new Date() ? profile.pass_blocked_until : null;
+  // Ticks every 30s so the countdown moves and the passes unlock on their own at zero.
+  const [now, setNow] = useState(() => Date.now());
+  const blockedMs = profile?.pass_blocked_until ? new Date(profile.pass_blocked_until).getTime() - now : 0;
+  const blockedUntil = blockedMs > 0 ? profile.pass_blocked_until : null;
+  useEffect(() => {
+    if (!blockedUntil) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [blockedUntil]);
   async function buy(pass) {
     if (busy || blockedUntil) return;
     setBusy(pass);
@@ -1744,7 +1762,7 @@ function SubscriptionPage() {
           </button>
         </div>
         {blockedUntil
-          ? <p className="sh-pass-note">you got a refund recently, so passes open back up {fmtDay(blockedUntil)}.</p>
+          ? <p className="sh-pass-note">you got a refund recently, so passes open back up {fmtDay(blockedUntil)} · {fmtCountdown(blockedMs)} left</p>
           : <p className="sh-pass-note">one-time purchase, no auto-renew.</p>}
       </div>
     </div>
