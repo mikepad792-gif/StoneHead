@@ -1,6 +1,6 @@
 # StoneHead AI — Privacy Policy
 
-**Last updated:** September 26, 2026
+**Last updated:** September 27, 2026
 
 StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.
 
@@ -248,6 +248,8 @@ If you find a security problem, please tell me. I'll fix it and I'll credit you.
 ## Changes
 
 If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.
+
+**September 27, 2026.** No change to this policy. Its date moved with the Terms of Service, which added a 21-day wait to buy a pass after a refund; one version string covers both documents.
 
 **September 26, 2026.** Photos. On Talk the Plant you can send a photo of your plant; Anthropic's Claude reads it, the photo is never saved, and only a text description is kept (see [Photos](#photos-talk-the-plant-only)). Also on this date: passes. You can buy a 7-day or 30-day pass through Stripe. Stripe handles card details; StoneHead keeps a record of each pass and a per-day count of photo reads (see [What I collect](#what-i-collect)). Both are new kinds of stored data, so you're being asked to accept the policy again.
 

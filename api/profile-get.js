@@ -20,7 +20,7 @@ import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js
 import { getUserBadges } from "../lib/getUserBadges.js";
 import { FREE_DAILY_LIMIT, TOS_VERSION } from "../lib/constants.js";
 import { getPhotoQuota } from "../lib/photoStore.js";
-import { hasActivePass, photoLimits } from "../lib/passStatus.js";
+import { hasActivePass, photoLimits, refundCooldownUntil } from "../lib/passStatus.js";
 import { PHOTO_DAILY_LIMIT, PHOTO_DAILY_LIMIT_UNLIMITED } from "../lib/config.js";
 
 export async function handler(event) {
@@ -94,9 +94,10 @@ export async function handler(event) {
   // --- Photos (migration 019): the quota and the rollover warning toggle ---
   // Both non-blocking for the same reason: a database without 019 still
   // loads the profile, just without photo counts.
-  const [photos, { data: rolloverPrefs, error: rolloverError }] = await Promise.all([
+  const [photos, { data: rolloverPrefs, error: rolloverError }, pass_blocked_until] = await Promise.all([
     getPhotoQuota(supabaseAdmin, { user_id, ...photoLimits(user) }),
     supabaseAdmin.from("users").select("warn_rollover").eq("id", user_id).maybeSingle(),
+    refundCooldownUntil(supabaseAdmin, user_id).catch(() => null),
   ]);
   if (rolloverError) console.error("profile/get warn_rollover (non-blocking):", rolloverError.message);
 
@@ -117,6 +118,8 @@ export async function handler(event) {
     skip_training_prompt: prefs?.skip_training_prompt === true,
     // Passes (2.1): a pass that hasn't ended. is_subscribed alone can lag.
     pass_active: hasActivePass(user),
+    // After a refund, no new pass until this time (ISO), or null.
+    pass_blocked_until,
     photos, // quota object or null
     // The two allowances, for the pass picker's copy. From the environment.
     photo_limits: { free: PHOTO_DAILY_LIMIT, pass: PHOTO_DAILY_LIMIT_UNLIMITED },

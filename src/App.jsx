@@ -1663,8 +1663,10 @@ function SubscriptionPage() {
   const [busy, setBusy] = useState(null); // the pass being bought
   const active = !!profile?.pass_active;
   const limits = profile?.photo_limits || null;
+  // After a refund the server refuses new passes for a while; say so up front.
+  const blockedUntil = profile?.pass_blocked_until && new Date(profile.pass_blocked_until) > new Date() ? profile.pass_blocked_until : null;
   async function buy(pass) {
-    if (busy) return;
+    if (busy || blockedUntil) return;
     setBusy(pass);
     try {
       const { url } = await apiPost("/api/checkout/create", { pass });
@@ -1686,16 +1688,18 @@ function SubscriptionPage() {
           {active && profile?.subscription_expires ? ` your pass runs until ${fmtDay(profile.subscription_expires)}; a new one starts after that.` : ""}
         </p>
         <div className="sh-pass-cards">
-          <button className="sh-pass-card" onClick={() => buy("7day")} disabled={!!busy}>
+          <button className="sh-pass-card" onClick={() => buy("7day")} disabled={!!busy || !!blockedUntil}>
             <span className="sh-pass-days">7 days</span>
             <span className="sh-pass-price">{busy === "7day" ? "..." : "$1.99"}</span>
           </button>
-          <button className="sh-pass-card" onClick={() => buy("30day")} disabled={!!busy}>
+          <button className="sh-pass-card" onClick={() => buy("30day")} disabled={!!busy || !!blockedUntil}>
             <span className="sh-pass-days">30 days</span>
             <span className="sh-pass-price">{busy === "30day" ? "..." : "$7"}</span>
           </button>
         </div>
-        <p className="sh-pass-note">one-time purchase, no auto-renew.</p>
+        {blockedUntil
+          ? <p className="sh-pass-note">you got a refund recently, so passes open back up {fmtDay(blockedUntil)}.</p>
+          : <p className="sh-pass-note">one-time purchase, no auto-renew.</p>}
       </div>
     </div>
   );

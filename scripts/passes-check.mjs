@@ -62,6 +62,19 @@ setStripeForTests({
   webhooks: realStripe.webhooks, // real signature verification
 });
 
+// Refund cooldown lookups (lib/passStatus.js refundCooldownUntil).
+let refundRows = [], refundErr = null, internal = false, refundFilter = null;
+supabaseAdmin.from = (table) => {
+  const q = {
+    select: () => q, eq: () => q, order: () => q,
+    gt: (col, v) => { refundFilter = [col, v]; return q; },
+    limit: async () => ({ data: refundRows, error: refundErr }),
+    maybeSingle: async () => ({ data: table === "users" ? { is_internal: internal } : null, error: null }),
+  };
+  return q;
+};
+const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString();
+
 await check("checkout: no session is 401", async () => {
   assert.equal((await checkout(req({ pass: "7day" }, { token: null }))).statusCode, 401);
 });
@@ -95,6 +108,41 @@ await check("checkout: a missing Price is 503, not a checkout", async () => {
   process.env.STRIPE_PRICE_30DAY = saved;
   assert.equal(r.statusCode, 503);
   assert.equal(sessionArgs, null);
+});
+
+await check("checkout: a refund 5 days ago is 403 with the date, no Stripe session", async () => {
+  refundRows = [{ refunded_at: daysAgo(5) }]; sessionArgs = null;
+  const r = await checkout(req({ pass: "7day" }));
+  assert.equal(r.statusCode, 403);
+  const body = JSON.parse(r.body);
+  assert.match(body.error, /21 days/);
+  const until = new Date(body.blocked_until).getTime();
+  assert.ok(Math.abs(until - (Date.now() + 16 * 86_400_000)) < 60_000, "blocked until refund + 21 days");
+  assert.equal(sessionArgs, null);
+});
+await check("checkout: the lookup only asks for refunds inside the last 21 days", async () => {
+  refundRows = []; refundFilter = null;
+  await checkout(req({ pass: "7day" }));
+  assert.equal(refundFilter[0], "refunded_at");
+  assert.ok(Math.abs(new Date(refundFilter[1]).getTime() - (Date.now() - 21 * 86_400_000)) < 60_000);
+});
+await check("checkout: no recent refund sells normally", async () => {
+  refundRows = []; sessionArgs = null;
+  assert.equal((await checkout(req({ pass: "30day" }))).statusCode, 200);
+  assert.ok(sessionArgs);
+});
+await check("checkout: internal accounts are exempt (owner testing refunds)", async () => {
+  refundRows = [{ refunded_at: daysAgo(1) }]; internal = true; sessionArgs = null;
+  const r = await checkout(req({ pass: "7day" }));
+  internal = false;
+  assert.equal(r.statusCode, 200);
+});
+await check("checkout: a failed lookup lets the sale through (fails open)", async () => {
+  refundRows = null; refundErr = { message: "db down" }; sessionArgs = null;
+  const r = await quiet(() => checkout(req({ pass: "7day" })));
+  refundErr = null; refundRows = [];
+  assert.equal(r.statusCode, 200);
+  assert.ok(logs.some((l) => l.includes("refund cooldown lookup failed")));
 });
 
 // ── webhook ─────────────────────────────────────────────────────────
