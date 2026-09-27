@@ -4,6 +4,7 @@
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { APP_VERSION } from "../src/version.js";
 
 function jsonResponse(statusCode, data) {
   return {
@@ -58,7 +59,9 @@ export async function handler(event) {
 
     const { data, error } = await supabaseAdmin
       .from("threads")
-      .update({ data_opt_in })
+      // Turning it ON records which version consent was given on. Turning it
+      // OFF leaves that alone: it's the last time consent was given.
+      .update(data_opt_in ? { data_opt_in, data_opt_in_version: APP_VERSION } : { data_opt_in })
       .eq("id", thread_id)
       .select("data_opt_in")
       .single();

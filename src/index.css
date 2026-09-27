@@ -41,7 +41,11 @@ body {
 }
 
 /* ── Root & Layout ──────────────────────────── */
-.sh-root { width: 100%; height: 100dvh; background: var(--bg-primary); display: flex; flex-direction: column; overflow: hidden; }
+/* Pinned to the visible viewport instead of height: 100dvh. In the home-screen
+   app, 100dvh can include the system bars, which made the page one bar taller
+   than the screen and let it scroll the header out of view. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+.sh-root { position: fixed; inset: 0; width: 100%; background: var(--bg-primary); display: flex; flex-direction: column; overflow: hidden; }
 .sh-layout { display: flex; height: 100%; position: relative; }
 .sh-main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100%; }
 
@@ -288,6 +292,27 @@ body {
 }
 .sh-retry-btn:hover { color: var(--text-primary); }
 
+/* Thumbs up / down under a reply: muted until tapped. Indented past the
+   avatar (28px + 8px gap) so they sit left-aligned under the bubble. */
+.sh-feedback-row { display: flex; gap: 2px; margin: -2px 0 4px 36px; }
+.sh-thumb {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  padding: 6px; border-radius: var(--radius-sm); line-height: 0;
+  opacity: 0.7; transition: color 0.2s, opacity 0.2s, background 0.2s;
+}
+.sh-thumb:hover:not(:disabled) { opacity: 1; color: var(--text-secondary); background: var(--bg-surface-raised); }
+.sh-thumb:disabled { cursor: default; }
+.sh-thumb--up, .sh-thumb--up:hover:not(:disabled) { color: var(--green-glow); opacity: 1; }
+.sh-thumb--down, .sh-thumb--down:hover:not(:disabled) { color: #c45050; opacity: 1; }
+.sh-feedback-dialog { display: flex; flex-direction: column; gap: 12px; }
+.sh-feedback-dialog h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-feedback-dialog p { font-size: 14px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
+.sh-feedback-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+.sh-feedback-check input { accent-color: var(--green-primary); width: 16px; height: 16px; }
+.sh-feedback-text { resize: vertical; min-height: 96px; font-family: var(--font-body); }
+.sh-feedback-count { align-self: flex-end; margin-top: -6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.sh-feedback-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+
 /* Vibe→plant handoff button (rendered only when the API sends handoff:"plant") */
 .sh-handoff-btn {
   display: block; margin-top: 10px;
@@ -347,6 +372,60 @@ body {
   cursor: pointer; opacity: 1;
 }
 .sh-send-btn--active:hover { box-shadow: 0 0 12px rgba(74,124,89,0.3); }
+
+/* ── Talk the Plant photos ──────────────────── */
+/* The attach button wears the plant tab's surface and glow, so it reads as a
+   Talk the Plant tool rather than a generic upload control. */
+.sh-photo-input { display: none; }
+.sh-attach-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--bg-plant-surface); border: 1px solid var(--border-default);
+  color: var(--green-glow); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.2s, box-shadow 0.2s; flex-shrink: 0;
+}
+.sh-attach-btn:hover:not(:disabled) { border-color: var(--green-primary); box-shadow: 0 0 12px rgba(74,124,89,0.25); }
+.sh-attach-btn:disabled { opacity: 0.4; cursor: default; }
+.sh-attach-btn:focus-visible,
+.sh-photo-draft-remove:focus-visible { outline: 2px solid var(--green-glow); outline-offset: 2px; }
+
+.sh-photo-draft {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px; padding: 8px;
+  background: var(--bg-plant-surface); border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+}
+.sh-photo-draft-thumb {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border-radius: var(--radius-sm); object-fit: cover; background: var(--bg-primary);
+}
+.sh-photo-draft-thumb--busy { animation: loadPulse 1.6s ease-in-out infinite; }
+.sh-photo-draft-body { flex: 1; min-width: 0; }
+.sh-photo-draft-tip { font-family: var(--font-mono); font-size: 11px; line-height: 1.4; color: var(--text-secondary); }
+.sh-photo-draft-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.sh-photo-draft-remove {
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%;
+  background: none; border: 1px solid var(--border-default);
+  color: var(--text-secondary); font-size: 16px; line-height: 1; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.sh-photo-draft-remove:hover { color: var(--text-primary); border-color: var(--stone-light); }
+
+.sh-bubble-photo {
+  display: block; max-width: min(240px, 100%); max-height: 320px;
+  border-radius: var(--radius-sm); object-fit: cover;
+}
+.sh-bubble-photo + .sh-bubble-text { margin-top: 8px; }
+.sh-photo-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+}
+.sh-photo-chip + .sh-bubble-text { margin-top: 6px; }
+.sh-typing-note { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); align-self: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-photo-draft-thumb--busy { animation: none; }
+}
 
 /* ── DataToggle ─────────────────────────────── */
 .sh-data-toggle { display: flex; align-items: center; }
@@ -509,6 +588,38 @@ body {
 .sh-nav-item--active { background: var(--bg-surface-raised); color: var(--text-primary); border-color: var(--border-default); }
 /* Anchor variant (discord) — same look as the buttons, no underline */
 .sh-nav-item--link { text-decoration: none; box-sizing: border-box; }
+/* Discord group: the parent toggles two indented links. */
+.sh-nav-chevron { margin-left: auto; font-size: 11px; color: var(--text-muted); transition: transform 0.2s; }
+.sh-nav-chevron--open { transform: rotate(90deg); }
+.sh-nav-sub { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 0 0 4px 36px; text-align: left; }
+.sh-nav-subitem {
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);
+  text-decoration: none; padding: 7px 10px; border-radius: var(--radius-sm); transition: all 0.2s;
+}
+.sh-nav-subitem:hover { color: var(--text-primary); background: var(--bg-surface-raised); }
+
+/* Home-screen app: iOS steps sheet and the one-time banner above the input. */
+.sh-install-sheet { display: flex; flex-direction: column; gap: 12px; }
+.sh-install-sheet h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-install-sheet ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.sh-install-sheet li, .sh-install-sheet p { font-size: 14px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
+.sh-install-sheet strong { color: var(--text-primary); }
+.sh-install-sheet .sh-btn-primary { margin-top: 4px; }
+.sh-install-banner {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  padding: 6px 6px 6px 12px; border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised); border: 1px solid var(--border-default);
+}
+.sh-install-banner-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text-secondary); }
+.sh-install-banner-add {
+  background: var(--green-primary); color: var(--text-primary); border: none; cursor: pointer;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+}
+.sh-install-banner-close {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 14px; padding: 6px 8px; line-height: 1;
+}
+.sh-install-banner-close:hover { color: var(--text-primary); }
 
 /* ── Memory page ────────────────────────────── */
 .sh-memory-page { flex: 1; overflow-y: auto; padding: 20px 16px 40px; }
@@ -533,7 +644,6 @@ body {
 .sh-mem-pin:hover { color: var(--green-glow); }
 .sh-mem-remove { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 6px; padding: 0; transition: color 0.2s; }
 .sh-mem-remove:hover { color: var(--danger, #e06c6c); }
-.sh-profile-memory-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 8px; }
 
 /* ── SubscriptionPage ───────────────────────── */
 .sh-subscription h2 { font-family: var(--font-mono); font-size: 18px; font-weight: 400; color: var(--text-primary); margin-bottom: 6px; }
@@ -591,8 +701,29 @@ body {
 }
 .sh-btn-danger:hover { background: rgba(196, 80, 80, 0.1); }
 
+/* Delete account: a quiet link under log out, then a confirm view. */
+.sh-delete-account-link {
+  background: none; border: none; cursor: pointer; align-self: center;
+  color: rgba(196, 80, 80, 0.75); font-family: var(--font-mono); font-size: 12px;
+  padding: 4px 8px; text-decoration: underline; text-underline-offset: 3px;
+}
+.sh-delete-account-link:hover { color: #e05555; }
+.sh-delete-account { display: flex; flex-direction: column; gap: 12px; }
+.sh-delete-account h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-delete-account p { font-size: 14px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
+.sh-delete-account strong { color: var(--text-primary); }
+.sh-delete-account-warn { color: #e0a060 !important; }
+.sh-delete-account .sh-profile-actions { margin-top: 4px; }
+.sh-btn-delete {
+  background: #b04444; color: #fff; border: none; padding: 11px 20px;
+  border-radius: var(--radius-sm); font-family: var(--font-mono);
+  font-size: 13px; cursor: pointer; transition: opacity 0.2s;
+}
+.sh-btn-delete:hover:not(:disabled) { opacity: 0.9; }
+.sh-btn-delete:disabled { opacity: 0.4; cursor: default; }
+
 /* ── Auth Screen ────────────────────────────── */
-.sh-auth-screen { display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px; }
+.sh-auth-screen { display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px; overflow-y: auto; }
 .sh-auth-card { max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 28px; }
 .sh-auth-logo { text-align: center; }
 .sh-auth-mascot { width: 120px; height: 120px; object-fit: contain; margin-bottom: 16px; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4)); }
@@ -626,6 +757,33 @@ body {
 }
 .sh-profile-legal a { color: var(--text-muted); text-decoration: underline; }
 .sh-profile-legal a:hover { color: var(--green-primary); }
+/* Passes and photos (2.1) */
+.sh-pass-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sh-pass-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+  background: var(--bg-surface-raised); border: 1px solid var(--border-default);
+  border-radius: var(--radius); padding: 18px 10px; color: var(--text-primary);
+  transition: border-color 0.2s, transform 0.1s;
+}
+.sh-pass-card:hover:not(:disabled) { border-color: var(--green-primary); }
+.sh-pass-card:active:not(:disabled) { transform: scale(0.98); }
+.sh-pass-card:disabled { opacity: 0.6; cursor: default; }
+.sh-pass-days { font-family: var(--font-mono); font-size: 15px; }
+.sh-pass-price { font-family: var(--font-mono); font-size: 20px; color: var(--green-glow); font-weight: 600; }
+.sh-pass-note { margin-top: 12px; text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+.sh-profile-photos p { font-size: 14px; color: var(--text-secondary); margin: 0 0 4px; }
+.sh-profile-muted { color: var(--text-muted) !important; font-size: 13px !important; }
+.sh-profile-settings { display: flex; flex-direction: column; gap: 10px; }
+.sh-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--text-secondary); cursor: pointer; }
+.sh-setting input { accent-color: var(--green-primary); width: 18px; height: 18px; flex-shrink: 0; }
+.sh-photo-count-line { margin: -2px 0 0 36px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.sh-rollover-card { display: flex; flex-direction: column; gap: 10px; }
+.sh-rollover-card h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-rollover-card p { font-size: 14px; color: var(--text-secondary); margin: 0; }
+.sh-profile-version {
+  text-align: center; font-size: 12px; color: var(--text-muted);
+  margin: 6px 0 0; letter-spacing: 0.02em;
+}
 
 /* Resource card (Addendum B1). Attached in code below the message — visually
    distinct from the prose on purpose, so it reads as "this is not StoneHead
@@ -673,4 +831,128 @@ body {
   margin: 10px 0 0; padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 11px; line-height: 1.4; color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI POLISH PASS (Sept 2026): matching the mockup.
+   Everything below overrides earlier rules on purpose, so the whole
+   pass can be reviewed, tuned, or reverted as one block.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Palette: green-black instead of warm gray, moss green instead of
+   teal, and brighter secondary text. The old values are why it looked
+   faded: #5a5a4e muted text on #141412 is barely 2.5:1 contrast. */
+:root {
+  --bg-primary: #0e110d;
+  --bg-surface: #131711;
+  --bg-surface-raised: #1b2019;
+  --bg-plant-surface: #1a2616;
+  --bg-user-bubble: #2b4a26;
+  --bg-user-bubble-warm: #33502a;
+  --bg-user-bubble-cool: #2a4530;
+  --border-default: #262e22;
+  --border-green: #3f5a30;
+  --text-primary: #ece8dc;
+  --text-secondary: #b4b3a3;
+  --text-muted: #858a78;
+  --green-primary: #6f9a4a;
+  --green-glow: #a8d67a;
+  --green-bright: #c9ecaa;
+  --gold: #e0b75c;
+  /* One typeface for everything people read. The mono was most of the
+     "unfinished" feel; it stays only where it's asked for by name. */
+  --font-mono: var(--font-body);
+}
+
+/* 2. Header and tabs */
+.sh-header { background: var(--bg-primary); border-bottom-color: var(--border-default); }
+.sh-header-brand { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.sh-header-tagline {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
+  color: var(--green-glow); margin-top: 2px;
+}
+.sh-avatar-btn { background: var(--bg-surface-raised); border-color: var(--border-green); color: var(--green-glow); }
+.sh-tab-bar { background: var(--bg-primary); padding: 8px 16px; }
+.sh-tab-switcher {
+  background: var(--bg-surface); border: 1px solid var(--border-default);
+  border-radius: 999px; padding: 3px;
+}
+.sh-tab { font-size: 13px; font-weight: 500; color: var(--text-muted); border-radius: 999px; padding: 7px 20px; border: 1px solid transparent; }
+.sh-tab--active,
+.sh-tab--plant.sh-tab--active {
+  background: #1f2b19; color: var(--green-bright);
+  border-color: var(--border-green);
+}
+
+/* 3. Empty state: everything on one screen. The mascot box was a square
+   holding a 3:2 image, so a third of its height was empty; it now sizes
+   to the image. The greeting tucks up under the mascot like the mockup. */
+.sh-welcome { justify-content: flex-start; padding: 4px 16px 16px; gap: 12px; }
+.sh-mascot-img { width: auto; height: min(190px, 25vh); max-width: 86vw; }
+.sh-hero .glow { width: 62%; top: 50%; background: radial-gradient(circle, rgba(120,200,70,0.55) 0%, transparent 66%); }
+.sh-welcome-bubble {
+  position: relative; z-index: 2; margin-top: -26px;
+  display: flex; gap: 10px; align-items: flex-start;
+  max-width: 400px; width: 100%; text-align: left;
+  background: var(--bg-surface-raised); border: 1px solid var(--border-green);
+  border-radius: 18px; padding: 14px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.sh-welcome-spark { color: var(--gold); font-size: 16px; line-height: 1.5; flex-shrink: 0; }
+.sh-welcome-text { font-size: 16px; font-weight: 400; line-height: 1.5; color: var(--text-primary); }
+
+/* 4. Suggestions grouped in one panel, label on the left */
+.sh-chips-section {
+  align-items: stretch; gap: 8px; max-width: 400px;
+  background: var(--bg-surface); border: 1px solid var(--border-default);
+  border-radius: 18px; padding: 12px;
+}
+.sh-chips-label { font-size: 13px; font-weight: 500; color: var(--green-glow); letter-spacing: 0; padding: 0 4px; }
+.sh-chip {
+  background: var(--bg-primary); border-color: var(--border-default);
+  color: var(--text-primary); font-size: 14px; line-height: 1.35;
+  padding: 11px 14px; border-radius: 14px;
+}
+.sh-chip-arrow { color: var(--green-glow); font-size: 20px; }
+
+/* 5. Conversation */
+.sh-bubble-text { font-size: 15px; }
+.sh-bubble--assistant-vibe { border: 1px solid var(--border-default); }
+.sh-bubble--assistant-plant { border: 1px solid #2b3a24; }
+.sh-bubble--assistant-plant .sh-bubble-text { color: #dbe8d0; }
+
+/* 6. Input: pill field with a green edge, send button that reads as a button */
+.sh-input-bar { background: var(--bg-primary); border-top-color: var(--border-default); padding-top: 10px; }
+.sh-chat-input {
+  background: #10150e; border-color: var(--border-green);
+  border-radius: 22px; padding: 11px 16px; font-size: 15px; min-height: 44px;
+}
+.sh-chat-input::placeholder { color: var(--text-muted); }
+.sh-chat-input:focus { border-color: var(--green-glow); }
+.sh-send-btn {
+  width: 44px; height: 44px; opacity: 1;
+  background: transparent; border: 1px solid var(--border-green); color: var(--text-muted);
+}
+.sh-send-btn--active { background: var(--green-primary); border-color: var(--green-glow); color: var(--bg-primary); }
+
+/* 7. Sidebar and memory page pick up the palette above; these fix the
+   dates that were floating mid-row in the thread list. */
+.sh-thread-time { margin-left: auto; padding-left: 8px; color: var(--text-muted); }
+
+/* Polish pass, fit: all four suggestions on one screen at phone height. */
+.sh-welcome { padding: 2px 12px 12px; gap: 10px; }
+.sh-mascot-img { height: min(160px, 21vh); }
+.sh-welcome-bubble { margin-top: -22px; padding: 12px 16px; }
+.sh-welcome-text { font-size: 15px; }
+.sh-chips-section { padding: 8px; gap: 6px; }
+.sh-chips-label { padding: 2px 6px 0; }
+.sh-chips { gap: 6px; }
+.sh-chip { padding: 9px 12px; gap: 9px; font-size: 13.5px; }
+.sh-chip-icon { font-size: 15px; }
+/* The dark rectangle behind the mascot was the drop-shadow being clipped
+   square by the mask-image. The greeting now overlaps the mascot's base,
+   which does the "seated" job the feathered mask was doing. */
+.sh-hero .mascot {
+  -webkit-mask-image: none; mask-image: none;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.6));
 }

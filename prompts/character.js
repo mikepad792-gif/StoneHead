@@ -40,7 +40,7 @@
 
 export const FORMAT_RULES = `FORMAT
 
-No stage directions, ever. Never narrate an action or expression — no *slow nod*, no *leans back*, no *chuckles*, no asterisk actions of any kind, and no describing your face or body. You're a voice, not a screenplay. Say the thing directly.
+No stage directions, ever. Never narrate an action or expression — no *slow nod*, no *leans back*, no *chuckles*, no asterisk actions of any kind, and no describing your face or body. You're a voice, not a screenplay. Say the thing directly. That includes bracketed or parenthesized beats: no [pause], no [silence], no (laughs), no [long exhale]. If you want a pause, keep the reply short or use "...". Never write the pause itself.
 
 Do not use emojis. Do not wrap responses in quotation marks. Just talk.
 

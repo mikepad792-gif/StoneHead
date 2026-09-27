@@ -40,6 +40,67 @@
       "bud-rot",
       "foxtailing",
       "light-leak-flower"
+    ],
+    "twisted-new-growth": [
+      "broad-russet-mites",
+      "boron-deficiency",
+      "calcium-deficiency",
+      "heat-stress"
+    ],
+    "purple": [
+      "phosphorus-deficiency",
+      "genetic-purpling",
+      "cold-stress"
+    ],
+    "small-flying-bugs": [
+      "fungus-gnats",
+      "whiteflies",
+      "aphids"
+    ],
+    "spots-and-trails": [
+      "septoria-leaf-spot",
+      "calcium-deficiency",
+      "leaf-miners"
+    ],
+    "stunted": [
+      "transplant-shock",
+      "hop-latent-viroid",
+      "autoflower-small-stature",
+      "root-aphids",
+      "insufficient-light"
+    ],
+    "odd-flower-growth": [
+      "re-vegging",
+      "foxtailing",
+      "light-leak-flower",
+      "hermaphroditism"
+    ],
+    "bud-damage": [
+      "bud-rot",
+      "caterpillars-budworms"
+    ],
+    "crispy-edges": [
+      "nutrient-burn",
+      "heat-stress",
+      "wind-burn",
+      "light-burn"
+    ],
+    "new-growth-yellowing": [
+      "iron-deficiency",
+      "zinc-deficiency",
+      "manganese-deficiency",
+      "sulfur-deficiency",
+      "ph-lockout"
+    ],
+    "leaves-pointing-up": [
+      "praying-leaves",
+      "heat-stress",
+      "light-burn"
+    ],
+    "white-cottony": [
+      "mealybugs",
+      "scale-insects",
+      "powdery-mildew"
     ]
   },
   "sources_index": [
@@ -52,7 +113,7 @@
     "University of Maryland Extension",
     "Utah State University Extension"
   ],
-  "issue_count": 35,
+  "issue_count": 61,
   "issues": [
     {
       "id": "nitrogen-deficiency",
@@ -299,7 +360,8 @@
         "new top leaves spotty and twisted",
         "brown spots on the newer leaves",
         "new growth curling and deformed",
-        "weak floppy stems on new growth"
+        "weak floppy stems on new growth",
+        "brown spots with yellow around them on the leaves"
       ],
       "symptoms": [
         "small brown/rusty spots on NEW/upper leaves, often at edges",
@@ -631,7 +693,8 @@
         "nitrogen-deficiency",
         "nitrogen-toxicity",
         "root-rot",
-        "heat-stress"
+        "heat-stress",
+        "broad-russet-mites"
       ],
       "differentiators": [
         {
@@ -653,6 +716,10 @@
         {
           "vs": "heat-stress",
           "tell": "Heat curls leaf edges UP and eases when it cools; overwatering droop tracks a wet medium regardless of temperature."
+        },
+        {
+          "vs": "broad-russet-mites",
+          "tell": "Overwatering droops the whole plant and eases as the pot dries out. Broad/russet mites twist and gloss only the newest top growth and keep getting worse no matter how you water."
         }
       ],
       "clarifying_questions": [
@@ -793,7 +860,8 @@
         "leaves cupping/tacoing up at the edges",
         "leaves curling up like a canoe",
         "top leaves curling up near the light",
-        "plant droops when it's hot"
+        "plant droops when it's hot",
+        "leaves pointing up and folding in near the light"
       ],
       "symptoms": [
         "leaf edges curl/cup UPWARD (\"tacoing\"/\"canoeing\")",
@@ -1300,7 +1368,8 @@
         "white powder on the leaves",
         "looks like flour or powdered sugar on top of the leaves",
         "white patches spreading on the leaves",
-        "white dust that wipes off"
+        "white dust that wipes off",
+        "white fuzzy patches on the stems too"
       ],
       "symptoms": [
         "flat white/grey powdery coating on the leaf SURFACE (like flour)",
@@ -1994,6 +2063,1501 @@
         "Colorado State University Extension"
       ],
       "confidence_note": "Whether a pre-harvest 'flush' improves smoothness is genuinely debated among growers; the drying/curing method above matters more to hay smell than flushing does."
+    },
+    {
+      "id": "sulfur-deficiency",
+      "name": "Sulfur Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "newer top leaves turning pale/yellow",
+        "upper growth going light green while bottom looks fine",
+        "young leaves yellowing evenly",
+        "new leaves pale with pinkish stems"
+      ],
+      "symptoms": [
+        "uniform yellowing on NEWER/upper leaves (sulfur is only semi-mobile, so it shows up top first)",
+        "whole young leaf pales fairly evenly, veins included",
+        "sometimes pink/purple tint on petioles and slowed growth"
+      ],
+      "likely_causes": [
+        "sulfur genuinely low in the feed/medium",
+        "pH out of range limiting sulfur uptake (lockout, not a true shortage)",
+        "heavy leaching / very lean medium"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "magnesium-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Location is the tell: nitrogen yellows OLDER/lower leaves first and climbs; sulfur pales the NEWER/upper leaves first because it moves less freely."
+        },
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Mg is interveinal (green veins, yellow between) on older/mid leaves; sulfur is fairly UNIFORM yellowing on younger leaves."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "If feed already contains sulfur but it keeps spreading, check pH before adding more — an off pH can lock sulfur out."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the yellowing worst on the NEW top growth or the OLD bottom growth?",
+        "What are you feeding, and do you know your runoff/reservoir pH?"
+      ],
+      "fix": "Confirm pH is in range first so you're not chasing lockout. If sulfur is genuinely low, many complete base nutrients and cal-mag/Epsom-type products supply it — move toward label strength and recheck new growth in a few days.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "True sulfur deficiency is fairly uncommon with complete nutrients; pale new growth is more often pH or another micronutrient, so rule those out first."
+    },
+    {
+      "id": "zinc-deficiency",
+      "name": "Zinc Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "seedling",
+        "veg"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "new leaves yellowing between the veins and looking crinkled",
+        "top growth bunched up with short spacing",
+        "small twisted new leaves",
+        "new growth pale and distorted"
+      ],
+      "symptoms": [
+        "interveinal chlorosis (yellow between green veins) on NEW/upper leaves",
+        "shortened internodes — new growth bunches into a tight rosette",
+        "small, distorted, sometimes twisted or wrinkled new leaves"
+      ],
+      "likely_causes": [
+        "high root-zone pH locking out zinc (very common trigger)",
+        "zinc genuinely low in the feed",
+        "cold/wet medium reducing micronutrient uptake"
+      ],
+      "confused_with": [
+        "iron-deficiency",
+        "manganese-deficiency",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "iron-deficiency",
+          "tell": "Iron gives clean interveinal yellowing on new leaves with normal shape; zinc ADDS shortened internodes and small, distorted/twisted new growth."
+        },
+        {
+          "vs": "manganese-deficiency",
+          "tell": "Mn interveinal chlorosis carries scattered brown necrotic flecks; zinc leans toward distortion and tight, stacked new growth instead."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Zinc locks out at HIGH pH — pale, bunched new tops with high runoff/res pH is usually lockout, so fix pH before dosing zinc."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the new growth also bunched up with very short spacing between leaves?",
+        "What's your runoff/reservoir pH?"
+      ],
+      "fix": "Check and correct pH first (zinc locks out when pH runs high) — that resolves most cases. If it persists in range, a complete micronutrient supplement supplies zinc; damaged leaves won't recover but new growth should normalize.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "manganese-deficiency",
+      "name": "Manganese Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "yellowing between veins on new leaves with brown spots",
+        "new growth mottled with little dead specks",
+        "upper leaves yellow between veins and spotting",
+        "speckled yellowing near the top"
+      ],
+      "symptoms": [
+        "interveinal chlorosis on NEWER/upper leaves with veins staying green",
+        "scattered small brown necrotic spots/flecks develop within the yellow areas",
+        "starts near the base of the leaf and spreads outward"
+      ],
+      "likely_causes": [
+        "high pH locking out manganese",
+        "manganese genuinely low in the feed",
+        "over-liming / very alkaline medium"
+      ],
+      "confused_with": [
+        "iron-deficiency",
+        "zinc-deficiency",
+        "magnesium-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "iron-deficiency",
+          "tell": "Iron is cleaner interveinal yellowing with few or no spots; manganese adds distinctive small brown necrotic FLECKS inside the yellow zones."
+        },
+        {
+          "vs": "zinc-deficiency",
+          "tell": "Zinc distorts new growth and shortens internodes; manganese keeps leaf shape more normal but adds the spotting."
+        },
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Mg hits OLDER/mid leaves; manganese hits NEWER/upper leaves — location separates them."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the yellow areas on new leaves developing tiny brown dead spots?",
+        "What's your runoff/reservoir pH?"
+      ],
+      "fix": "Correct pH into range first (a high pH is the usual cause). If it continues in range, a complete micronutrient product supplies manganese. Avoid overcorrecting — excess manganese can itself cause problems.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "boron-deficiency",
+      "name": "Boron Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "new growth tips looking twisted and brittle",
+        "growing tips turning brown and dying",
+        "new leaves thick, rough, deformed",
+        "top shoots stunted and gnarly"
+      ],
+      "symptoms": [
+        "abnormal, thick, brittle, twisted NEW growth",
+        "brown/necrotic or dying growing tips (terminal shoots)",
+        "rough or corky stems; new leaves may be misshapen"
+      ],
+      "likely_causes": [
+        "boron genuinely low in the feed/water",
+        "low humidity or inconsistent watering reducing boron uptake (it moves with transpiration)",
+        "pH out of range affecting availability"
+      ],
+      "confused_with": [
+        "calcium-deficiency",
+        "ph-lockout",
+        "broad-russet-mites"
+      ],
+      "differentiators": [
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Both damage new growth, but calcium tends to give brown SPOTS and hooked/curled tips; boron leans toward brittle, thick, deformed shoots and dead growing points."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "An off pH mimics boron symptoms — check and correct pH before dosing boron, which is easy to overdo."
+        },
+        {
+          "vs": "broad-russet-mites",
+          "tell": "Broad/russet mites also twist and glaze new growth, but that's a moving pest problem — inspect at 60x+; a nutrient issue has no mites."
+        }
+      ],
+      "clarifying_questions": [
+        "Is it mainly the growing TIPS that are deformed/dying, and how's your humidity and watering consistency?",
+        "What's your pH, and have you checked new growth under magnification for mites?"
+      ],
+      "fix": "Confirm pH and keep watering/humidity steady so boron can move into new growth. If genuinely deficient, correct with a complete micronutrient source and go LIGHT — boron toxicity happens quickly, so under-correct rather than over.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Boron deficiency is relatively rare and easily confused with calcium issues or mite damage; because boron toxicity is easy to trigger, rule out pH and pests before supplementing."
+    },
+    {
+      "id": "copper-deficiency",
+      "name": "Copper Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "new leaves very dark with a bluish or metallic sheen",
+        "leaf tips and edges going dark and dying on new growth",
+        "top leaves twisting and wilting for no clear reason",
+        "dark shiny leaves that droop"
+      ],
+      "symptoms": [
+        "new/upper leaves unusually dark green with a blue/metallic or purple undertone",
+        "leaf tips and margins darken/necrose; leaves may twist or wilt",
+        "slowed growth with a stiff, shiny appearance"
+      ],
+      "likely_causes": [
+        "copper genuinely low (uncommon with complete nutrients)",
+        "pH out of range limiting copper uptake",
+        "excess of other elements antagonizing copper"
+      ],
+      "confused_with": [
+        "overwatering",
+        "nitrogen-toxicity",
+        "ph-lockout"
+      ],
+      "differentiators": [
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering droops the whole plant with a constantly-wet medium; copper deficiency shows dark, shiny, twisting NEW leaves with darkened tips regardless of soil moisture."
+        },
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "Both give dark leaves, but nitrogen toxicity claws the leaf tips DOWN on glossy green leaves; copper adds a bluish/metallic cast plus dying tips/margins on new growth."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "An off pH mimics micronutrient shortages — correct pH before assuming a true copper shortage."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the dark, shiny look on the NEW top growth, with tips/edges dying back?",
+        "What's your pH, and are you running a complete micronutrient feed?"
+      ],
+      "fix": "Check pH first — genuine copper deficiency is rare, and lockout is the more common cause. A complete micronutrient product supplies copper; go light, since copper is toxic in excess.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Copper deficiency is quite rare in practice; suspect pH, overwatering, or another cause first and confirm before adding copper (which is easily toxic)."
+    },
+    {
+      "id": "molybdenum-deficiency",
+      "name": "Molybdenum Deficiency",
+      "category": "nutrient",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "middle leaves yellowing with orange or pink edges",
+        "leaves turning yellow then getting reddish margins",
+        "mottled yellow-orange on mid-plant leaves",
+        "looks like nitrogen deficiency but with orange tints"
+      ],
+      "symptoms": [
+        "yellowing that often starts on middle-aged leaves and can spread",
+        "orange/pink/reddish mottling or margins developing on affected leaves",
+        "can look like a nitrogen problem because molybdenum is tied to nitrogen use"
+      ],
+      "likely_causes": [
+        "LOW pH locking out molybdenum (its classic trigger)",
+        "molybdenum genuinely low (rare)",
+        "very acidic medium overall"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "ph-lockout",
+        "phosphorus-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Plain nitrogen shortage is uniform yellowing from the bottom up; molybdenum adds orange/pink mottling and is usually a LOW-pH lockout rather than a true shortage."
+        },
+        {
+          "vs": "ph-lockout",
+          "tell": "Molybdenum specifically locks out at LOW pH — acidic runoff/res with these symptoms points to correcting pH up rather than dosing Mo."
+        },
+        {
+          "vs": "phosphorus-deficiency",
+          "tell": "P deficiency purples/bronzes older leaves with dull dark tone; molybdenum trends toward orange/pink mottling tied to a low pH."
+        }
+      ],
+      "clarifying_questions": [
+        "Is your runoff/reservoir pH running low (acidic)?",
+        "Are the affected leaves developing orange/pink tints along with the yellowing?"
+      ],
+      "fix": "Check pH first and raise it into range if it's too acidic — that resolves most molybdenum cases, since it's almost always a low-pH lockout rather than a real shortage. Complete nutrients supply the small amount needed.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "Cornell NRCCA",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Molybdenum deficiency is rare and almost always a low-pH lockout; correcting pH is the primary fix."
+    },
+    {
+      "id": "cold-stress",
+      "name": "Cold Stress / Low Temperature",
+      "category": "environment",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "leaves and stems turning purple in cold weather",
+        "growing slow and drooping when it's cold",
+        "purpling since temps dropped at night",
+        "leaves curling and dark in a cold tent"
+      ],
+      "symptoms": [
+        "purple/red/blue hues in leaves, stems, and petioles, often worse after cold nights",
+        "slowed growth, drooping, and sometimes leaf curl in cold conditions",
+        "in flower, cool nights can deepen bud color but also slow ripening"
+      ],
+      "likely_causes": [
+        "canopy/room temperature too low (especially night lows toward or below ~50-60 F / 10-15 C)",
+        "large day-to-night temperature swings",
+        "cold medium/root zone slowing uptake"
+      ],
+      "confused_with": [
+        "phosphorus-deficiency",
+        "genetic-purpling",
+        "nitrogen-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "phosphorus-deficiency",
+          "tell": "P purpling comes with dull, dark, sometimes spotted leaves and poor growth regardless of temperature; cold purpling tracks the COLD and often eases when you warm the space."
+        },
+        {
+          "vs": "genetic-purpling",
+          "tell": "Genetic color shows on an otherwise vigorous, healthy plant; cold purpling pairs with slowed growth, drooping, and a genuinely cold environment."
+        },
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Nitrogen yellows lower leaves from the bottom up; cold stress trends purple/red with sluggish growth, not uniform yellowing."
+        }
+      ],
+      "clarifying_questions": [
+        "What are your temperatures, especially at night / lights-off?",
+        "Did the purpling start when it got colder, and is overall growth slow?"
+      ],
+      "fix": "Raise temperatures into a comfortable range and reduce the day-to-night swing — insulate the space, warm the room, or lift pots off cold floors. Growth and color usually recover as it warms; cold-driven purpling on a healthy plant is cosmetic.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy",
+        "Colorado State University Extension"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "wind-burn",
+      "name": "Wind Burn (Fan Too Close)",
+      "category": "environment",
+      "stage": [
+        "any"
+      ],
+      "severity": "cosmetic",
+      "is_normal": false,
+      "user_phrases": [
+        "leaves clawing and curling right where the fan hits",
+        "leaves near the fan look burnt and twisted",
+        "curling leaves only on one side facing the fan",
+        "wind blowing hard and leaves canoeing"
+      ],
+      "symptoms": [
+        "clawing/curling and 'canoeing' leaves concentrated where airflow hits hardest",
+        "dried, bronzed, or tattered leaf edges in the fan's direct path",
+        "damage localized to the wind path rather than spread by leaf age"
+      ],
+      "likely_causes": [
+        "a fan aimed directly at the canopy on high, hitting the same spot constantly",
+        "too much direct airflow for the plant's size",
+        "leaves whipped continuously against each other or hardware"
+      ],
+      "confused_with": [
+        "nitrogen-toxicity",
+        "heat-stress",
+        "nutrient-burn"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "The nitrogen claw hits dark-green upper growth broadly; wind burn is LOCALIZED to wherever the fan blasts and tracks airflow, not feeding."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Heat tacoing is worst near the LAMP/hottest spot; wind burn is worst in the direct FAN path — follow which one lines up with the damage."
+        },
+        {
+          "vs": "nutrient-burn",
+          "tell": "Nute burn is crispy brown TIPS tied to feed strength across the plant; wind burn is curling/tattering confined to the airflow path."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the damage concentrated exactly where a fan blows on the plant?",
+        "Are your fans aimed straight at the canopy, and on how high a setting?"
+      ],
+      "fix": "Redirect fans so air moves THROUGH and around the canopy rather than blasting one spot, drop the speed, or use oscillation. Aim for leaves gently rustling, not thrashing. Damaged leaves won't recover, but new growth comes in normal.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "whiteflies",
+      "name": "Whiteflies",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "tiny white bugs fly up when I touch the plant",
+        "little white moth-like insects under the leaves",
+        "cloud of tiny white flies off the plant",
+        "sticky leaves and tiny white bugs"
+      ],
+      "symptoms": [
+        "tiny white moth-like insects on leaf undersides that flutter up in a cloud when disturbed",
+        "yellow stippling/mottling as they suck sap",
+        "sticky honeydew and sooty black mold on leaves below"
+      ],
+      "likely_causes": [
+        "arrived on new plants/clones or from outdoors",
+        "warm conditions and crowded, poorly ventilated canopy",
+        "nearby infested houseplants or garden"
+      ],
+      "confused_with": [
+        "fungus-gnats",
+        "aphids",
+        "thrips"
+      ],
+      "differentiators": [
+        {
+          "vs": "fungus-gnats",
+          "tell": "Gnats are dark, hang around the SOIL surface, and fly weakly; whiteflies are white, cluster UNDER leaves, and lift off in a cloud when you shake the plant."
+        },
+        {
+          "vs": "aphids",
+          "tell": "Aphids are soft-bodied and stay put in clusters; whiteflies are winged and take flight — both leave honeydew, but only whiteflies scatter into the air."
+        },
+        {
+          "vs": "thrips",
+          "tell": "Thrips leave silvery streaks and black frass and are slender/crawling; whiteflies are white and fly."
+        }
+      ],
+      "clarifying_questions": [
+        "When you shake the plant, does a little cloud of white insects fly up?",
+        "Are leaf undersides where you see them, and is there sticky residue?"
+      ],
+      "fix": "Isolate affected plants and hit the leaf undersides on a repeat schedule to catch newly hatched adults. Yellow sticky traps help monitor and knock down fliers, and improving airflow makes the environment less favorable.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Utah State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "broad-russet-mites",
+      "name": "Broad Mites / Russet Mites",
+      "category": "pest",
+      "stage": [
+        "veg",
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "new growth twisted and shiny but I can't see any bugs",
+        "top leaves curling and glossy, wet-looking",
+        "buds bronzing and drying out with no webbing",
+        "distorted new growth and nothing shows under a normal loupe"
+      ],
+      "symptoms": [
+        "twisted, curled, glossy or 'wet-looking' NEW growth (broad mites); bronzing/russeting of leaves and stems (russet mites)",
+        "stunted, distorted tops while lower/older growth may look okay at first",
+        "damage appears well before the mites do — they're near-microscopic with NO webbing"
+      ],
+      "likely_causes": [
+        "introduced on clones/cuttings (very common vector)",
+        "spread by handling, clothing, or tools between plants",
+        "warm conditions accelerating reproduction"
+      ],
+      "confused_with": [
+        "spider-mites",
+        "boron-deficiency",
+        "heat-stress",
+        "overwatering"
+      ],
+      "differentiators": [
+        {
+          "vs": "spider-mites",
+          "tell": "Spider mites give visible stippling plus fine WEBBING and dots you can see at 10x; broad/russet mites leave NO webbing, are invisible without 60x+, and show up as distorted, glossy, or bronzed new growth."
+        },
+        {
+          "vs": "boron-deficiency",
+          "tell": "Boron also deforms new growth, but that's a nutrient issue with no mites; inspect the growing tips at 60x+ — moving mites/eggs confirm the pest."
+        },
+        {
+          "vs": "heat-stress",
+          "tell": "Heat curls leaf edges up broadly and eases when cooled; broad/russet damage is twisted, shiny, or bronzed and keeps worsening regardless of temperature."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering droops the whole plant, with firm leaves curling down from the stem and a pot that stays heavy for days. Broad/russet mite damage starts at the newest top growth, which twists and turns glossy or bronzed while the pot dries on its normal schedule."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the damage on the NEW top growth (twisted/glossy or bronzed), with no webbing?",
+        "Can you inspect the growing tips at 60x or higher, and did you recently bring in clones?"
+      ],
+      "fix": "Treat as serious — these spread fast and hide. Isolate affected plants immediately, sanitize hands/tools between plants, and run an aggressive REPEAT treatment schedule targeting new growth; predatory mites and appropriate miticides are common options. Confirmation often needs high magnification or a lab.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Broad and russet mites are notoriously hard to see; diagnosis is often made from the distinctive distortion/bronzing pattern plus high-magnification inspection."
+    },
+    {
+      "id": "caterpillars-budworms",
+      "name": "Caterpillars / Budworms",
+      "category": "pest",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "chewed leaves and little black droppings in the buds",
+        "one bud wilting and browning while the rest look fine",
+        "found a caterpillar inside a cola",
+        "holes in leaves and frass on the plant"
+      ],
+      "symptoms": [
+        "chewed leaves with irregular holes and ragged edges",
+        "dark specks of frass (droppings) caught in the buds",
+        "caterpillars boring INTO colas, causing a single bud to wilt, brown, or rot from inside"
+      ],
+      "likely_causes": [
+        "moths laying eggs on outdoor/greenhouse plants in flower",
+        "warm season pest pressure, worst as buds fatten",
+        "unscreened outdoor grows"
+      ],
+      "confused_with": [
+        "bud-rot",
+        "improper-curing",
+        "nutrient-burn"
+      ],
+      "differentiators": [
+        {
+          "vs": "bud-rot",
+          "tell": "Caterpillars OFTEN trigger bud rot — the tell is chew holes, frass, and a live worm; pure bud rot is grey mushy decay from inside with no droppings or chewing."
+        },
+        {
+          "vs": "improper-curing",
+          "tell": "Curing problems happen after harvest; caterpillar damage is on the living plant with visible chewing and frass in the buds."
+        },
+        {
+          "vs": "nutrient-burn",
+          "tell": "Nute burn is crispy tips from feeding; a single wilting/browning bud with frass is a boring caterpillar, not a nutrient issue."
+        }
+      ],
+      "clarifying_questions": [
+        "Do you see dark droppings (frass) or chew holes near the affected bud?",
+        "Is it isolated to one cola that's wilting/browning while the rest look healthy?"
+      ],
+      "fix": "Inspect colas and remove caterpillars by hand, and cut out any bud already rotting around the damage to stop it spreading. A biological caterpillar control (Bt) applied before buds close up is a common preventative; netting/screening helps outdoors. Serious in late flower because it seeds bud rot.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "leaf-miners",
+      "name": "Leaf Miners",
+      "category": "pest",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": false,
+      "user_phrases": [
+        "squiggly white trails winding through the leaves",
+        "wavy lines like something tunneled inside the leaf",
+        "pale meandering tracks on the leaves",
+        "weird trails inside the leaf surface"
+      ],
+      "symptoms": [
+        "winding white/tan 'serpentine' trails INSIDE the leaf tissue",
+        "trails widen as the larva feeds and grows",
+        "mostly cosmetic on cannabis unless a leaf is heavily mined"
+      ],
+      "likely_causes": [
+        "fly/moth larvae tunneling between leaf layers",
+        "adults arriving from outdoors or nearby plants",
+        "warm-season outdoor pressure"
+      ],
+      "confused_with": [
+        "thrips",
+        "leaf-variegation",
+        "septoria-leaf-spot"
+      ],
+      "differentiators": [
+        {
+          "vs": "thrips",
+          "tell": "Thrips scrape the SURFACE, leaving silvery patches and black frass; miners tunnel INSIDE, leaving a raised winding trail you can't wipe off."
+        },
+        {
+          "vs": "leaf-variegation",
+          "tell": "Variegation is a stable, often symmetric color pattern present as the leaf grows; a mine is a single meandering track that expands over days."
+        },
+        {
+          "vs": "septoria-leaf-spot",
+          "tell": "Septoria makes round brown SPOTS; leaf miners make LINES/trails."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the marks winding LINES inside the leaf, or spots/surface silvering?",
+        "How many leaves are affected — a few, or widespread?"
+      ],
+      "fix": "Usually minor — pick and remove mined leaves to take the larvae with them, and use yellow sticky traps for the adult flies. Only heavy infestations warrant more aggressive control.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "mealybugs",
+      "name": "Mealybugs",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "white cottony fuzz in the joints of the plant",
+        "little white waxy clumps where leaves meet the stem",
+        "cotton-like specks and sticky leaves",
+        "white fuzzy bugs at the nodes"
+      ],
+      "symptoms": [
+        "white, cottony/waxy clusters tucked into leaf axils, nodes, and undersides",
+        "sticky honeydew and sooty black mold; ants often present",
+        "yellowing/weakening as they drain sap"
+      ],
+      "likely_causes": [
+        "arrived on new plants or nearby houseplants",
+        "ants farming them for honeydew and spreading them",
+        "warm, sheltered conditions"
+      ],
+      "confused_with": [
+        "powdery-mildew",
+        "scale-insects",
+        "root-aphids"
+      ],
+      "differentiators": [
+        {
+          "vs": "powdery-mildew",
+          "tell": "Mildew is a FLAT dust lying on the leaf surface that wipes to a smear; mealybugs are RAISED cottony insect clusters at the joints that you can pick off."
+        },
+        {
+          "vs": "scale-insects",
+          "tell": "Mealybugs are soft, cottony, and slightly mobile; scale are hard/waxy fixed BUMPS on stems — both suck sap and drip honeydew."
+        },
+        {
+          "vs": "root-aphids",
+          "tell": "Mealybugs cluster on the visible above-ground plant; root aphids live in the medium/root zone and cause unexplained decline instead."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the white bits cottony CLUMPS at the nodes/joints (raised), or a flat dust on the leaf?",
+        "Do you see ants or sticky honeydew on the plant?"
+      ],
+      "fix": "Isolate the plant, physically remove the cottony clusters, and treat on a repeat schedule since they hide in crevices. Control any ants, which protect and spread them.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "scale-insects",
+      "name": "Scale Insects",
+      "category": "pest",
+      "stage": [
+        "any"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "little brown bumps stuck on the stems",
+        "small hard scales along the branches",
+        "bumps on the stem that don't move and sticky leaves",
+        "waxy lumps on the stems and veins"
+      ],
+      "symptoms": [
+        "small immobile brown/tan bumps clinging to stems and along leaf veins",
+        "they look like part of the plant but scrape off to reveal insects",
+        "honeydew and sooty mold; yellowing/decline as they feed"
+      ],
+      "likely_causes": [
+        "introduced on new plants",
+        "ants farming and spreading them",
+        "warm, sheltered indoor conditions"
+      ],
+      "confused_with": [
+        "mealybugs",
+        "powdery-mildew",
+        "aphids"
+      ],
+      "differentiators": [
+        {
+          "vs": "mealybugs",
+          "tell": "Scale are HARD, waxy, fixed bumps; mealybugs are SOFT cottony clusters — both drip honeydew but the texture and mobility differ."
+        },
+        {
+          "vs": "powdery-mildew",
+          "tell": "Mildew is a flat powder on leaf surfaces; scale are three-dimensional bumps on stems/veins that you can pop or scrape off."
+        },
+        {
+          "vs": "aphids",
+          "tell": "Aphids are soft, pear-shaped, and mobile in clusters on new growth; scale are stationary armored bumps on woody stems."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the bumps hard and firmly stuck to the stems (don't move when nudged)?",
+        "Is there sticky honeydew or ant activity?"
+      ],
+      "fix": "Scrape or wipe off the scales, then treat on a repeat schedule since crawlers hatch over time; isolate the plant and control ants. Persistent infestations may need targeted horticultural treatments applied to stems and undersides.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Utah State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "root-aphids",
+      "name": "Root Aphids",
+      "category": "pest",
+      "stage": [
+        "veg",
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "plant declining and I can't figure out why",
+        "looks like every deficiency at once but feeding is fine",
+        "little bugs on the soil surface and pot edges",
+        "white waxy stuff on the roots and slow decline"
+      ],
+      "symptoms": [
+        "unexplained deficiency-like symptoms (yellowing, spotting, stunting) despite correct feeding and pH",
+        "wilting or slowed growth with no obvious above-ground cause",
+        "small aphid-like insects on the medium surface, pot rims, or roots; sometimes white waxy residue on roots"
+      ],
+      "likely_causes": [
+        "introduced in infested medium, clones, or from winged adults",
+        "spread between pots via shared trays/runoff",
+        "hard to detect until populations build in the root zone"
+      ],
+      "confused_with": [
+        "ph-lockout",
+        "fungus-gnats",
+        "overwatering"
+      ],
+      "differentiators": [
+        {
+          "vs": "ph-lockout",
+          "tell": "Lockout resolves when you correct pH; root aphids keep the plant declining with 'multiple deficiencies' even though pH and feed are dialed in — check the root zone/pot edges for insects."
+        },
+        {
+          "vs": "fungus-gnats",
+          "tell": "Gnat larvae eat organic matter/decaying roots and the adults are obvious dark fliers; root aphids pierce LIVING roots and often show as aphid-like bugs on the medium surface, not clouds of fliers."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering tracks a constantly-wet medium and improves as it dries; root aphid decline persists regardless of watering."
+        }
+      ],
+      "clarifying_questions": [
+        "Have you ruled out pH/feeding, and does the plant still decline anyway?",
+        "Can you check the medium surface, pot edges, and roots for small insects or white waxy residue?"
+      ],
+      "fix": "Treat as serious — they're stubborn. Confirm by inspecting the root zone, isolate affected plants, and use soil-drench treatments on a repeat schedule; heavy cases often need to bare-root and replace medium plus strict sanitation of trays and tools.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Root aphids are easy to miss because symptoms mimic nutrient/pH problems; confirmation usually means finding the insects in the medium or on roots."
+    },
+    {
+      "id": "slugs-snails",
+      "name": "Slugs & Snails",
+      "category": "pest",
+      "stage": [
+        "seedling",
+        "veg"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "big ragged holes chewed in the leaves overnight",
+        "shiny slime trails on and around the plant",
+        "something eating my outdoor seedlings at night",
+        "leaves getting shredded but no bugs in the day"
+      ],
+      "symptoms": [
+        "irregular ragged holes chewed in leaves, worst on young/low foliage",
+        "silvery dried SLIME trails on leaves, stems, or soil",
+        "damage appears overnight; pests hide by day"
+      ],
+      "likely_causes": [
+        "outdoor/greenhouse grows with damp, sheltered hiding spots",
+        "cool, moist nighttime conditions",
+        "mulch, debris, or pot rims giving daytime cover"
+      ],
+      "confused_with": [
+        "caterpillars-budworms",
+        "leaf-miners",
+        "thrips"
+      ],
+      "differentiators": [
+        {
+          "vs": "caterpillars-budworms",
+          "tell": "Slugs/snails leave SLIME trails and no droppings; caterpillars leave dark frass and no slime — check for the shiny trail."
+        },
+        {
+          "vs": "leaf-miners",
+          "tell": "Slugs chew right THROUGH the leaf leaving holes; miners tunnel inside leaving trails without removing tissue."
+        },
+        {
+          "vs": "thrips",
+          "tell": "Thrips scrape a silvery surface film; slugs/snails remove whole chunks of leaf, leaving big holes plus slime."
+        }
+      ],
+      "clarifying_questions": [
+        "Do you see shiny slime trails near the damage, and is it happening overnight?",
+        "Are you growing outdoors or somewhere damp with hiding spots nearby?"
+      ],
+      "fix": "Hand-pick at night when they're active, clear damp hiding spots and debris near the plants, and use barriers or traps around the base. Keeping the area drier and less sheltered reduces pressure.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "septoria-leaf-spot",
+      "name": "Septoria Leaf Spot (Yellow Leaf Spot)",
+      "category": "disease",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "yellow then brown spots starting on the lower leaves",
+        "round spots with light centers spreading up the plant",
+        "lots of little spots on the bottom leaves outdoors",
+        "leaves spotting and dying from the bottom"
+      ],
+      "symptoms": [
+        "small round yellow spots on LOWER/older leaves that turn brown, often with a lighter center and darker margin",
+        "spots multiply and the leaf yellows and dies, progressing upward",
+        "favored by warm, wet, humid conditions and water splash"
+      ],
+      "likely_causes": [
+        "fungal spores spread by rain/overhead watering splash",
+        "warm, humid, crowded conditions with poor airflow",
+        "infected debris left around the plant"
+      ],
+      "confused_with": [
+        "calcium-deficiency",
+        "powdery-mildew",
+        "leaf-miners"
+      ],
+      "differentiators": [
+        {
+          "vs": "calcium-deficiency",
+          "tell": "Calcium spotting tends toward brown flecks with new-growth distortion and follows a nutrient pattern; septoria is discrete ROUND spots starting on lower leaves and spreading, tied to humidity/splash."
+        },
+        {
+          "vs": "powdery-mildew",
+          "tell": "Mildew is a white surface film; septoria is distinct brown SPOTS in the leaf tissue."
+        },
+        {
+          "vs": "leaf-miners",
+          "tell": "Miners leave winding trails; septoria leaves round spots."
+        }
+      ],
+      "clarifying_questions": [
+        "Did the spotting start on the LOWER/older leaves and work upward?",
+        "How humid is your space, and are you getting water splash on the leaves?"
+      ],
+      "fix": "Remove and dispose of affected leaves, improve airflow, and lower humidity. Avoid overhead watering and splash, keep the area clean of fallen debris, and apply an appropriate fungicide early if it's spreading. Sanitation between plants matters.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "fusarium-wilt",
+      "name": "Fusarium Wilt / Root & Crown Rot",
+      "category": "disease",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "one branch or side wilting and not recovering with water",
+        "plant wilting even though the soil is fine",
+        "lower leaves yellowing and the plant collapsing",
+        "stem looks brown inside when I cut it"
+      ],
+      "symptoms": [
+        "wilting that doesn't recover after watering, sometimes starting on one side/branch",
+        "yellowing of lower leaves, progressive decline, and possible collapse",
+        "brown discoloration in the stem's internal (vascular) tissue"
+      ],
+      "likely_causes": [
+        "soilborne fungus in contaminated medium/reused soil",
+        "warm soil and overwatering favoring infection",
+        "wounded roots/stem giving an entry point"
+      ],
+      "confused_with": [
+        "root-rot",
+        "overwatering",
+        "underwatering"
+      ],
+      "differentiators": [
+        {
+          "vs": "root-rot",
+          "tell": "Both wilt, but classic (pythium) root rot shows brown, mushy, foul roots; fusarium often shows one-sided wilt plus BROWN streaking inside the stem — cut a stem to check the vascular tissue."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering wilt improves as the medium dries; fusarium wilt keeps worsening regardless and comes with internal stem browning."
+        },
+        {
+          "vs": "underwatering",
+          "tell": "Underwatering recovers after a proper watering; fusarium wilt does not bounce back with water."
+        }
+      ],
+      "clarifying_questions": [
+        "Does the wilting fail to recover even after correct watering, and is it worse on one side?",
+        "If you cut a lower stem, is the tissue inside browned/streaked?"
+      ],
+      "fix": "Treat as serious and largely unrecoverable per plant — remove and destroy infected plants, don't compost them, and sanitize tools/pots. Avoid reusing the soil, and manage watering and soil temperature to reduce spread. Lab testing can confirm the pathogen.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "UC IPM",
+        "Oregon State University Extension",
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Several root/vascular pathogens look alike; definitive identification usually needs a lab, but the management (remove, sanitize, don't reuse soil) is similar."
+    },
+    {
+      "id": "hop-latent-viroid",
+      "name": "Hop Latent Viroid (HLVd / \"Dudding\")",
+      "category": "disease",
+      "stage": [
+        "veg",
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "serious",
+      "is_normal": false,
+      "user_phrases": [
+        "clones from the same mom are stunted and weak",
+        "buds coming out small, loose, and low-potency for no reason",
+        "plants dudding out even though care is dialed",
+        "reduced smell and trichomes across a whole batch"
+      ],
+      "symptoms": [
+        "stunted growth, reduced vigor, and brittle stems",
+        "smaller, looser, lower-potency ('dudded') buds with reduced aroma and trichomes",
+        "often symptomless carriers — a plant can spread it while looking normal"
+      ],
+      "likely_causes": [
+        "infected mother plants passing it to every clone",
+        "mechanical spread via cutting tools, hands, and plant-to-plant contact",
+        "possible spread through root contact/shared water"
+      ],
+      "confused_with": [
+        "overwatering",
+        "transplant-shock"
+      ],
+      "differentiators": [
+        {
+          "vs": "nutrient-deficiency-generic",
+          "tell": "Deficiencies show characteristic leaf patterns and respond to correcting feed/pH; HLVd stunting/dudding persists across a clean, dialed-in grow and often runs in a whole clone line from one mother."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering tracks a wet medium and improves as it dries; HLVd decline is genetic-line-wide and doesn't respond to watering fixes."
+        },
+        {
+          "vs": "transplant-shock",
+          "tell": "Transplant shock is temporary and recovers in days; HLVd is a persistent, spreading decline that a healthy transplant wouldn't explain."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the poor performance showing up across clones from the same mother, despite good care?",
+        "Have you ruled out pH/feeding/watering, and are you sanitizing tools between plants?"
+      ],
+      "fix": "There's no cure — the priority is confirmation and containment. A lab PCR test is the reliable diagnosis, since symptoms overlap with ordinary stress and carriers can look normal. Cull or isolate infected mothers, sterilize blades/tools between every plant, and rebuild from tested-clean stock.",
+      "escalate": true,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "HLVd cannot be reliably diagnosed by eye — symptoms mimic many stressors and infected plants are often symptomless carriers; lab testing is the standard for confirmation."
+    },
+    {
+      "id": "re-vegging",
+      "name": "Re-Vegging (Reversion to Veg in Flower)",
+      "category": "physiological",
+      "stage": [
+        "early-flower",
+        "late-flower"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "single smooth-edged leaves growing out of my buds",
+        "round leaves and weird growth on flowering plant",
+        "buds throwing out new leafy growth and stalling",
+        "plant seems to be going back to veg"
+      ],
+      "symptoms": [
+        "smooth-edged, single-blade or rounded leaves emerging from buds",
+        "elongated, leafy new growth and 'whiskers' out of colas; flowering stalls",
+        "overall confused growth instead of steady bud development"
+      ],
+      "likely_causes": [
+        "light interruptions during the dark period / light leaks in flower",
+        "insufficient or inconsistent dark period (schedule slipped off 12/12)",
+        "keeping a plant alive after harvest or re-exposing it to long days"
+      ],
+      "confused_with": [
+        "light-leak-flower",
+        "foxtailing",
+        "hermaphroditism"
+      ],
+      "differentiators": [
+        {
+          "vs": "light-leak-flower",
+          "tell": "Light leaks are the CAUSE here; re-vegging is the RESULT — leaks/interrupted dark can push a plant to revert with rounded single-blade leaves, so fix the leak to stop the reversion."
+        },
+        {
+          "vs": "foxtailing",
+          "tell": "Foxtailing is towers of new calyxes stacking into spires (a bud shape change); re-vegging is leafy, smooth-edged VEGETATIVE growth from the buds."
+        },
+        {
+          "vs": "hermaphroditism",
+          "tell": "Hermie shows pollen sacs/'nanners'; re-vegging shows leafy reversion growth — different structures, though both can stem from light stress."
+        }
+      ],
+      "clarifying_questions": [
+        "Is any light reaching the plant during its dark period, or did the schedule slip off 12/12?",
+        "Is the new growth leafy and smooth-edged (veg-like), rather than pollen sacs?"
+      ],
+      "fix": "Restore a strict, uninterrupted 12/12 dark period and seal any light leaks. Recovery back into flower takes a couple of weeks as the plant re-orients; consistency is the fix.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "helmet-head",
+      "name": "Helmet Head (Stuck Seed Shell)",
+      "category": "germination",
+      "stage": [
+        "seedling"
+      ],
+      "severity": "moderate",
+      "is_normal": false,
+      "user_phrases": [
+        "seed shell stuck on my seedling's leaves",
+        "seedling came up wearing its shell like a helmet",
+        "the casing won't come off the new leaves",
+        "shell stuck on the cotyledons"
+      ],
+      "symptoms": [
+        "the seed shell/casing remains clamped over the cotyledons after the seedling emerges",
+        "trapped leaves can't open fully, stalling early growth",
+        "otherwise the seedling stem and any exposed tissue look healthy"
+      ],
+      "likely_causes": [
+        "seed planted too shallow, so the medium didn't help strip the shell",
+        "low surface humidity letting the shell dry and harden onto the leaves",
+        "membrane inside the shell sticking to the cotyledons"
+      ],
+      "confused_with": [
+        "damping-off",
+        "poor-germination",
+        "seedling-slowness"
+      ],
+      "differentiators": [
+        {
+          "vs": "damping-off",
+          "tell": "Helmet head is a healthy, firm-stemmed seedling with a shell stuck on top; damping-off is a collapsing seedling with a pinched, darkened stem at the soil line."
+        },
+        {
+          "vs": "poor-germination",
+          "tell": "The seed here DID sprout — it's just wearing its shell; poor germination is a seed that never sprouts at all."
+        },
+        {
+          "vs": "seedling-slowness",
+          "tell": "Slowness is normal early establishment with open leaves; helmet head is specifically the shell trapping the leaves shut."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the shell/casing physically stuck over the first leaves, with the stem otherwise firm and green?",
+        "How humid is the surface, and how deep did you plant the seed?"
+      ],
+      "fix": "Raise humidity around the seedling to soften the shell (a light misting or humidity dome), wait, then gently ease it off — never yank, which tears the cotyledons. Next time, plant a touch deeper and keep the surface humid during emergence.",
+      "escalate": false,
+      "reassurance": null,
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "genetic-purpling",
+      "name": "Genetic Purpling (Normal Color)",
+      "category": "stage-normal",
+      "stage": [
+        "late-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "my buds and leaves are turning purple, is that bad",
+        "plant going purple in late flower",
+        "pink and purple colors showing up, is something wrong",
+        "is purple a deficiency or normal"
+      ],
+      "symptoms": [
+        "purple/pink/red coloring in leaves, stems, or buds, often deepening in late flower or cool temps",
+        "the plant is otherwise vigorous and healthy with no growth problems",
+        "coloring appears as a trait, not alongside spotting or dieback"
+      ],
+      "likely_causes": [
+        "strain genetics that express purple/anthocyanin pigments",
+        "cooler temperatures intensifying the color, especially late in flower"
+      ],
+      "confused_with": [
+        "phosphorus-deficiency",
+        "cold-stress",
+        "magnesium-deficiency"
+      ],
+      "differentiators": [
+        {
+          "vs": "phosphorus-deficiency",
+          "tell": "P purpling comes WITH dull, dark, sometimes spotted leaves and stalled growth; genetic color shows on a vigorous, otherwise-healthy plant with no other symptoms."
+        },
+        {
+          "vs": "cold-stress",
+          "tell": "Cold purpling pairs with slow growth and drooping in a genuinely cold space; genetic purpling appears on a thriving plant regardless (though cool temps can deepen it)."
+        },
+        {
+          "vs": "magnesium-deficiency",
+          "tell": "Mg shows interveinal yellowing on older leaves; healthy genetic purpling isn't accompanied by that yellowing pattern."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the plant otherwise healthy and growing well, with no yellowing/spotting?",
+        "Is this a strain known to color up, and are your temps on the cooler side?"
+      ],
+      "fix": "Usually nothing — if the plant is healthy and vigorous, purple color is a genetic/temperature trait, not a problem. Only investigate if the color comes with yellowing, spotting, or stalled growth.",
+      "escalate": false,
+      "reassurance": "Purple, pink, or red coloring on an otherwise healthy, vigorous plant is normal — many strains express it, and cool temperatures bring it out, especially in late flower. It's cosmetic, not a deficiency, as long as there's no yellowing, spotting, or stalled growth alongside it.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "leaf-variegation",
+      "name": "Leaf Variegation (Normal Genetic Patterning)",
+      "category": "stage-normal",
+      "stage": [
+        "any"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "some leaves have white or yellow patches, is that a problem",
+        "plant has cream and green patterned leaves",
+        "leaves growing in with white sections",
+        "is this variegation or a deficiency"
+      ],
+      "symptoms": [
+        "stable white/yellow/cream sections on leaves, often crisp-edged and present as the leaf forms",
+        "pattern doesn't spread or worsen the way a deficiency does",
+        "heavily variegated plants may grow a bit slower (less chlorophyll) but aren't sick"
+      ],
+      "likely_causes": [
+        "genetic variegation — patches of tissue with reduced chlorophyll",
+        "trait expressed from growth, not caused by nutrients or environment"
+      ],
+      "confused_with": [
+        "leaf-miners",
+        "light-burn"
+      ],
+      "differentiators": [
+        {
+          "vs": "nutrient-deficiency-generic",
+          "tell": "Variegation is stable and often crisp/symmetric and present as leaves grow; a deficiency spreads over time and follows leaf age or vein patterns."
+        },
+        {
+          "vs": "leaf-miners",
+          "tell": "Miners leave winding trails that expand; variegation is fixed patches of color, not tracks."
+        },
+        {
+          "vs": "light-burn",
+          "tell": "Light bleaching hits the tops nearest the lamp and correlates with intensity/distance; variegation appears throughout regardless of light position."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the white/yellow areas stable and present as the leaf grows, or spreading over time?",
+        "Is the plant otherwise healthy, and does the pattern look crisp rather than mottled/dying?"
+      ],
+      "fix": "Nothing needed if it's stable genetic variegation and the plant is otherwise healthy. Just note that heavily variegated plants often grow slower since they have less green tissue to photosynthesize.",
+      "escalate": false,
+      "reassurance": "Stable white or yellow patterning that's present as leaves grow is genetic variegation, not a disease or deficiency. It's harmless — the main trade-off is that very variegated plants can grow a little slower because they have less chlorophyll.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "cotyledon-yellowing",
+      "name": "Cotyledon Yellowing (Normal Seedling Transition)",
+      "category": "stage-normal",
+      "stage": [
+        "seedling"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "the first round leaves on my seedling are yellowing",
+        "seedling's bottom two little leaves going yellow",
+        "are the first leaves supposed to fall off",
+        "round baby leaves yellowing, is that bad"
+      ],
+      "symptoms": [
+        "the first round 'seed leaves' (cotyledons) yellow and eventually drop",
+        "the true, serrated leaves above them are healthy and green",
+        "happens as the seedling matures past the cotyledon stage"
+      ],
+      "likely_causes": [
+        "normal transition — cotyledons are spent as true leaves take over photosynthesis"
+      ],
+      "confused_with": [
+        "nitrogen-deficiency",
+        "overwatering",
+        "seedling-slowness"
+      ],
+      "differentiators": [
+        {
+          "vs": "nitrogen-deficiency",
+          "tell": "Nitrogen yellows the true FAN leaves from the bottom up; cotyledon yellowing is limited to the ROUND first leaves while the true leaves stay green."
+        },
+        {
+          "vs": "overwatering",
+          "tell": "Overwatering droops the seedling in a soggy medium; normal cotyledon fade happens on a healthy seedling with good true-leaf growth."
+        },
+        {
+          "vs": "seedling-slowness",
+          "tell": "Slowness is about pace of growth; this is specifically the round first leaves aging out — a normal milestone, not a stall."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the yellowing limited to the round first leaves, with healthy green true leaves above?",
+        "Is the seedling otherwise growing and looking firm?"
+      ],
+      "fix": "Nothing — if only the round cotyledons are yellowing while the true leaves are healthy and green, it's a normal part of the seedling maturing. Don't start feeding heavily in response.",
+      "escalate": false,
+      "reassurance": "Yellowing of the first round 'seed leaves' (cotyledons) is normal as the seedling matures and the true serrated leaves take over. As long as those true leaves are green and healthy, there's nothing to fix — the cotyledons are just aging out.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "praying-leaves",
+      "name": "Praying Leaves (Normal Healthy Sign)",
+      "category": "stage-normal",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "leaves reaching up toward the light, is that okay",
+        "top leaves angled upward like praying hands",
+        "leaves lifting up, is my plant stressed",
+        "is upward leaves good or bad",
+        "my leaves are pointing straight up"
+      ],
+      "symptoms": [
+        "leaves lift and angle UPWARD toward the light, flat and healthy",
+        "typically on vigorous plants under good light and conditions",
+        "no edge-curl, no discoloration — just an upward reach"
+      ],
+      "likely_causes": [
+        "a healthy plant response to good light and comfortable conditions"
+      ],
+      "confused_with": [
+        "heat-stress",
+        "light-burn",
+        "nitrogen-toxicity"
+      ],
+      "differentiators": [
+        {
+          "vs": "heat-stress",
+          "tell": "Heat tacoing CURLS the leaf EDGES up into a canoe on a hot canopy; praying is the whole flat leaf/petiole lifting toward the light on a comfortable, healthy plant."
+        },
+        {
+          "vs": "light-burn",
+          "tell": "Light burn bleaches/yellows the tops nearest the lamp; praying leaves are green and healthy, just angled up."
+        },
+        {
+          "vs": "nitrogen-toxicity",
+          "tell": "The nitrogen claw curls leaf tips DOWN on dark glossy leaves; praying lifts leaves UP and flat with normal color."
+        }
+      ],
+      "clarifying_questions": [
+        "Are the leaves flat and healthy (just angled up), or are the EDGES curling into a canoe?",
+        "What are your canopy temperatures — comfortable, or hot?"
+      ],
+      "fix": "Nothing — leaves reaching up toward the light on a healthy, green plant is generally a good sign of a happy plant. Only treat it as heat if the edges are curling/cupping and the canopy is hot.",
+      "escalate": false,
+      "reassurance": "Leaves lifting and angling up toward the light ('praying') is usually a sign of a healthy, happy plant with good light and conditions. As long as the leaves are flat, green, and the edges aren't curling on a hot canopy, there's nothing to fix.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": null
+    },
+    {
+      "id": "autoflower-small-stature",
+      "name": "Small Autoflower / Compact Plant (Normal Genetics)",
+      "category": "stage-normal",
+      "stage": [
+        "veg",
+        "early-flower"
+      ],
+      "severity": "cosmetic",
+      "is_normal": true,
+      "user_phrases": [
+        "my autoflower is really small, is it stunted",
+        "auto started flowering while still tiny",
+        "plant is compact, did I do something wrong",
+        "is my little autoflower normal"
+      ],
+      "symptoms": [
+        "compact overall size, sometimes flowering while still small",
+        "healthy, green, vigorous growth despite the small stature",
+        "size determined largely by genetics, not by any problem"
+      ],
+      "likely_causes": [
+        "autoflower/compact genetics that stay small and flower on age",
+        "limited veg window before an autoflower flips to flower on its own"
+      ],
+      "confused_with": [
+        "insufficient-light",
+        "transplant-shock"
+      ],
+      "differentiators": [
+        {
+          "vs": "insufficient-light",
+          "tell": "Light-starved plants stretch tall/leggy and pale reaching for the lamp; a normal small auto is COMPACT, green, and healthy — small isn't the same as stretched."
+        },
+        {
+          "vs": "transplant-shock",
+          "tell": "Transplant shock is a temporary stall that recovers in days; a small auto is simply its genetic size, growing steadily."
+        },
+        {
+          "vs": "nutrient-deficiency-generic",
+          "tell": "A deficiency shows leaf discoloration/patterns; a healthy small auto has clean green foliage — it's just petite."
+        }
+      ],
+      "clarifying_questions": [
+        "Is the plant an autoflower or a known compact strain, and is it otherwise green and healthy?",
+        "Is it compact but sturdy, or stretchy/pale reaching for the light?"
+      ],
+      "fix": "Usually nothing — many autoflowers and some strains simply stay small and flower on age. Treat autos gently (minimal transplanting, topping, or heavy training), since stress permanently limits their size more than it would a photoperiod plant.",
+      "escalate": false,
+      "reassurance": "Plenty of autoflowers and compact strains just stay small and start flowering while still petite — that's genetics, not a mistake. If the plant is green, sturdy, and growing steadily, a small stature is normal; only a stretchy, pale, reaching plant points to a light problem.",
+      "sources": [
+        "GrowWeedEasy"
+      ],
+      "confidence_note": "Final size varies enormously by genetics and pot/veg time, so 'too small' is hard to judge by size alone — plant health is the better indicator."
     }
   ]
 }

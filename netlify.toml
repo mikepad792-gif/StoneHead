@@ -13,6 +13,20 @@
   node_bundler = "esbuild"
   included_files = ["data/**"]
 
+# Home-screen app. sw.js must never be cached by the browser or the CDN, or
+# a fixed worker can take days to reach people.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "no-cache"
+
 # Security headers for every response.
 # TODO: add a Content-Security-Policy as a follow-up with a report-only
 # rollout — CRA's build emits inline chunks, and a broken CSP is worse
@@ -58,6 +72,13 @@
   to = "/.netlify/functions/chat-send"
   status = 200
 
+# Talk the Plant photo reads. Step one of a photo turn; /api/chat/send with
+# the returned photo_read_id is step two.
+[[redirects]]
+  from = "/api/plant/photo-read"
+  to = "/.netlify/functions/plant-photo-read"
+  status = 200
+
 [[redirects]]
   from = "/api/profile/get"
   to = "/.netlify/functions/profile-get"
@@ -81,6 +102,18 @@
 [[redirects]]
   from = "/api/usage/check"
   to = "/.netlify/functions/usage-check"
+  status = 200
+
+# In-app account deletion (migration 016). The privacy policy promises it.
+[[redirects]]
+  from = "/api/account/delete"
+  to = "/.netlify/functions/account-delete"
+  status = 200
+
+# Thumbs up / down on replies (migration 017).
+[[redirects]]
+  from = "/api/feedback"
+  to = "/.netlify/functions/feedback"
   status = 200
 
 # New (Thread 3):
@@ -129,14 +162,21 @@
   to = "/.netlify/functions/strains-liked-update"
   status = 200
 
+# Passes on Stripe (2.1, migration 019). Replaced the payment-code system.
 [[redirects]]
-  from = "/api/subscription/generate-code"
-  to = "/.netlify/functions/subscription-generate-code"
+  from = "/api/checkout/create"
+  to = "/.netlify/functions/checkout-create"
   status = 200
 
 [[redirects]]
-  from = "/api/subscription/callback"
-  to = "/.netlify/functions/subscription-callback"
+  from = "/api/stripe/webhook"
+  to = "/.netlify/functions/stripe-webhook"
+  status = 200
+
+# Profile toggles (warn before rollover, ask before sharing for training).
+[[redirects]]
+  from = "/api/profile/settings"
+  to = "/.netlify/functions/profile-settings"
   status = 200
 
 # New (Phase 2 — session memory):

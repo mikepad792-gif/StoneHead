@@ -203,6 +203,55 @@ try {
   );
   process.env.OPENROUTER_TIMEOUT_MS = "1000";
 
+  // fallbackModel (photo reads). Omitted keeps the shared fallback, which is
+  // every existing caller. A string re-points the retry. null turns it off.
+  // The vision path needs this because a text-only fallback cannot see a
+  // photo, and AI_MODEL_FALLBACK belongs to text.
+  const attempted = [];
+  await runWithFetch(
+    async (_url, init) => {
+      const body = JSON.parse(init.body);
+      attempted.push(body.model);
+      return body.model === "vision/primary"
+        ? jsonResponse(503, { error: { code: 503, message: "provider down" } })
+        : jsonResponse(200, completion("vision fallback", body.model));
+    },
+    async () => {
+      const data = await openrouterChat("vision/primary", [], {}, { fallbackModel: "vision/backup" });
+      assert.equal(data.choices[0].message.content, "vision fallback");
+      assert.deepEqual(attempted, ["vision/primary", "vision/backup"], "retry must use the given fallback, not AI_MODEL_FALLBACK");
+    }
+  );
+
+  let noFallbackCalls = 0;
+  await runWithFetch(
+    async () => {
+      noFallbackCalls++;
+      return jsonResponse(503, { error: { code: 503, message: "provider down" } });
+    },
+    async () => {
+      const data = await openrouterChat("vision/primary", [], {}, { fallbackModel: null });
+      assert.equal(data, null);
+      assert.equal(noFallbackCalls, 1, "fallbackModel: null must not retry");
+    }
+  );
+
+  const defaultAttempts = [];
+  await runWithFetch(
+    async (_url, init) => {
+      const body = JSON.parse(init.body);
+      defaultAttempts.push(body.model);
+      return defaultAttempts.length === 1
+        ? jsonResponse(503, { error: { code: 503, message: "provider down" } })
+        : jsonResponse(200, completion("shared fallback", body.model));
+    },
+    async () => {
+      await openrouterChat("primary/model", []);
+      assert.equal(defaultAttempts.length, 2);
+      assert.notEqual(defaultAttempts[1], "primary/model", "omitted fallbackModel keeps the shared fallback");
+    }
+  );
+
   // A blank model is a configuration error, not something to paper over by
   // silently substituting the fallback.
   await runWithFetch(

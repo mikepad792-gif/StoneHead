@@ -233,6 +233,120 @@
       "query": "my dried buds smell like hay and fresh cut grass and the smoke is harsh",
       "expect_issue": "improper-curing",
       "note": "hay smell from fast/bad dry"
+    },
+    {
+      "id": "tn1",
+      "query": "the new growth is all twisted and crinkly",
+      "expect_cluster": [
+        "broad-russet-mites",
+        "boron-deficiency",
+        "calcium-deficiency"
+      ],
+      "note": "twisted new growth: mites vs boron vs calcium, ask for a loupe"
+    },
+    {
+      "id": "pu1",
+      "query": "my leaves are turning purple, is that bad",
+      "expect_cluster": [
+        "genetic-purpling",
+        "phosphorus-deficiency",
+        "cold-stress"
+      ],
+      "note": "purple: genetics vs P vs cold, ask about night temps"
+    },
+    {
+      "id": "fb1",
+      "query": "little flying bugs around my plants",
+      "expect_cluster": [
+        "fungus-gnats",
+        "whiteflies",
+        "aphids"
+      ],
+      "note": "small flying bugs: soil vs leaf underside"
+    },
+    {
+      "id": "sp1",
+      "query": "yellow spots with brown centers on my leaves",
+      "expect_cluster": [
+        "septoria-leaf-spot",
+        "calcium-deficiency",
+        "leaf-miners"
+      ],
+      "note": "spots: fungal vs calcium"
+    },
+    {
+      "id": "st1",
+      "query": "my plant is stunted and barely growing",
+      "expect_cluster": [
+        "transplant-shock",
+        "hop-latent-viroid",
+        "root-aphids",
+        "autoflower-small-stature",
+        "insufficient-light"
+      ],
+      "note": "stunted: must not jump to 'normal autoflower'"
+    },
+    {
+      "id": "fw1",
+      "query": "my buds are growing weird leaves in flower",
+      "expect_cluster": [
+        "re-vegging",
+        "foxtailing",
+        "light-leak-flower",
+        "hermaphroditism"
+      ],
+      "note": "odd flower growth: reveg vs foxtail vs light leak"
+    },
+    {
+      "id": "bd1",
+      "query": "found brown mush inside one of my buds",
+      "expect_cluster": [
+        "bud-rot",
+        "caterpillars-budworms"
+      ],
+      "note": "rot vs budworm damage, check for frass"
+    },
+    {
+      "id": "ce1",
+      "query": "the edges of my leaves are crispy",
+      "expect_cluster": [
+        "nutrient-burn",
+        "heat-stress",
+        "wind-burn",
+        "light-burn"
+      ],
+      "note": "crispy edges: feed vs heat vs fan"
+    },
+    {
+      "id": "ng1",
+      "query": "new leaves are yellow between the veins",
+      "expect_cluster": [
+        "iron-deficiency",
+        "zinc-deficiency",
+        "manganese-deficiency",
+        "ph-lockout"
+      ],
+      "note": "new-growth chlorosis: micronutrient or pH"
+    },
+    {
+      "id": "pr1",
+      "query": "my leaves are pointing straight up",
+      "expect_cluster": [
+        "praying-leaves",
+        "heat-stress",
+        "light-burn"
+      ],
+      "note": "praying (healthy) vs heat tacoing"
+    },
+    {
+      "id": "wc1",
+      "query": "white cottony stuff on the stems",
+      "expect_cluster": [
+        "mealybugs",
+        "scale-insects",
+        "powdery-mildew"
+      ],
+      "note": "cottony bugs vs mildew, does it wipe off"
     }
   ],
   "behavioral_cases": [

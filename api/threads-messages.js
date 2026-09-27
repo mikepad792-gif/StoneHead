@@ -1,13 +1,18 @@
 // GET /api/threads/messages
 // Query params: thread_id
-// Response: { messages: [{ id, role, content, tokens_in, tokens_out, created_at }] }
+// Response: { messages: [{ id, role, content, tokens_in, tokens_out, created_at, photo?, rateable?, rating? }] }
+// rateable / rating: thumbs up/down on replies (migration 017). rating is
+// "up" | "down" | null, this user's current rating of that reply.
 // Note: content_augmented is never sent to frontend
+// photo: true marks a user message that was sent with a photo (Talk the
+// Plant). The photo itself is never stored, so this is all the UI can show.
 
 import { authenticateRequest } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { detectCrisis } from "../lib/crisisDetect.js";
 import { detectSubstance } from "../lib/substanceDetect.js";
 import { buildSafetyCard } from "../lib/safetyCard.js";
+import { rateableReplyIds } from "../lib/feedbackEligibility.js";
 
 /**
  * Re-derive safety cards for a loaded thread (Addendum B1).
@@ -94,7 +99,46 @@ export async function handler(event) {
 
     if (error) throw error;
 
-    return jsonResponse(200, { messages: attachSafetyCards(messages || []) });
+    // Which messages came with a photo. Its own query against photo_reads
+    // (migration 015) rather than a column on messages, and non-blocking:
+    // if the photo lookup fails the thread still loads, just without the
+    // photo markers. Photos must never be able to take a thread down.
+    //
+    // The reply ratings (migration 017) are read alongside, and are just as
+    // non-blocking: a failure loses the filled-in thumbs, never the thread.
+    let photoIds = new Set();
+    const [{ data: photoRows, error: photoError }, { data: ratingRows, error: ratingError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("photo_reads")
+          .select("message_id")
+          .eq("thread_id", thread_id)
+          .not("message_id", "is", null),
+        supabaseAdmin
+          .from("message_feedback")
+          .select("message_id, rating")
+          .eq("thread_id", thread_id)
+          .eq("user_id", user.user_id),
+      ]);
+    if (photoError) {
+      console.error("threads/messages photo lookup failed (non-blocking):", photoError.message);
+    } else {
+      photoIds = new Set((photoRows || []).map((r) => r.message_id));
+    }
+    if (ratingError) {
+      console.error("threads/messages rating lookup failed (non-blocking):", ratingError.message);
+    }
+    const ratings = new Map((ratingRows || []).map((r) => [r.message_id, r.rating]));
+    const rateable = rateableReplyIds(messages || []);
+    const marked = (messages || []).map((m) => {
+      let out = photoIds.has(m.id) ? { ...m, photo: true } : m;
+      if (m.role === "assistant") {
+        out = { ...out, rateable: rateable.has(m.id), rating: ratings.get(m.id) || null };
+      }
+      return out;
+    });
+
+    return jsonResponse(200, { messages: attachSafetyCards(marked) });
   } catch (err) {
     console.error("threads/messages error:", err);
     return jsonResponse(500, { error: "Failed to load messages" });

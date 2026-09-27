@@ -1,8 +1,49 @@
-import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
+import { pickChips, loadRecent, saveRecent } from "./chipPool.js";
+import { APP_VERSION } from "./version.js";
 
 const API_BASE = "";
 const DISCORD_INVITE_URL = "https://discord.gg/twJuwv6WT";
+// Discord Developer Portal -> the StoneHead bot -> Installation -> Install Link
+// (the Discord Provided Link). Scopes and permissions come from the portal's
+// Guild Install settings: bot + applications.commands, permissions 85056.
+const DISCORD_BOT_INSTALL_URL = "https://discord.com/oauth2/authorize?client_id=1549743913261203516";
+// Invite-only deploys (the test site) set REACT_APP_DISABLE_SIGNUP=true at build
+// time to hide the sign-up toggle. The server enforces it too (DISABLE_SIGNUP).
+const SIGNUP_DISABLED = process.env.REACT_APP_DISABLE_SIGNUP === "true";
 const AppContext = createContext(null);
+
+// ── Home-screen app ─────────────────────────────────────────────────
+// Chrome fires beforeinstallprompt once, possibly before React mounts, so it
+// is caught here at module load. Saved for the "get the app" item and the
+// one-time banner; the browser's own mini-bar is suppressed.
+window.__shInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  window.__shInstallPrompt = e;
+  window.dispatchEvent(new Event("sh-install-ready"));
+});
+window.addEventListener("appinstalled", () => {
+  window.__shInstallPrompt = null;
+  window.dispatchEvent(new Event("sh-installed"));
+});
+const isStandalone = () =>
+  window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+const isIOS = () =>
+  /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// Android browsers can always install from their own menu. Chrome only
+// hands the page its install prompt after a tap and ~30s on the page, so
+// until then "get the app" shows the menu steps instead of doing nothing.
+const isAndroid = () => /android/i.test(navigator.userAgent);
+// There's a way to install from here: a saved Chrome prompt, iOS's Add to
+// Home Screen, or an Android browser menu. Never inside the installed app.
+const installAvailable = () => !isStandalone() && (!!window.__shInstallPrompt || isIOS() || isAndroid());
+const isPhone = () => window.matchMedia("(pointer: coarse)").matches;
+// The install banner shows once per device, ever (install is per device).
+const INSTALL_BANNER_KEY = "sh_install_banner_done";
+function installBannerDone() { try { return localStorage.getItem(INSTALL_BANNER_KEY) === "1"; } catch { return false; } }
+function markInstallBannerDone() { try { localStorage.setItem(INSTALL_BANNER_KEY, "1"); } catch {} }
 function useApp() { return useContext(AppContext); }
 
 // Single-flight session refresh: N parallel 401s trigger ONE refresh
@@ -34,7 +75,10 @@ async function apiCall(endpoint, options = {}, isRetry = false) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers: { ...headers, ...(options.headers || {}) } });
-  const data = await res.json();
+  // A platform error (Netlify's 413 for an oversized body, a gateway timeout)
+  // is not JSON. Turn it into an ordinary error instead of a parse crash.
+  let data;
+  try { data = await res.json(); } catch { data = { error: `request failed (${res.status})` }; }
   let parsed;
   if (typeof data.body === "string") { try { parsed = JSON.parse(data.body); } catch { parsed = data; } } else { parsed = data; }
   // Expired session: one transparent refresh + one retry, then give up.
@@ -52,30 +96,151 @@ async function apiCall(endpoint, options = {}, isRetry = false) {
     localStorage.removeItem("refresh_token");
     throw new Error(parsed.error || "session expired");
   }
-  if (parsed.error) throw new Error(parsed.error);
+  if (parsed.error) {
+    // status and code ride along so callers can tell a photo limit from a
+    // dead network without string-matching the message.
+    const err = new Error(parsed.error);
+    err.status = res.status;
+    err.code = parsed.code || null;
+    err.data = parsed; // e.g. the photo quota on a rollover_confirm 409
+    throw err;
+  }
   return parsed;
 }
 async function apiPost(endpoint, body) { return apiCall(endpoint, { method: "POST", body: JSON.stringify(body) }); }
 async function apiGet(endpoint, params = {}) { const qs = new URLSearchParams(params).toString(); return apiCall(qs ? `${endpoint}?${qs}` : endpoint, { method: "GET" }); }
 
+// ── Talk the Plant photos ────────────────────────────────────────────
+// Every photo is redrawn on a canvas before it leaves the phone. That does two
+// jobs. It shrinks the photo to what the vision model actually uses (past
+// about 1568px on the long edge it gets downscaled on their end anyway), and
+// it strips everything the camera attached, GPS location included, because a
+// canvas export carries no metadata at all. The server strips again
+// (lib/photoRead.js) as a second lock.
+const PHOTO_MAX_EDGE = 1568;
+const PHOTO_JPEG_QUALITY = 0.85;
+const PHOTO_MAX_FILE_BYTES = 40 * 1024 * 1024; // refuse to even decode past this
+// Must match PHOTO_ONLY_TEXT in lib/photoRead.js: stored as the message text
+// when a photo is sent with no words, and hidden behind the photo marker.
+const PHOTO_ONLY_TEXT = "(photo)";
+
+async function decodePhoto(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, done: () => bitmap.close && bitmap.close() };
+    } catch { /* some browsers refuse the options bag or the format; <img> below covers them */ }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode_failed"));
+      el.src = url;
+    });
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+}
+
+async function preparePhoto(file) {
+  if (file.size > PHOTO_MAX_FILE_BYTES) throw new Error("too_big");
+  const decoded = await decodePhoto(file);
+  try {
+    const { width, height } = decoded;
+    if (!width || !height) throw new Error("decode_failed");
+    const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(width, height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx2d = canvas.getContext("2d");
+    // JPEG has no transparency. White, not black, behind a transparent screenshot.
+    ctx2d.fillStyle = "#ffffff";
+    ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+    ctx2d.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY));
+    if (!blob) throw new Error("encode_failed");
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("encode_failed"));
+      reader.readAsDataURL(blob);
+    });
+    return { dataUrl, previewUrl: URL.createObjectURL(blob) };
+  } finally {
+    decoded.done();
+  }
+}
+
+// "Oct 26" and "5:00 PM" in the phone's own time zone.
+// The year only when it isn't this one ("Sep 23, 2027"), so a date a year out
+// never reads like one that already passed.
+function fmtDay(iso) {
+  try {
+    const d = new Date(iso);
+    const utc = iso && iso.length === 10;
+    const sameYear = (utc ? d.getUTCFullYear() : d.getFullYear()) === new Date().getFullYear();
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: utc ? "UTC" : undefined });
+  } catch { return ""; }
+}
+function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); } catch { return ""; } }
+// A cached quota stops being true at the daily reset (midnight UTC).
+function quotaIsFresh(q) { return !!q && !!q.resets_at && Date.now() < Date.parse(q.resets_at); }
+function photoCountLine(q) {
+  if (!q) return null;
+  const n = q.remaining_today;
+  let line = `${n} photo${n === 1 ? "" : "s"} left today · resets at ${fmtTime(q.resets_at)}`;
+  if (q.rollover > 0) line += ` · ${q.rollover} rollover`;
+  return line;
+}
+const ROLLOVER_OK_KEY = (threadId) => `sh_rollover_ok_${threadId}`;
+function rolloverOkForThread(threadId) { try { return !!threadId && localStorage.getItem(ROLLOVER_OK_KEY(threadId)) === "1"; } catch { return false; } }
+function markRolloverOkForThread(threadId) { try { if (threadId) localStorage.setItem(ROLLOVER_OK_KEY(threadId), "1"); } catch {} }
+
+// What StoneHead says when a photo turn fails. `final` means retrying the
+// same photo can't work, so the error bubble offers no retry button.
+function photoErrorReply(e) {
+  switch (e && e.code) {
+    case "photo_limit":
+      return { text: "that's all the photos I can look at today. tell me what you're seeing and I'll work with that.", final: true };
+    case "bad_image":
+      return { text: "couldn't open that photo. try a regular jpg or a screenshot of it.", final: true };
+    case "photo_expired":
+    case "photo_used":
+    case "photo_not_found":
+    case "photo_not_ready":
+      return { text: "that photo timed out on me. attach it again?", final: true };
+    case "age_blocked":
+    case "age_unverified":
+    case "not_plant":
+      return { text: "photos only work on talk the plant.", final: true };
+    case "vision_unavailable":
+    case "vision_unreadable":
+    case "photo_unavailable":
+      return { text: "couldn't get a good look at that one, something's off on my end. try it again in a sec.", final: false };
+    default:
+      if (e && e.status === 413) return { text: "that photo's too big to send. try a screenshot of it.", final: true };
+      return null;
+  }
+}
+
+function CameraIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 8h3l1.6-2.4A1.5 1.5 0 0 1 9.85 5h4.3a1.5 1.5 0 0 1 1.25.6L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+      <circle cx="12" cy="13" r="3.5" stroke="currentColor" strokeWidth="1.8"/>
+    </svg>
+  );
+}
+
 // §7: all four are in the USER's voice, and none can be satisfied by a single
 // deep line — the previous set was quote-vending prompts, which taught the
 // exact behavior the giveaway rejects. Chip 3 is the first-contact demo of the
 // voice rewrite: it asks him to bring something, which surfaces a tide pool.
-const VIBE_SUGGESTIONS = [
-  { text: "i don't even know what to say to you", icon: "💭" },
-  { text: "there's something i can't stop thinking about", icon: "🌀" },
-  { text: "what do you think about when nobody's talking to you?", icon: "🗿" },
-  { text: "i keep going back and forth on something", icon: "🔀" },
-];
-const PLANT_SUGGESTIONS = [
-  // §7: 2 strain + 2 grow, each phrased as a real user message. The grow chips
-  // teach what's newly possible (diagnosis + cultivation-about-a-strain).
-  { text: "what's good for a lazy Sunday?", icon: "🛋" },
-  { text: "something that won't make me anxious", icon: "🌿" },
-  { text: "my leaves are turning yellow, help", icon: "🍃" },
-  { text: "is Blue Dream hard to grow?", icon: "🌱" },
-];
+// Suggestion chips now rotate: pools and picker live in src/chipPool.js.
 
 function relativeTime(dateStr) {
   if (!dateStr) return "";
@@ -129,11 +294,25 @@ export default function App() {
   const [appLoading, setAppLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [toasts, setToasts] = useState([]);
+  // The photo quota (migration 019): { daily_limit, used_today, remaining_today,
+  // rollover, earns_rollover, next_halving, resets_at }, from profile-get and
+  // refreshed by every photo-read response.
+  const [photoQuota, setPhotoQuota] = useState(null);
+  const photosRemaining = photoQuota && quotaIsFresh(photoQuota) ? photoQuota.remaining_today : null;
+  // The rollover warning card: { remaining, threadId, onOkay } while open.
+  const [rolloverAsk, setRolloverAsk] = useState(null);
+  const [loadingNote, setLoadingNote] = useState(null); // a word next to the typing dots ("looking at the photo...")
   const [recoveryToken, setRecoveryToken] = useState(null); // set from the reset-email hash
   // Owes an acknowledgement of the CURRENT terms — never accepted, or accepted
   // an older version. The server decides (profile-get compares against
   // TOS_VERSION); the client only renders.
   const [tosPending, setTosPending] = useState(false);
+  // Home-screen app: whether there's a way to install, the iOS steps sheet,
+  // and the one-time banner ("unseen" -> "showing" -> "done").
+  const [canInstall, setCanInstall] = useState(() => installAvailable());
+  const [showInstallSheet, setShowInstallSheet] = useState(false);
+  const [installBanner, setInstallBanner] = useState(() => (installBannerDone() ? "done" : "unseen"));
+  const [gotReply, setGotReply] = useState(false); // a live reply arrived this session
 
   function addToast(msg) {
     const id = Date.now();
@@ -148,6 +327,17 @@ export default function App() {
   }, [sessionToken]);
 
   useEffect(() => { if (sessionToken) loadThreads(); }, [activeTab]);
+
+  useEffect(() => {
+    const onReady = () => setCanInstall(installAvailable());
+    const onInstalled = () => {
+      setCanInstall(false); setInstallBanner("done"); setShowInstallSheet(false);
+      addToast("StoneHead's on your home screen.");
+    };
+    window.addEventListener("sh-install-ready", onReady);
+    window.addEventListener("sh-installed", onInstalled);
+    return () => { window.removeEventListener("sh-install-ready", onReady); window.removeEventListener("sh-installed", onInstalled); };
+  }, []);
 
   // §6a — the password-reset link lands here with the tokens in the URL HASH
   // (Supabase verifies on its own domain, then redirects). Keying off the hash
@@ -168,6 +358,38 @@ export default function App() {
     }
   }, []);
 
+  // Back from Stripe Checkout (?paid=1 or ?paid=0). The pass is granted by
+  // the webhook, a moment after the redirect, so wait for the end date to
+  // move (up to ~20s) before saying so. The flag leaves the URL either way.
+  useEffect(() => {
+    if (!sessionToken) return;
+    const params = new URLSearchParams(window.location.search);
+    const paid = params.get("paid");
+    if (paid === null) return;
+    params.delete("paid");
+    const rest = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+    if (paid !== "1") return;
+    let prev = null;
+    try { prev = sessionStorage.getItem("sh_prev_expires"); sessionStorage.removeItem("sh_prev_expires"); } catch {}
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 10 && !cancelled; i++) {
+        try {
+          const p = await apiGet("/api/profile/get");
+          if (p.pass_active && p.subscription_expires && p.subscription_expires !== prev) {
+            await loadProfile();
+            addToast(`you're set until ${fmtDay(p.subscription_expires)}`);
+            return;
+          }
+        } catch (e) {}
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!cancelled) addToast("payment's still processing. it'll show up in a minute");
+    })();
+    return () => { cancelled = true; };
+  }, [sessionToken]);
+
   async function loadProfile() {
     try {
       const p = await apiGet("/api/profile/get");
@@ -175,6 +397,7 @@ export default function App() {
       setUser({ user_id: p.user_id, username: p.username, is_subscribed: p.is_subscribed, age_verified: p.age_verified, is_founder: p.is_founder, founder_number: p.founder_number, badges: p.badges || [] });
       setUsageRemaining(p.usage_remaining ?? null);
       setTosPending(p.tos_pending === true);
+      if (p.photos) setPhotoQuota(p.photos);
     } catch (e) { handleLogout(); }
   }
   async function loadThreads() {
@@ -225,6 +448,49 @@ export default function App() {
     setThreads([]); setMessages([]); setActiveThreadId(null);
     setTosPending(false);
   }
+  // Show the rollover card, unless the user turned the warning off (on the
+  // account) or okayed rollover for this thread (on this device).
+  function askRollover({ remaining, threadId, onOkay }) {
+    if (profile && profile.warn_rollover === false) { onOkay(); return; }
+    if (rolloverOkForThread(threadId)) { onOkay(); return; }
+    setRolloverAsk({ remaining, threadId, onOkay });
+  }
+  // The two profile toggles. Optimistic, reverted if the save fails.
+  async function saveSetting(field, value) {
+    const before = profile ? profile[field] : undefined;
+    setProfile((p) => (p ? { ...p, [field]: value } : p));
+    try { await apiPost("/api/profile/settings", { [field]: value }); }
+    catch (e) { setProfile((p) => (p ? { ...p, [field]: before } : p)); addToast("couldn't save that. try again"); }
+  }
+  // Thumbs up / down on a reply. rating null removes it. Throws on failure so
+  // the dialog can stay open; the thumb only changes once the server saved.
+  async function handleRate(messageId, rating, extra = {}) {
+    await apiPost("/api/feedback", { message_id: messageId, rating, ...extra });
+    setMessages((p) => p.map((m) => (m.id === messageId ? { ...m, rating } : m)));
+    if (rating === "up" && extra.dont_ask_again) setProfile((p) => (p ? { ...p, skip_training_prompt: true } : p));
+  }
+  // "get the app": Chrome's saved install prompt (single-use either way), or
+  // the Add to Home Screen steps on iOS.
+  async function handleInstall() {
+    setInstallBanner((b) => (b === "showing" ? "done" : b));
+    const prompt = window.__shInstallPrompt;
+    if (prompt) {
+      window.__shInstallPrompt = null;
+      setCanInstall(installAvailable());
+      try { await prompt.prompt(); await prompt.userChoice; } catch {}
+      return;
+    }
+    if (isIOS()) setShowInstallSheet("ios");
+    else if (isAndroid()) setShowInstallSheet("android");
+  }
+  function dismissInstallBanner() { setInstallBanner("done"); }
+  // Runs after /api/account/delete succeeded: the same cleanup as logging
+  // out, then the login screen says goodbye.
+  function handleAccountDeleted() {
+    handleLogout();
+    setShowProfile(false);
+    addToast("your account's gone. take care of yourself.");
+  }
   async function handleAcceptTos() {
     await apiPost("/api/profile/accept-tos", {});
     setTosPending(false);
@@ -259,34 +525,79 @@ export default function App() {
   }
   // opts { threadId, tab } override the active state — the vibe→plant handoff
   // sends into a thread it just created, before React state has caught up.
+  //
+  // opts.photo { dataUrl, previewUrl, photoReadId? } makes it a photo turn,
+  // Talk the Plant only. Two requests: /api/plant/photo-read looks at the
+  // photo and returns a read id, then /api/chat/send runs the turn with it.
+  // A retry carries photoReadId so it doesn't pay for a second read.
   async function handleSendMessage(text, opts = {}) {
-    if (!text.trim()) return;
+    const photo = opts.photo || null;
+    if (!text.trim() && !photo) return;
     const tab = opts.tab || activeTab;
+    if (photo && tab !== "plant") return;
     let threadId = opts.threadId || activeThreadId;
     if (!threadId) {
       try { const data = await apiPost("/api/threads/create", { tab }); threadId = data.thread_id; setActiveThreadId(threadId); loadThreads(); }
       catch (e) { addToast("couldn't start thread"); return; }
     }
-    setMessages((p) => [...p, { id: `temp-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() }]);
+    const tempId = `temp-${Date.now()}`;
+    setMessages((p) => [...p, { id: tempId, role: "user", content: text, created_at: new Date().toISOString(), ...(photo ? { photo: true, photoUrl: photo.previewUrl } : {}) }]);
     setLoading(true);
+    let photoReadId = photo ? photo.photoReadId || null : null;
     try {
+      if (photo && !photoReadId) {
+        setLoadingNote("looking at the photo...");
+        const read = await apiPost("/api/plant/photo-read", { thread_id: threadId, image: photo.dataUrl, caption: text, ...(photo.allowRollover ? { allow_rollover: true } : {}) });
+        if (read.photos) setPhotoQuota(read.photos);
+        // "skipped" (a safety intercept on the words, or out of messages) has
+        // no read id. The turn still goes to chat-send, as plain text, and
+        // chat-send answers it the way it answers any other message.
+        photoReadId = read.photo_read_id || null;
+        setLoadingNote(null);
+      }
       // supports_safety_card tells the backend this bundle can RENDER the
       // card. Without it the backend appends the resource to the message text
       // instead, so an old cached bundle degrades to a visible number rather
       // than silently dropping the disclosure.
-      const data = await apiPost("/api/chat/send", { message: text, thread_id: threadId, tab, supports_safety_card: true });
+      const data = await apiPost("/api/chat/send", {
+        message: text || (photo && !photoReadId ? PHOTO_ONLY_TEXT : text),
+        thread_id: threadId,
+        tab,
+        supports_safety_card: true,
+        ...(photoReadId ? { photo_read_id: photoReadId } : {}),
+      });
       // A blank/whitespace reply must never render as an empty bubble — treat
       // it as a failed send so the user gets the error bubble + retry button.
       if (!data.reply || !String(data.reply).trim()) throw new Error("empty reply");
       // handoff and safetyCard both come from API fields, never from
       // string-matching the prose.
-      setMessages((p) => [...p, { id: `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString(), handoff: data.handoff || null, handoff_message: data.handoff_message || null, safetyCard: data.safetyCard || null }]);
+      // assistant_message_id is the stored row, so the reply can be rated
+      // right away; rateable is the server's call (never a safety turn).
+      setMessages((p) => [...p, { id: data.assistant_message_id || `resp-${Date.now()}`, role: "assistant", content: data.reply, created_at: new Date().toISOString(), handoff: data.handoff || null, handoff_message: data.handoff_message || null, safetyCard: data.safetyCard || null, rateable: data.rateable === true && !!data.assistant_message_id, rating: null }]);
       if (data.usage_remaining !== null && data.usage_remaining !== undefined) setUsageRemaining(data.usage_remaining);
+      setGotReply(true);
       setTimeout(() => loadThreads(), 2000);
     } catch (e) {
-      setMessages((p) => [...p, { id: `err-${Date.now()}`, role: "assistant", content: "man, something went sideways... try again in a sec", created_at: new Date().toISOString(), isError: true }]);
-      addToast("message failed to send");
-    } finally { setLoading(false); }
+      if (e && e.data && e.data.photos) setPhotoQuota(e.data.photos);
+      // The next photo would come out of rollover (say, photos used on another
+      // device since the quota was cached). Nothing was used: take the bubble
+      // back and ask, and "okay" resends the same photo with allow_rollover.
+      if (photo && e && e.code === "rollover_confirm") {
+        setMessages((p) => p.filter((m) => m.id !== tempId));
+        askRollover({
+          remaining: e.data?.photos?.rollover ?? 0,
+          threadId,
+          onOkay: () => handleSendMessage(text, { ...opts, threadId, tab, photo: { ...photo, allowRollover: true } }),
+        });
+        return;
+      }
+      const photoError = photo ? photoErrorReply(e) : null;
+      // A photo turn that failed AFTER its read keeps the read id, so the
+      // retry button goes straight to the send instead of paying again.
+      const retryPhoto = photo && !(photoError && photoError.final) ? { ...photo, photoReadId } : null;
+      setMessages((p) => [...p, { id: `err-${Date.now()}`, role: "assistant", content: photoError ? photoError.text : "man, something went sideways... try again in a sec", created_at: new Date().toISOString(), isError: true, noRetry: !!(photoError && photoError.final), retryPhoto }]);
+      addToast(photoError ? "photo didn't go through" : "message failed to send");
+    } finally { setLoading(false); setLoadingNote(null); }
   }
   // The click-over button: switch to plant, new thread, carry the question so
   // they never retype what they just asked. Unverified users route THROUGH
@@ -308,7 +619,23 @@ export default function App() {
     catch (e) { addToast("couldn't update data setting"); }
   }
 
-  const ctx = { user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos };
+  // The one-time install banner. Never on the welcome screen (it would push
+  // the suggestions below the fold), never on a desktop, and never in a
+  // thread with a safety turn: nobody gets an app promo under a crisis
+  // response. A safety turn is a reply with a card, or one the server marked
+  // not rateable (crisis tier 1 has no card).
+  const threadHadSafetyTurn = messages.some((m) => m.role === "assistant" && (m.safetyCard || m.rateable === false));
+  const bannerAllowed = canInstall && view === "chat" && !threadHadSafetyTurn;
+  const bannerEligible = installBanner === "unseen" && bannerAllowed && gotReply && isPhone() &&
+    !showProfile && !showSubscription && !showAgeGate && !tosPending && !showInstallSheet;
+  useEffect(() => {
+    // Marked done the moment it first shows: tap add, tap x, or ignore it,
+    // it never comes back on this device.
+    if (bannerEligible) { setInstallBanner("showing"); markInstallBannerDone(); }
+  }, [bannerEligible]);
+  const showInstallBanner = installBanner === "showing" && bannerAllowed;
+
+  const ctx = { photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
 
   // A recovery link can arrive while a session is still in localStorage, so the
   // reset view wins over the logged-in app until the password is set.
@@ -340,6 +667,8 @@ export default function App() {
         {showAgeGate && <AgeGateModal />}
         {showProfile && <ProfilePage />}
         {showSubscription && <SubscriptionPage />}
+        {rolloverAsk && <RolloverCard ask={rolloverAsk} onClose={() => setRolloverAsk(null)} />}
+        {showInstallSheet && <InstallSheet platform={showInstallSheet} onClose={() => setShowInstallSheet(false)} />}
         <div className="sh-layout">
           {sidebarOpen && <div className="sh-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
           <ThreadSidebar />
@@ -348,7 +677,7 @@ export default function App() {
               <button className="sh-menu-btn" onClick={() => setSidebarOpen((s) => !s)} aria-label="Menu">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect y="3" width="20" height="2" rx="1" fill="currentColor"/><rect y="9" width="20" height="2" rx="1" fill="currentColor"/><rect y="15" width="20" height="2" rx="1" fill="currentColor"/></svg>
               </button>
-              <div className="sh-header-brand"><img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img" /></div>
+              <div className="sh-header-brand"><img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img" /><span className="sh-header-tagline">your always stone-d AI friend</span></div>
               <div className="sh-header-right">
                 {view !== "memory" && activeThreadId && <DataToggle threadId={activeThreadId} currentState={threads.find((t) => t.id === activeThreadId)?.data_opt_in || false} />}
                 <button className="sh-avatar-btn" onClick={() => setShowProfile(true)} title="Profile">{user?.username?.[0]?.toUpperCase() || "?"}</button>
@@ -402,7 +731,7 @@ function AuthScreen() {
             <button type="submit" className="sh-btn-primary" disabled={submitting}>{submitting ? "hold on..." : authView === "login" ? "come in" : "join up"}</button>
           </form>
           {authView === "login" && <button type="button" className="sh-auth-toggle" onClick={onForgot} disabled={submitting}>forgot your password?</button>}
-          <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>
+          {!SIGNUP_DISABLED && <button className="sh-auth-toggle" onClick={() => setAuthView(authView === "login" ? "register" : "login")}>{authView === "login" ? "don't have an account? sign up" : "already here? log in"}</button>}
           {/* Signup notice. The agreement wording only makes sense on the
               register view — that's the moment somebody is actually agreeing
               to something — but the LINKS belong on both, or a returning user
@@ -470,8 +799,53 @@ function TabSwitcher() {
 }
 
 function ChatWindow() {
-  const { messages, activeTab, handleSendMessage, loading, usageRemaining, user } = useApp();
+  const { messages, activeTab, activeThreadId, handleSendMessage, loading, loadingNote, usageRemaining, user, photosRemaining, photoQuota, askRollover, addToast, showInstallBanner, handleInstall, dismissInstallBanner } = useApp();
   const [input, setInput] = useState(""); const scrollRef = useRef(null); const textareaRef = useRef(null);
+  // Photos are a Talk the Plant feature. The button only exists on that tab,
+  // and the server refuses a photo anywhere else.
+  const photosOn = activeTab === "plant";
+  const [photo, setPhoto] = useState(null); // { dataUrl, previewUrl } while drafting
+  const [preparing, setPreparing] = useState(false);
+  const fileRef = useRef(null);
+  function discardPhoto() {
+    setPhoto((p) => { if (p && p.previewUrl) URL.revokeObjectURL(p.previewUrl); return null; });
+  }
+  // Leaving the tab drops an unsent photo.
+  useEffect(() => { if (!photosOn) discardPhoto(); }, [photosOn]);
+  // Set when the user okayed a rollover photo before picking it; the photo
+  // then carries allow_rollover to the server.
+  const allowRolloverRef = useRef(false);
+  function openPicker(allowRollover) {
+    allowRolloverRef.current = !!allowRollover;
+    if (fileRef.current) fileRef.current.click();
+  }
+  // The camera button checks the cached quota first. A stale quota (past the
+  // daily reset) or photos left today: straight to the picker. Only rollover
+  // left: the warning card, unless it's been turned off. Nothing left: say
+  // when more arrive. The server still has the final say either way.
+  function handleCameraTap() {
+    const q = photoQuota;
+    if (!quotaIsFresh(q) || q.remaining_today > 0) { openPicker(false); return; }
+    if (q.rollover > 0) {
+      askRollover({ remaining: q.rollover, threadId: activeThreadId, onOkay: () => openPicker(true) });
+      return;
+    }
+    addToast(`that's all the photos for today. more at ${fmtTime(q.resets_at)}`);
+  }
+  async function handlePickPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // picking the same file twice should still fire
+    if (!file) return;
+    const allowRollover = allowRolloverRef.current;
+    allowRolloverRef.current = false;
+    setPreparing(true);
+    try {
+      const prepared = { ...(await preparePhoto(file)), ...(allowRollover ? { allowRollover: true } : {}) };
+      setPhoto((p) => { if (p && p.previewUrl) URL.revokeObjectURL(p.previewUrl); return prepared; });
+    } catch (err) {
+      addToast(err && err.message === "too_big" ? "that photo's too big. try a screenshot of it" : "couldn't open that photo. try a jpg or a screenshot");
+    } finally { setPreparing(false); }
+  }
   useEffect(() => {
     if (!scrollRef.current) return;
     // Empty/welcome thread: keep the hero pinned to the top so the full
@@ -479,10 +853,36 @@ function ChatWindow() {
     if (messages.length === 0) scrollRef.current.scrollTop = 0;
     else scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, loading]);
-  function handleSubmit(e) { if (e) e.preventDefault(); if (!input.trim() || loading) return; handleSendMessage(input.trim()); setInput(""); if (textareaRef.current) textareaRef.current.style.height = "auto"; }
+  function handleSubmit(e) {
+    if (e) e.preventDefault();
+    if (loading || preparing) return;
+    const text = input.trim();
+    if (!text && !photo) return;
+    if (photo) {
+      handleSendMessage(text, { photo });
+      setPhoto(null); // not revoked: the sent bubble is still showing it
+    } else {
+      handleSendMessage(text);
+    }
+    setInput(""); if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }
+  const canSend = (!!input.trim() || !!photo) && !loading && !preparing;
   function handleKeyDown(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }
   function handleTextareaChange(e) { setInput(e.target.value); const el = e.target; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 130) + "px"; }
   const showSuggestions = messages.length === 0;
+  // The photo count sits under StoneHead's reply to the MOST RECENT photo only,
+  // so an older count is never left on screen to go stale. Plant tab only.
+  const latestPhotoReplyIndex = useMemo(() => {
+    if (activeTab !== "plant") return -1;
+    let lastPhoto = -1;
+    messages.forEach((m, i) => { if (m.role === "user" && m.photo) lastPhoto = i; });
+    if (lastPhoto < 0) return -1;
+    for (let i = lastPhoto + 1; i < messages.length; i++) {
+      if (messages[i].role === "assistant") return messages[i].isError ? -1 : i;
+      if (messages[i].role === "user") return -1;
+    }
+    return -1;
+  }, [messages, activeTab]);
   const showUsage = usageRemaining !== null && usageRemaining !== undefined;
   return (
     <div className="sh-chat-window">
@@ -495,31 +895,68 @@ function ChatWindow() {
                 <img src={activeTab === "plant" && user?.age_verified ? "/images/stonehead-smoke.png" : "/images/stonehead-clean.png"} alt="Stone Head" className="mascot sh-mascot-img" />
               </div>
             </div>
-            <p className="sh-tagline">Your Always Stone-D AI Friend</p>
-<div className="sh-welcome-bubble">
-  <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "yo what's good... let's talk about the plant. you can ask me about growing too, not just what to smoke."}</p>
-</div>
+            <div className="sh-welcome-bubble">
+              <span className="sh-welcome-spark" aria-hidden="true">✦</span>
+              <p className="sh-welcome-text">{activeTab === "vibe" ? "hey... pull up a chair. what's on your mind?" : "what's good... ask me anything about the plant. if yours looks off, send me a pic."}</p>
+            </div>
             <SuggestionChips tab={activeTab} onChipClick={(t) => handleSendMessage(t)} />
           </div>
         )}
         {messages.map((msg, i) => (
           <MessageBubble key={msg.id} message={msg} tab={activeTab}
-            onRetry={msg.isError && messages[i - 1] ? () => handleSendMessage(messages[i - 1].content) : null} />
+            photoLine={i === latestPhotoReplyIndex ? photoCountLine(photoQuota) : null}
+            onRetry={msg.isError && !msg.noRetry && messages[i - 1] ? () => handleSendMessage(messages[i - 1].content, msg.retryPhoto ? { photo: msg.retryPhoto } : {}) : null} />
         ))}
         {loading && (
           <div className="sh-typing-row">
             <div className="sh-bubble-avatar"><img src={activeTab === "plant" ? "/images/stonehead-avatar-smoke.png" : "/images/stonehead-avatar-clean.png"} alt="" className="sh-avatar-img" /></div>
             <div className="sh-typing"><div className="sh-typing-dot"/><div className="sh-typing-dot"/><div className="sh-typing-dot"/></div>
+            {loadingNote && <span className="sh-typing-note">{loadingNote}</span>}
           </div>
         )}
       </div>
       <div className="sh-input-bar">
+        {showInstallBanner && (
+          <div className="sh-install-banner" role="region" aria-label="install StoneHead">
+            <span className="sh-install-banner-text">📲 put StoneHead on your home screen</span>
+            <button className="sh-install-banner-add" onClick={handleInstall}>add</button>
+            <button className="sh-install-banner-close" onClick={dismissInstallBanner} aria-label="close">✕</button>
+          </div>
+        )}
         {showUsage && <div className="sh-usage-badge">{usageRemaining > 0 ? `${usageRemaining} left today` : "tapped out for today"}</div>}
+        {photosOn && (photo || preparing) && (
+          <div className="sh-photo-draft">
+            {photo
+              ? <img src={photo.previewUrl} alt="Your photo, ready to send" className="sh-photo-draft-thumb" />
+              : <div className="sh-photo-draft-thumb sh-photo-draft-thumb--busy" aria-hidden="true" />}
+            <div className="sh-photo-draft-body">
+              <p className="sh-photo-draft-tip">{photo ? "white light, close up, and in focus reads best" : "getting the photo ready..."}</p>
+              {photo && typeof photosRemaining === "number" && (
+                <p className="sh-photo-draft-count">{photosRemaining} photo {photosRemaining === 1 ? "read" : "reads"} left today</p>
+              )}
+            </div>
+            {photo && <button type="button" className="sh-photo-draft-remove" onClick={discardPhoto} aria-label="Remove photo">×</button>}
+          </div>
+        )}
         <div className="sh-input-form">
+          {photosOn && (
+            <>
+              <input ref={fileRef} type="file" accept="image/*" className="sh-photo-input" onChange={handlePickPhoto} tabIndex={-1} aria-hidden="true" />
+              {/* Not disabled at 0 left: that count goes stale overnight in an
+                  open tab. The draft shows the count, and the server has the
+                  final say (photo_limit). */}
+              <button type="button" className="sh-attach-btn" onClick={handleCameraTap}
+                disabled={loading || preparing}
+                aria-label="Add a photo of your plant"
+                title="Add a photo of your plant">
+                <CameraIcon />
+              </button>
+            </>
+          )}
           <textarea ref={textareaRef} value={input} onChange={handleTextareaChange} onKeyDown={handleKeyDown} maxLength={4000}
-            placeholder={activeTab === "vibe" ? "say something..." : "ask about a strain..."} className="sh-chat-input" disabled={loading} rows={1} />
-          <button type="button" className={`sh-send-btn ${input.trim() && !loading ? "sh-send-btn--active" : ""}`}
-            onClick={handleSubmit} disabled={!input.trim() || loading}>
+            placeholder={activeTab === "vibe" ? "say something..." : photo ? "what should I look at? (optional)" : "ask about a strain..."} className="sh-chat-input" disabled={loading} rows={1} />
+          <button type="button" className={`sh-send-btn ${canSend ? "sh-send-btn--active" : ""}`}
+            onClick={handleSubmit} disabled={!canSend}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         </div>
@@ -595,16 +1032,23 @@ function SafetyCard({ card }) {
   );
 }
 
-function MessageBubble({ message, tab, onRetry }) {
+function MessageBubble({ message, tab, onRetry, photoLine }) {
   const { handleHandoffClick } = useApp();
   const isUser = message.role === "user";
+  // A photo sent with no words is stored as PHOTO_ONLY_TEXT. Show the photo
+  // (or its marker), never the placeholder.
+  const photoOnly = isUser && message.photo && (!message.content || message.content === PHOTO_ONLY_TEXT);
   return (
+    <>
     <div className={`sh-bubble-row ${isUser ? "sh-bubble-row--user" : ""}`}>
       {!isUser && (
         <div className="sh-bubble-avatar"><img src={tab === "plant" ? "/images/stonehead-avatar-smoke.png" : "/images/stonehead-avatar-clean.png"} alt="" className="sh-avatar-img" /></div>
       )}
       <div className={`sh-bubble ${isUser ? "sh-bubble--user" : tab === "plant" ? "sh-bubble--assistant-plant" : "sh-bubble--assistant-vibe"}`}>
-        <p className="sh-bubble-text">{renderInline(message.content)}</p>
+        {isUser && message.photo && (message.photoUrl
+          ? <img src={message.photoUrl} alt="Your plant photo" className="sh-bubble-photo" />
+          : <span className="sh-photo-chip" title="Photos are read once and not saved"><CameraIcon size={14} /> photo (not saved)</span>)}
+        {!photoOnly && <p className="sh-bubble-text">{renderInline(message.content)}</p>}
         {!isUser && message.handoff === "plant" && message.handoff_message && (
           <button className="sh-handoff-btn" onClick={() => handleHandoffClick(message.handoff_message)}>
             take it to talk the plant 🌿
@@ -614,11 +1058,113 @@ function MessageBubble({ message, tab, onRetry }) {
         {!isUser && message.safetyCard && <SafetyCard card={message.safetyCard} />}
       </div>
     </div>
+    {/* Only on real, stored model replies the server marked rateable: never
+        a greeting, limit or error bubble, and never a safety turn. */}
+    {!isUser && photoLine && <p className="sh-photo-count-line">{photoLine}</p>}
+    {!isUser && message.rateable && !message.safetyCard && !message.isError && <FeedbackThumbs message={message} />}
+    </>
+  );
+}
+
+function ThumbIcon({ down = false, filled = false }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" style={down ? { transform: "scaleY(-1)" } : undefined}
+      fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3z" />
+      <path d="M7 10l4-8a3 3 0 0 1 3 3v4h5.5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 18.1 21H7" />
+    </svg>
+  );
+}
+
+const FEEDBACK_MAX = 1000;
+const FEEDBACK_COUNTER_FROM = 800;
+
+function FeedbackThumbs({ message }) {
+  const { handleRate, profile, addToast } = useApp();
+  const [dialog, setDialog] = useState(null); // null | "up" | "down"
+  const [busy, setBusy] = useState(false);
+  const rating = message.rating || null;
+  async function save(next, extra) {
+    setBusy(true);
+    try { await handleRate(message.id, next, extra); setDialog(null); return true; }
+    catch (e) { addToast("couldn't save that. try again"); return false; }
+    finally { setBusy(false); }
+  }
+  function onUp() {
+    if (busy) return;
+    if (rating === "up") return save(null);
+    if (profile?.skip_training_prompt) return save("up");
+    setDialog("up");
+  }
+  function onDown() {
+    if (busy) return;
+    if (rating === "down") return save(null);
+    setDialog("down");
+  }
+  return (
+    <div className="sh-feedback-row">
+      <button className={`sh-thumb ${rating === "up" ? "sh-thumb--up" : ""}`} onClick={onUp} disabled={busy}
+        aria-pressed={rating === "up"} aria-label={rating === "up" ? "remove thumbs up" : "thumbs up"} title="good reply">
+        <ThumbIcon filled={rating === "up"} />
+      </button>
+      <button className={`sh-thumb ${rating === "down" ? "sh-thumb--down" : ""}`} onClick={onDown} disabled={busy}
+        aria-pressed={rating === "down"} aria-label={rating === "down" ? "remove thumbs down" : "thumbs down"} title="something was off">
+        <ThumbIcon down filled={rating === "down"} />
+      </button>
+      {dialog === "up" && <ThumbsUpDialog busy={busy} onCancel={() => setDialog(null)} onShare={(dontAsk, comment) => save("up", { ...(dontAsk ? { dont_ask_again: true } : {}), ...(comment ? { comment } : {}) })} />}
+      {dialog === "down" && <ThumbsDownDialog busy={busy} onCancel={() => setDialog(null)} onSend={(comment) => save("down", comment ? { comment } : {})} />}
+    </div>
+  );
+}
+
+function ThumbsUpDialog({ busy, onCancel, onShare }) {
+  const [dontAsk, setDontAsk] = useState(false);
+  const [comment, setComment] = useState("");
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}>
+      <div className="sh-modal sh-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="sh-fb-up-title">
+        <h2 id="sh-fb-up-title">thanks, man.</h2>
+        <p>this reply and the message before it may be used to train and improve StoneHead.</p>
+        <textarea className="sh-input sh-feedback-text" rows={3} maxLength={FEEDBACK_MAX} value={comment}
+          onChange={(e) => setComment(e.target.value)} placeholder="what hit right? (optional)" disabled={busy} />
+        {comment.length > FEEDBACK_COUNTER_FROM && <span className="sh-feedback-count">{comment.length}/{FEEDBACK_MAX}</span>}
+        <label className="sh-feedback-check">
+          <input type="checkbox" checked={dontAsk} onChange={(e) => setDontAsk(e.target.checked)} disabled={busy} />
+          don't show this again
+        </label>
+        <div className="sh-feedback-actions">
+          <button className="sh-btn-primary" onClick={() => onShare(dontAsk, comment.trim())} disabled={busy}>{busy ? "..." : "share it"}</button>
+          <button className="sh-btn-secondary" onClick={onCancel} disabled={busy}>cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThumbsDownDialog({ busy, onCancel, onSend }) {
+  const [comment, setComment] = useState("");
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}>
+      <div className="sh-modal sh-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="sh-fb-down-title">
+        <h2 id="sh-fb-down-title">what was off?</h2>
+        <textarea className="sh-input sh-feedback-text" rows={4} maxLength={FEEDBACK_MAX} value={comment}
+          onChange={(e) => setComment(e.target.value)} placeholder="tell me what went wrong" disabled={busy} autoFocus />
+        {comment.length > FEEDBACK_COUNTER_FROM && <span className="sh-feedback-count">{comment.length}/{FEEDBACK_MAX}</span>}
+        <p>sending this shares this reply and your message before it with me, so I can see what happened.</p>
+        <div className="sh-feedback-actions">
+          <button className="sh-btn-primary" onClick={() => onSend(comment.trim())} disabled={busy}>{busy ? "..." : "send"}</button>
+          <button className="sh-btn-secondary" onClick={onCancel} disabled={busy}>cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function SuggestionChips({ tab, onChipClick }) {
-  const chips = tab === "plant" ? PLANT_SUGGESTIONS : VIBE_SUGGESTIONS;
+  // Picked once per tab while this screen is showing, so the set never
+  // reshuffles under someone's thumb. A new empty chat gets a new set.
+  const chips = useMemo(() => pickChips(tab, loadRecent(tab)), [tab]);
+  useEffect(() => { saveRecent(tab, chips.map((c) => c.text)); }, [tab, chips]);
   return (
     <div className="sh-chips-section">
       <span className="sh-chips-label">try asking me about...</span>
@@ -634,9 +1180,10 @@ function SuggestionChips({ tab, onChipClick }) {
 }
 
 function ThreadSidebar() {
-  const { threads, activeThreadId, handleNewThread, handleSelectThread, handleDeleteThread, handleRenameThread, sidebarOpen, view, setView, setSidebarOpen } = useApp();
+  const { threads, activeThreadId, handleNewThread, handleSelectThread, handleDeleteThread, handleRenameThread, sidebarOpen, view, setView, setSidebarOpen, canInstall, handleInstall } = useApp();
   const [editingId, setEditingId] = useState(null); const [editTitle, setEditTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [discordOpen, setDiscordOpen] = useState(false);
   function startRename(t) { setEditingId(t.id); setEditTitle(t.title || ""); }
   function saveRename(id) { if (editTitle.trim()) handleRenameThread(id, editTitle.trim()); setEditingId(null); }
   function goChat() { setView("chat"); setSidebarOpen(false); }
@@ -646,7 +1193,16 @@ function ThreadSidebar() {
       <div className="sh-sidebar-nav">
         <button className={`sh-nav-item ${view === "chat" ? "sh-nav-item--active" : ""}`} onClick={goChat}>💬 chat</button>
         <button className={`sh-nav-item ${view === "memory" ? "sh-nav-item--active" : ""}`} onClick={goMemory}>🧠 memory</button>
-        <a className="sh-nav-item sh-nav-item--link" href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">👾 discord</a>
+        <button className="sh-nav-item" onClick={() => setDiscordOpen((o) => !o)} aria-expanded={discordOpen} aria-controls="sh-discord-sub">
+          👾 discord<span className={`sh-nav-chevron ${discordOpen ? "sh-nav-chevron--open" : ""}`} aria-hidden="true">▸</span>
+        </button>
+        {discordOpen && (
+          <div className="sh-nav-sub" id="sh-discord-sub">
+            <a className="sh-nav-subitem" href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">join the StoneHead server</a>
+            {DISCORD_BOT_INSTALL_URL && <a className="sh-nav-subitem" href={DISCORD_BOT_INSTALL_URL} target="_blank" rel="noopener noreferrer">add the bot to your server</a>}
+          </div>
+        )}
+        {canInstall && <button className="sh-nav-item" onClick={() => { setSidebarOpen(false); handleInstall(); }}>📲 get the app</button>}
       </div>
       <div className="sh-sidebar-header"><span className="sh-sidebar-title">THREADS</span><button className="sh-new-thread-btn" onClick={handleNewThread}>+ new</button></div>
       <div className="sh-thread-list">
@@ -764,7 +1320,9 @@ function TosModal() {
 }
 
 function ProfilePage() {
-  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast } = useApp();
+  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast, photoQuota, saveSetting } = useApp();
+  const passActive = !!profile?.pass_active;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -785,6 +1343,7 @@ function ProfilePage() {
       addToast(e.message || "couldn't update username");
     } finally { setSavingName(false); }
   }
+  if (confirmingDelete) return <DeleteAccountView onCancel={() => setConfirmingDelete(false)} />;
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
       <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)}>×</button></div>
@@ -810,7 +1369,7 @@ function ProfilePage() {
             <button className="sh-username-edit-btn" onClick={startEditName} title="edit username" aria-label="edit username">✎</button>
           </div>
         )}
-        <span className={`sh-sub-badge ${user?.is_subscribed ? "sh-sub-badge--active" : ""}`}>{user?.is_subscribed ? "subscribed" : "free tier"}</span>
+        <span className={`sh-sub-badge ${passActive ? "sh-sub-badge--active" : ""}`}>{passActive ? (profile?.subscription_expires ? `pass active until ${fmtDay(profile.subscription_expires)}` : "pass active") : "free tier"}</span>
         {user?.is_founder && (
           <span className="sh-founder-badge" title={`OG Sesher #${user.founder_number}`}>
             ★ og sesher{user.founder_number ? ` #${user.founder_number}` : ""}
@@ -828,10 +1387,32 @@ function ProfilePage() {
           </span>
         ))}
       </div>
-      <p className="sh-profile-memory-hint">your liked strains and what Stone Head remembers now live in <strong>memory</strong> (open the menu).</p>
+      {photoQuota && (
+        <div className="sh-profile-section sh-profile-photos">
+          <h3>PHOTOS</h3>
+          <p>{photoQuota.daily_limit} per day · {quotaIsFresh(photoQuota) ? photoQuota.remaining_today : photoQuota.daily_limit} left today</p>
+          {(photoQuota.earns_rollover || photoQuota.rollover > 0) && (
+            <p>{photoQuota.rollover} rollover · half expire {fmtDay(photoQuota.next_halving)}</p>
+          )}
+          {!photoQuota.earns_rollover && <p className="sh-profile-muted">with a pass, each day you don't use all your photos adds 1 rollover photo</p>}
+        </div>
+      )}
+      <div className="sh-profile-section sh-profile-settings">
+        <label className="sh-setting">
+          <span>warn before using a rollover photo</span>
+          <input type="checkbox" role="switch" checked={profile?.warn_rollover !== false}
+            onChange={(e) => saveSetting("warn_rollover", e.target.checked)} />
+        </label>
+        <label className="sh-setting">
+          <span>ask before sharing rated replies for training</span>
+          <input type="checkbox" role="switch" checked={!profile?.skip_training_prompt}
+            onChange={(e) => saveSetting("skip_training_prompt", !e.target.checked)} />
+        </label>
+      </div>
       <div className="sh-profile-actions">
-        <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{user?.is_subscribed ? "manage subscription" : "subscribe"}</button>
+        <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{passActive ? "get more time" : "get a pass"}</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
+        <button className="sh-delete-account-link" onClick={() => setConfirmingDelete(true)}>delete my account</button>
       </div>
       {/* The signup notice is only on the register view, which means an
           existing user had no route to either document from inside the app.
@@ -843,6 +1424,86 @@ function ProfilePage() {
         {" · "}
         <a href="/terms" target="_blank" rel="noopener noreferrer">terms</a>
       </p>
+      <p className="sh-profile-version">StoneHead v{APP_VERSION}</p>
+    </div></div>
+  );
+}
+
+// iOS has no install prompt to call, so this walks through Safari's own
+// Add to Home Screen (Android gets its browser-menu steps the same way when
+// Chrome hasn't handed over its prompt yet). The login line matters: a home-screen app on iPhone
+// keeps its own storage, so people sign in once inside it.
+function InstallSheet({ platform, onClose }) {
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sh-modal sh-install-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-install-title">
+        <h2 id="sh-install-title">put StoneHead on your home screen</h2>
+        {platform === "android" ? (
+          <ol>
+            <li>tap your browser's menu (the <strong>⋮</strong> in the corner)</li>
+            <li>tap <strong>Install app</strong> or <strong>Add to Home screen</strong></li>
+            <li>tap <strong>Install</strong></li>
+          </ol>
+        ) : (
+          <>
+            <ol>
+              <li>tap the share button (the square with the arrow)</li>
+              <li>scroll down and tap <strong>Add to Home Screen</strong></li>
+              <li>tap <strong>Add</strong></li>
+            </ol>
+            <p>you'll log in once inside the app. after that it remembers you.</p>
+          </>
+        )}
+        <button className="sh-btn-primary" onClick={onClose}>got it</button>
+      </div>
+    </div>
+  );
+}
+
+// Same modal as the profile, swapped to a confirm view. The server takes the
+// account from the session and needs the literal word, so this input is the
+// whole confirmation.
+function DeleteAccountView({ onCancel }) {
+  const { profile, setShowProfile, handleAccountDeleted } = useApp();
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const ready = typed.trim().toLowerCase() === "delete";
+  async function handleDelete() {
+    if (!ready || deleting) return;
+    setDeleting(true); setError("");
+    try {
+      await apiPost("/api/account/delete", { confirm: "delete" });
+      handleAccountDeleted();
+    } catch (e) {
+      setError(e.message || "couldn't delete your account. try again in a sec");
+      setDeleting(false);
+    }
+  }
+  return (
+    <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
+      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)} disabled={deleting}>×</button></div>
+      <div className="sh-delete-account">
+        <h2>delete your account?</h2>
+        <p>this wipes everything: your conversations, what StoneHead remembers, your liked strains, your photo reads, and your login. it can't be undone.</p>
+        <p>one exception: summaries from chats where you turned the data toggle on are kept, with no name, email, or anything that links them back to you.</p>
+        {/* Passes are one-time purchases, so there's no billing to cancel. What
+            they do lose is the time left on a pass. */}
+        {profile?.pass_active && (
+          <p className="sh-delete-account-warn">
+            heads up: your pass runs until {profile.subscription_expires ? fmtDay(profile.subscription_expires) : "later"}. deleting your account ends it, and that time is lost. bought it in the last 3 days? email me for a refund before you delete.
+          </p>
+        )}
+        <p>type <strong>delete</strong> to confirm.</p>
+        <input className="sh-input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="delete"
+          autoCapitalize="none" autoCorrect="off" spellCheck={false} disabled={deleting}
+          onKeyDown={(e) => { if (e.key === "Enter") handleDelete(); }} aria-label="type delete to confirm" />
+        {error && <p className="sh-error">{error}</p>}
+        <div className="sh-profile-actions">
+          <button className="sh-btn-delete" onClick={handleDelete} disabled={!ready || deleting}>{deleting ? "deleting..." : "delete everything"}</button>
+          <button className="sh-btn-secondary" onClick={onCancel} disabled={deleting}>keep my account</button>
+        </div>
+      </div>
     </div></div>
   );
 }
@@ -994,53 +1655,89 @@ function RecentSessionsSection({ onPinned }) {
   );
 }
 
+// The pass picker (2.1). One-time Stripe purchases; buying while a pass is
+// active adds the time after it. The pass itself is granted by the Stripe
+// webhook, so this page only ever sends people to Checkout.
 function SubscriptionPage() {
-  const { setShowSubscription, loadProfile, addToast } = useApp();
-  const [code, setCode] = useState(null); const [expiresAt, setExpiresAt] = useState(null);
-  const [paymentUrl, setPaymentUrl] = useState(null); const [generating, setGenerating] = useState(false); const [copied, setCopied] = useState(false);
-  const [checking, setChecking] = useState(false);
-  async function generateCode() {
-    setGenerating(true);
-    try { const data = await apiPost("/api/subscription/generate-code", {}); setCode(data.payment_code); setExpiresAt(data.expires_at); setPaymentUrl(data.payment_url); }
-    catch (e) {} finally { setGenerating(false); }
-  }
-  function copyCode() { if (code) { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); } }
-  // Payment happens on an external page — nothing pushes the new state back
-  // into this client, so refresh on close (when a code was generated this
-  // session) and offer an explicit "I paid" refresh.
-  function handleClose() {
-    if (code) loadProfile();
-    setShowSubscription(false);
-  }
-  async function checkPaid() {
-    setChecking(true);
+  const { setShowSubscription, profile, addToast } = useApp();
+  const [busy, setBusy] = useState(null); // the pass being bought
+  const active = !!profile?.pass_active;
+  const limits = profile?.photo_limits || null;
+  async function buy(pass) {
+    if (busy) return;
+    setBusy(pass);
     try {
-      const p = await apiGet("/api/profile/get");
-      await loadProfile();
-      if (p.is_subscribed) { setShowSubscription(false); addToast("you're in — no more daily cap"); }
-      else { addToast("not seeing it yet... give it a sec and try again"); }
-    } catch (e) { addToast("couldn't check — try again"); }
-    finally { setChecking(false); }
+      const { url } = await apiPost("/api/checkout/create", { pass });
+      // So the return trip can tell when the new end date has landed.
+      try { sessionStorage.setItem("sh_prev_expires", profile?.subscription_expires || ""); } catch {}
+      window.location.href = url;
+    } catch (e) {
+      addToast(e.message || "couldn't start checkout. try again in a sec");
+      setBusy(null);
+    }
   }
   return (
-    <div className="sh-modal-overlay"><div className="sh-modal sh-subscription">
-      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={handleClose}>×</button></div>
-      <h2>subscribe to Stone Head</h2>
-      <p className="sh-sub-price">$8/month — what you see is what you pay</p>
-      <p className="sh-sub-desc">unlimited messages, no daily cap. just you and Stone Head, as long as you want.</p>
-      {!code ? (
-        <button className="sh-btn-primary" onClick={generateCode} disabled={generating}>{generating ? "generating..." : "get your payment code"}</button>
-      ) : (
-        <div className="sh-code-section">
-          <p className="sh-code-label">your payment code:</p>
-          <div className="sh-code-box" onClick={copyCode}><code>{code}</code><span className="sh-copy-hint">{copied ? "copied!" : "click to copy"}</span></div>
-          {expiresAt && <p className="sh-code-expires">expires {new Date(expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
-          {paymentUrl && <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="sh-btn-primary sh-payment-link">go to payment page</a>}
-          <p className="sh-code-instructions">copy the code, head to the payment page, enter it with your payment info. your account activates automatically.</p>
-          <button className="sh-btn-secondary" onClick={checkPaid} disabled={checking}>{checking ? "checking..." : "I paid — refresh my account"}</button>
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !busy) setShowSubscription(false); }}>
+      <div className="sh-modal sh-subscription" role="dialog" aria-modal="true" aria-labelledby="sh-pass-title">
+        <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowSubscription(false)} disabled={!!busy}>×</button></div>
+        <h2 id="sh-pass-title">{active ? "get more time" : "get a pass"}</h2>
+        <p className="sh-sub-desc">
+          unlimited messages{limits ? `, ${limits.pass} photos a day` : ", more photos a day"}, and 1 rollover photo for each day you don't use them all.
+          {active && profile?.subscription_expires ? ` your pass runs until ${fmtDay(profile.subscription_expires)}; a new one starts after that.` : ""}
+        </p>
+        <div className="sh-pass-cards">
+          <button className="sh-pass-card" onClick={() => buy("7day")} disabled={!!busy}>
+            <span className="sh-pass-days">7 days</span>
+            <span className="sh-pass-price">{busy === "7day" ? "..." : "$1.99"}</span>
+          </button>
+          <button className="sh-pass-card" onClick={() => buy("30day")} disabled={!!busy}>
+            <span className="sh-pass-days">30 days</span>
+            <span className="sh-pass-price">{busy === "30day" ? "..." : "$7"}</span>
+          </button>
         </div>
-      )}
-    </div></div>
+        <p className="sh-pass-note">one-time purchase, no auto-renew.</p>
+      </div>
+    </div>
+  );
+}
+
+// "this uses a rollover photo". Cancel, the X, tapping outside, and the
+// phone's back button all close it with nothing used.
+function RolloverCard({ ask, onClose }) {
+  const { saveSetting } = useApp();
+  useEffect(() => {
+    // A history entry while open, so the back button closes the card instead
+    // of leaving the app.
+    window.history.pushState({ shRollover: true }, "");
+    const onPop = () => onClose();
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (window.history.state && window.history.state.shRollover) window.history.back();
+    };
+  }, []);
+  function proceed(remember) {
+    if (remember === "thread") markRolloverOkForThread(ask.threadId);
+    if (remember === "always") saveSetting("warn_rollover", false);
+    const okay = ask.onOkay;
+    onClose();
+    okay(); // synchronous, still inside the tap: the photo picker needs that
+  }
+  const n = ask.remaining;
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sh-modal sh-rollover-card" role="dialog" aria-modal="true" aria-labelledby="sh-rollover-title">
+        <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={onClose} aria-label="close">×</button></div>
+        <h2 id="sh-rollover-title">this uses a rollover photo</h2>
+        <p>you've got {n} left.</p>
+        <div className="sh-feedback-actions">
+          <button className="sh-btn-primary" onClick={() => proceed(null)}>okay</button>
+          {ask.threadId && <button className="sh-btn-secondary" onClick={() => proceed("thread")}>don't show again in this thread</button>}
+          <button className="sh-btn-secondary" onClick={() => proceed("always")}>don't show again</button>
+          <button className="sh-btn-secondary" onClick={onClose}>cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

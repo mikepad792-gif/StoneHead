@@ -1,6 +1,6 @@
 # StoneHead AI — Terms of Service
 
-**Last updated:** September 20, 2026
+**Last updated:** September 26, 2026
 
 Plain language, because you should be able to read this.
 
@@ -92,7 +92,7 @@ If you do these things I may suspend or delete your account.
 
 You're responsible for your login. Don't share it. If someone else gets into your account, tell me.
 
-You can delete your account at any time from the app — everything goes with it. See the Privacy Policy.
+You can delete your account at any time from the app, in your profile. Everything goes with it, with one exception: memory summaries from chats where you turned the data toggle on are kept, with nothing that links them to you. See the Privacy Policy.
 
 ---
 
@@ -100,7 +100,7 @@ You can delete your account at any time from the app — everything goes with it
 
 **What you type stays yours.** You own your messages. You give me permission to store them and send them to the AI providers so the app can function — that's it.
 
-**I don't train AI models on your conversations.** I don't build models and I've never exported anyone's chats to make a dataset.
+**I don't train AI models on your conversations.** I don't build or fine-tune models. The one exception is replies you rate: a thumbs-up you choose to share can become a test case for tuning StoneHead's prompts, and any rating lets me read that one exchange. Nothing you haven't rated is used that way. The Privacy Policy has the details.
 
 I can't make that same promise on behalf of the AI providers your messages pass through, and I've stopped pretending otherwise. The Privacy Policy has the full and specific version of this, including what was true before August 5, 2026 and what changed. It's worth the two minutes.
 
@@ -120,11 +120,24 @@ If you want to contribute code, that's genuinely welcome, and it requires a sign
 
 ## Money
 
-StoneHead is currently **free**. Nothing is sold, and no payment system is live.
+StoneHead is free to use, with a daily cap on messages and 3 photo reads a day. If you want more, you can buy a **pass**.
 
-There's a subscription tier built into the code for the future. If I ever turn it on, I'll tell you clearly before anyone is charged for anything, and using the app will never silently start costing money.
+**Passes.** There are two: **7 days for $1.99** and **30 days for $7**. A pass is a **one-time purchase**. It does **not** renew, and you're never charged again unless you buy another one. If you buy a pass while one is still running, the new one starts when the current one ends, so you never lose time.
 
-Some early users have been given lifetime access badges. Those are honored.
+**What a pass includes, while it's active:**
+- unlimited messages
+- 10 photo reads a day instead of 3
+- **rollover photos** (below)
+
+When a pass ends, you're back on the free tier. Nothing else changes.
+
+**Rollover photos, in plain words.** On each day you have a pass, if you don't use all of that day's photos, 1 photo goes into your rollover, however many you left unused. Days you don't open the app count as unused. Photos come out of today's allowance first and only then out of rollover, and the app asks before it uses a rollover photo (you can turn that warning off in your profile). On the 1st and the 16th of every month, half of your rollover expires, rounded in your favor (7 becomes 4, 1 stays 1). If your pass ends, your rollover stays: it stops growing, keeps halving on the 1st and 16th, and gets used after your free daily photos run out. Rollover can't be bought, has **no cash value**, can't be transferred, and is deleted with your account. Daily photo counts reset at midnight UTC; the app shows you when that is in your time zone.
+
+**Refunds.** If you change your mind, ask within **3 days** of buying and I'll refund the pass in full. After 3 days, email me and I'll review it case by case. Email stoneheadAI@gmail.com with the email address you bought it with. A refunded pass ends when the refund goes through; if you'd stacked another pass after it, that one moves up to start right away. Rollover you've already earned stays.
+
+**Payments** are handled by Stripe. Your card details go to Stripe, not to me; see the Privacy Policy.
+
+Some early users have been given lifetime access badges. Those are honored, and founders get the pass-level photo allowance and rollover too.
 
 ---
 
@@ -163,6 +176,8 @@ If any part of these terms turns out to be unenforceable, the rest still stands.
 ## Changes to these terms
 
 If I change these terms meaningfully, I'll say so in the app and in the Discord.
+
+**September 26, 2026.** Added passes, photo limits, rollover photos, and the refund policy (the **Money** section). Before this, the terms said nothing was for sale. Deleting your account now has one exception, covered under **Your account**.
 
 ---
 
