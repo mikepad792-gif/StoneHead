@@ -72,6 +72,9 @@ On Talk the Plant you can send a photo of your plant. Here's everything that hap
 - StoneHead is told to ignore people in photos, but whatever is in the frame still gets sent. Keep faces, and anything with your address on it, out of the shot.
 - There's a daily limit on photos, because each one costs real money to read. See the Terms for how the limit and rollover work.
 
+**Support requests**
+If you use **contact support** in your profile, I save what you send: the email you want a reply at, your message, and which version of StoneHead you were on. Your account ID, username, and account email are attached automatically so I can find your account. It's emailed to me through [Resend](https://resend.com/legal/privacy-policy), the same service that sends password-reset emails, and deleted with your account.
+
 **Passes and payments**
 If you buy a pass, you pay on Stripe's checkout page, and **Stripe handles your card details**. I never see or store your card number. Stripe tells me the purchase went through, and I keep a record of each pass: which pass, when it started and ends, and the amount and currency. Stripe emails you a receipt, so Stripe has your email for that. What Stripe does with payment information is covered by [Stripe's privacy policy](https://stripe.com/privacy), not mine.
 
@@ -168,6 +171,8 @@ Your message text is transmitted to them, along with recent context from the con
 
 **The database provider.** Your data is stored in a Supabase database (Postgres) and the app is hosted on Netlify. They store the data; they don't use it.
 
+**Resend**, only for email: password resets, and support requests you send. It delivers the email; it doesn't see your conversations.
+
 **Stripe**, only if you buy a pass. Stripe processes the payment and sends your receipt. It doesn't see your conversations.
 
 **Me.** I can technically see the database. I don't read conversations for entertainment, and I don't go looking through people's threads. If you turn the data toggle **on**, you're giving me permission to read that thread to improve the app. If it's off, I leave it alone, with two exceptions: the safety logs named above, and any single exchange you rated with a thumbs up or down.
@@ -214,7 +219,7 @@ You must be at least 13 to use StoneHead at all. If I learn that someone under 1
 
 As long as you have an account. If you delete your account, your data — conversations, memories, reply ratings, photo reads, everything linked to you — is deleted with it, including your login.
 
-Your pass records and photo usage counts are deleted with the account too. Stripe keeps its own record of the payment (it's required to, for tax and fraud reasons), under Stripe's policy.
+Your pass records, photo usage counts, and support requests are deleted with the account too. Stripe keeps its own record of the payment (it's required to, for tax and fraud reasons), under Stripe's policy.
 
 **One exception:** memory summaries from threads where you turned the data toggle on are copied out first and kept, with no account, email, username, or thread attached, and only the month they were written. Nothing in what's kept links back to you. See [The data toggle](#the-data-toggle) for what a summary can still contain.
 
@@ -249,7 +254,7 @@ If you find a security problem, please tell me. I'll fix it and I'll credit you.
 
 If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.
 
-**September 27, 2026.** No change to this policy. Its date moved with the Terms of Service, which added a 21-day wait to buy a pass after a refund; one version string covers both documents.
+**September 27, 2026.** Added [support requests](#what-i-collect): if you contact support from your profile, your message and reply email are saved and emailed to me through Resend. That's a new kind of stored data, so you're being asked to accept the policy again. The Terms of Service changed on the same date, adding a 21-day wait to buy a pass after a refund.
 
 **September 26, 2026.** Photos. On Talk the Plant you can send a photo of your plant; Anthropic's Claude reads it, the photo is never saved, and only a text description is kept (see [Photos](#photos-talk-the-plant-only)). Also on this date: passes. You can buy a 7-day or 30-day pass through Stripe. Stripe handles card details; StoneHead keeps a record of each pass and a per-day count of photo reads (see [What I collect](#what-i-collect)). Both are new kinds of stored data, so you're being asked to accept the policy again.
 

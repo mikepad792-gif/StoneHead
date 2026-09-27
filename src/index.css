@@ -713,6 +713,14 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .sh-delete-account p { font-size: 14px; line-height: 1.5; color: var(--text-secondary); margin: 0; }
 .sh-delete-account strong { color: var(--text-primary); }
 .sh-delete-account-warn { color: #e0a060 !important; }
+
+/* Support form (profile → contact support). */
+.sh-support { display: flex; flex-direction: column; gap: 10px; }
+.sh-support h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-support p { font-size: 14px; line-height: 1.5; color: var(--text-secondary); margin: 0 0 4px; }
+.sh-support-label { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em; }
+.sh-support-message { resize: vertical; min-height: 120px; font-family: inherit; line-height: 1.5; }
+.sh-support .sh-profile-actions { margin-top: 6px; }
 .sh-delete-account .sh-profile-actions { margin-top: 4px; }
 .sh-btn-delete {
   background: #b04444; color: #fff; border: none; padding: 11px 20px;

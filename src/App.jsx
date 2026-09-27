@@ -1323,6 +1323,7 @@ function ProfilePage() {
   const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast, photoQuota, saveSetting } = useApp();
   const passActive = !!profile?.pass_active;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -1344,6 +1345,7 @@ function ProfilePage() {
     } finally { setSavingName(false); }
   }
   if (confirmingDelete) return <DeleteAccountView onCancel={() => setConfirmingDelete(false)} />;
+  if (showSupport) return <SupportView onDone={() => setShowSupport(false)} />;
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
       <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)}>×</button></div>
@@ -1411,6 +1413,7 @@ function ProfilePage() {
       </div>
       <div className="sh-profile-actions">
         <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{passActive ? "get more time" : "get a pass"}</button>
+        <button className="sh-btn-secondary" onClick={() => setShowSupport(true)}>contact support</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
         <button className="sh-delete-account-link" onClick={() => setConfirmingDelete(true)}>delete my account</button>
       </div>
@@ -1502,6 +1505,49 @@ function DeleteAccountView({ onCancel }) {
         <div className="sh-profile-actions">
           <button className="sh-btn-delete" onClick={handleDelete} disabled={!ready || deleting}>{deleting ? "deleting..." : "delete everything"}</button>
           <button className="sh-btn-secondary" onClick={onCancel} disabled={deleting}>keep my account</button>
+        </div>
+      </div>
+    </div></div>
+  );
+}
+
+// Support form: where to reply, and what's wrong. The server attaches the
+// account id, username and account email from the session (api/support.js).
+function SupportView({ onDone }) {
+  const { profile, setShowProfile, addToast } = useApp();
+  const [email, setEmail] = useState(profile?.email || "");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const ready = email.trim().length > 3 && message.trim().length > 0;
+  async function handleSend() {
+    if (!ready || sending) return;
+    setSending(true); setError("");
+    try {
+      await apiPost("/api/support", { email: email.trim(), message: message.trim() });
+      addToast("sent. I'll get back to you by email");
+      onDone();
+    } catch (e) {
+      setError(e.message || "couldn't send that. try again in a sec");
+      setSending(false);
+    }
+  }
+  return (
+    <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
+      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)} disabled={sending}>×</button></div>
+      <div className="sh-support">
+        <h2>contact support</h2>
+        <p>something broken, a billing question, anything. your account info is attached automatically so I can find you.</p>
+        <label className="sh-support-label" htmlFor="sh-support-email">email to reply to</label>
+        <input id="sh-support-email" className="sh-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={254} disabled={sending} />
+        <label className="sh-support-label" htmlFor="sh-support-message">what's going on?</label>
+        <textarea id="sh-support-message" className="sh-input sh-support-message" value={message} onChange={(e) => setMessage(e.target.value)}
+          maxLength={2000} rows={6} disabled={sending} />
+        {error && <p className="sh-error">{error}</p>}
+        <div className="sh-profile-actions">
+          <button className="sh-btn-primary" onClick={handleSend} disabled={!ready || sending}>{sending ? "sending..." : "send"}</button>
+          <button className="sh-btn-secondary" onClick={onDone} disabled={sending}>back</button>
         </div>
       </div>
     </div></div>

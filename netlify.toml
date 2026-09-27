@@ -116,6 +116,12 @@
   to = "/.netlify/functions/feedback"
   status = 200
 
+# Support form in the profile (migration 020, emailed through Resend).
+[[redirects]]
+  from = "/api/support"
+  to = "/.netlify/functions/support"
+  status = 200
+
 # New (Thread 3):
 [[redirects]]
   from = "/api/threads/list"
