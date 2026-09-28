@@ -476,6 +476,8 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
    "can't be reached" and "can't be covered" are different guarantees and this
    is the one that should not depend on the other holding. */
 .sh-modal-overlay--top { z-index: 300; }
+/* The 21+ card opens over the profile (avatar picker), under the terms. */
+.sh-modal-overlay--gate { z-index: 250; }
 .sh-tos-modal { text-align: center; }
 .sh-tos-modal h2 {
   font-family: var(--font-mono); font-size: 20px; color: var(--text-primary);
@@ -502,6 +504,29 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-mono); font-size: 22px; color: var(--text-primary);
 }
+/* Avatars (v2.1.2): the header button and profile circle show the picked one. */
+.sh-avatar-btn { overflow: hidden; padding: 0; }
+.sh-avatar-face { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+button.sh-profile-avatar { position: relative; cursor: pointer; padding: 0; overflow: visible; }
+button.sh-profile-avatar .sh-avatar-face { border-radius: 50%; }
+.sh-profile-avatar-edit {
+  position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg-surface-raised, #222); border: 1px solid var(--border-default);
+  font-size: 11px; line-height: 20px; text-align: center; color: var(--text-secondary);
+}
+.sh-avatar-picker h2 { font-size: 18px; color: var(--text-primary); margin: 0 0 12px; }
+.sh-avatar-section { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.1em; margin: 16px 0 8px; }
+.sh-avatar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 10px; }
+.sh-avatar-tile {
+  aspect-ratio: 1; border-radius: 50%; padding: 0; border: 2px solid transparent;
+  background: var(--stone-dark); cursor: pointer; overflow: hidden; transition: border-color 0.15s, transform 0.15s;
+}
+.sh-avatar-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sh-avatar-tile:hover { transform: scale(1.04); }
+.sh-avatar-tile--on { border-color: var(--green-primary); box-shadow: 0 0 0 2px rgba(0,0,0,0.6), 0 0 12px var(--green-primary); }
+.sh-avatar-tile--letter span { font-family: var(--font-mono); font-size: 22px; color: var(--text-primary); }
+.sh-avatar-unlock { width: 100%; margin-top: 16px; }
+.sh-avatar-picker .sh-profile-actions { margin-top: 16px; }
 .sh-profile-header h2 { font-family: var(--font-mono); font-size: 18px; font-weight: 400; color: var(--text-primary); }
 /* Username inline edit — pencil sits beside the name; edit mode swaps in an
    input styled like .sh-thread-edit-input with mono to match the h2. */
