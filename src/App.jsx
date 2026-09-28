@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
 import { pickChips, loadRecent, saveRecent } from "./chipPool.js";
 import { APP_VERSION } from "./version.js";
+import { AVATARS, AVATAR_PATH } from "./avatars.js";
 
 const API_BASE = "";
 const DISCORD_INVITE_URL = "https://discord.gg/twJuwv6WT";
@@ -300,6 +301,9 @@ export default function App() {
   const [showAgeGate, setShowAgeGate] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingHandoff, setPendingHandoff] = useState(null); // vibe→plant question awaiting age verify
+  // What opened the 21+ card: "plant" (the tab or a handoff) switches to Talk
+  // the Plant after verifying; "avatars" stays put so the picker can unlock.
+  const [ageGateFor, setAgeGateFor] = useState("plant");
   const [loading, setLoading] = useState(false);
   const [appLoading, setAppLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -506,20 +510,24 @@ export default function App() {
     setTosPending(false);
   }
   async function handleSwitchTab(tab) {
-    if (tab === "plant" && user && !user.age_verified) { setShowAgeGate(true); return; }
+    if (tab === "plant" && user && !user.age_verified) { setAgeGateFor("plant"); setShowAgeGate(true); return; }
     setActiveTab(tab); setActiveThreadId(null); setMessages([]);
   }
   async function handleAgeVerify() {
     try {
       await apiPost("/api/profile/age-verify", {});
       setUser((u) => ({ ...u, age_verified: true }));
-      setShowAgeGate(false); setActiveTab("plant"); setActiveThreadId(null); setMessages([]);
+      setShowAgeGate(false);
+      // From the avatar picker: unlock the 21+ avatars and stay there.
+      if (ageGateFor === "avatars") return;
+      setActiveTab("plant"); setActiveThreadId(null); setMessages([]);
       // A handoff that hit the gate resumes here — verified first, then carried.
       if (pendingHandoff) { const carried = pendingHandoff; setPendingHandoff(null); await startPlantThreadWith(carried); }
     }
     catch (e) { addToast("age verification failed"); }
   }
   function dismissAgeGate() { setShowAgeGate(false); setPendingHandoff(null); }
+  function openAvatarAgeGate() { setAgeGateFor("avatars"); setShowAgeGate(true); }
   async function handleNewThread() {
     try { const data = await apiPost("/api/threads/create", { tab: activeTab }); setActiveThreadId(data.thread_id); setMessages([]); await loadThreads(); setSidebarOpen(false); }
     catch (e) { addToast("couldn't create thread"); }
@@ -614,7 +622,7 @@ export default function App() {
   // the age gate (handleAgeVerify resumes the carry) — never around it.
   async function handleHandoffClick(text) {
     if (!text || !text.trim() || loading) return;
-    if (user && !user.age_verified) { setPendingHandoff(text); setShowAgeGate(true); return; }
+    if (user && !user.age_verified) { setPendingHandoff(text); setAgeGateFor("plant"); setShowAgeGate(true); return; }
     await startPlantThreadWith(text);
   }
   async function startPlantThreadWith(text) {
@@ -645,7 +653,7 @@ export default function App() {
   }, [bannerEligible]);
   const showInstallBanner = installBanner === "showing" && bannerAllowed;
 
-  const ctx = { photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
+  const ctx = { photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, openAvatarAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
 
   // A recovery link can arrive while a session is still in localStorage, so the
   // reset view wins over the logged-in app until the password is set.
@@ -690,7 +698,7 @@ export default function App() {
               <div className="sh-header-brand"><img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img" /><span className="sh-header-tagline">your always stone-d AI friend</span></div>
               <div className="sh-header-right">
                 {view !== "memory" && activeThreadId && <DataToggle threadId={activeThreadId} currentState={threads.find((t) => t.id === activeThreadId)?.data_opt_in || false} />}
-                <button className="sh-avatar-btn" onClick={() => setShowProfile(true)} title="Profile">{user?.username?.[0]?.toUpperCase() || "?"}</button>
+                <button className="sh-avatar-btn" onClick={() => setShowProfile(true)} title="Profile"><AvatarFace avatarId={profile?.avatar_id} name={user?.username} /></button>
               </div>
             </header>
             {view === "memory" ? (
@@ -1263,7 +1271,7 @@ function AgeGateModal() {
   const { handleAgeVerify, showAgeGate, dismissAgeGate } = useApp();
   if (!showAgeGate) return null;
   return (
-    <div className="sh-modal-overlay"><div className="sh-modal sh-age-gate">
+    <div className="sh-modal-overlay sh-modal-overlay--gate"><div className="sh-modal sh-age-gate">
       <img src="/images/stonehead-smoke.png" alt="" className="sh-age-mascot" />
       <h2>hold up</h2>
       <p>Talk the Plant is for people 21 and older. Are you 21 years of age or older?</p>
@@ -1334,6 +1342,7 @@ function ProfilePage() {
   const passActive = !!profile?.pass_active;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [showAvatars, setShowAvatars] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -1356,11 +1365,15 @@ function ProfilePage() {
   }
   if (confirmingDelete) return <DeleteAccountView onCancel={() => setConfirmingDelete(false)} />;
   if (showSupport) return <SupportView onDone={() => setShowSupport(false)} />;
+  if (showAvatars) return <AvatarPicker onDone={() => setShowAvatars(false)} />;
   return (
     <div className="sh-modal-overlay"><div className="sh-modal sh-profile">
       <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)}>×</button></div>
       <div className="sh-profile-header">
-        <div className="sh-profile-avatar">{user?.username?.[0]?.toUpperCase() || "?"}</div>
+        <button className="sh-profile-avatar" onClick={() => setShowAvatars(true)} aria-label="change avatar" title="change avatar">
+          <AvatarFace avatarId={profile?.avatar_id} name={user?.username} />
+          <span className="sh-profile-avatar-edit" aria-hidden="true">✎</span>
+        </button>
         {editingName ? (
           <div className="sh-username-edit">
             <input
@@ -1559,6 +1572,55 @@ function SupportView({ onDone }) {
           <button className="sh-btn-primary" onClick={handleSend} disabled={!ready || sending}>{sending ? "sending..." : "send"}</button>
           <button className="sh-btn-secondary" onClick={onDone} disabled={sending}>back</button>
         </div>
+      </div>
+    </div></div>
+  );
+}
+
+// The picked avatar, or the first letter of the username when there's none
+// (or the server dropped a 21+ one because the account no longer passes).
+const AVATAR_BY_ID = new Map(AVATARS.map((a) => [a.id, a]));
+function AvatarFace({ avatarId, name }) {
+  const a = avatarId ? AVATAR_BY_ID.get(avatarId) : null;
+  if (a) return <img className="sh-avatar-face" src={AVATAR_PATH + a.file} alt={a.label} />;
+  return <>{name?.[0]?.toUpperCase() || "?"}</>;
+}
+
+// Profile -> tap the avatar. All-ages for everyone; the 21+ set only after
+// the same gate as Talk the Plant (the server checks again on save).
+function AvatarPicker({ onDone }) {
+  const { user, profile, saveSetting, setShowProfile, openAvatarAgeGate } = useApp();
+  const current = profile?.avatar_id || null;
+  const allAges = AVATARS.filter((a) => !a.adult);
+  const adult = AVATARS.filter((a) => a.adult);
+  function pick(id) { if (id !== current) saveSetting("avatar_id", id); }
+  const tile = (a) => (
+    <button key={a.id} className={`sh-avatar-tile${a.id === current ? " sh-avatar-tile--on" : ""}`}
+      onClick={() => pick(a.id)} aria-pressed={a.id === current} title={a.label}>
+      <img src={AVATAR_PATH + a.file} alt={a.label} loading="lazy" />
+    </button>
+  );
+  return (
+    <div className="sh-modal-overlay"><div className="sh-modal sh-profile sh-avatar-picker">
+      <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={() => setShowProfile(false)}>×</button></div>
+      <h2>pick an avatar</h2>
+      <div className="sh-avatar-grid">
+        <button className={`sh-avatar-tile sh-avatar-tile--letter${!current ? " sh-avatar-tile--on" : ""}`}
+          onClick={() => pick(null)} aria-pressed={!current} title="use my letter">
+          <span>{user?.username?.[0]?.toUpperCase() || "?"}</span>
+        </button>
+        {allAges.map(tile)}
+      </div>
+      {user?.age_verified ? (
+        <>
+          <h3 className="sh-avatar-section">21+</h3>
+          <div className="sh-avatar-grid">{adult.map(tile)}</div>
+        </>
+      ) : (
+        <button className="sh-btn-secondary sh-avatar-unlock" onClick={openAvatarAgeGate}>see age-restricted avatars</button>
+      )}
+      <div className="sh-profile-actions">
+        <button className="sh-btn-secondary" onClick={onDone}>done</button>
       </div>
     </div></div>
   );
