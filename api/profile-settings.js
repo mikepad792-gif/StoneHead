@@ -5,7 +5,7 @@
 // The two profile toggles. Each is how a "don't show again" gets undone:
 //   warn_rollover         warn before a photo comes out of rollover
 //   skip_training_prompt  skip the thumbs-up "share it" dialog
-// And the avatar (migration 021): an id from src/avatars.js, or null for the
+// And the avatar (migration 022): an id from src/avatars.js, or null for the
 // letter. A 21+ avatar needs the Talk the Plant gate (lib/avatars.js).
 // Only these fields; anything else is ignored.
 

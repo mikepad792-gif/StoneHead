@@ -99,7 +99,7 @@ export async function handler(event) {
     getPhotoQuota(supabaseAdmin, { user_id, ...photoLimits(user) }),
     supabaseAdmin.from("users").select("warn_rollover").eq("id", user_id).maybeSingle(),
     refundCooldownUntil(supabaseAdmin, user_id).catch(() => null),
-    // Its own read (migration 021), like the others: without it the profile
+    // Its own read (migration 022), like the others: without it the profile
     // still loads, with the letter avatar.
     supabaseAdmin.from("users").select("avatar_id, self_reported_age_band").eq("id", user_id).maybeSingle(),
   ]);
