@@ -372,6 +372,18 @@ export default function App() {
     }
   }, []);
 
+  // /welcome is the signup landing (see handleRegister). It's the same app;
+  // the address goes back to / so a refresh or a bookmark doesn't count as
+  // another signup. Logged out (someone typed it in), it goes back at once.
+  useEffect(() => {
+    if (window.location.pathname !== "/welcome") return undefined;
+    let loggedIn = false;
+    try { loggedIn = !!localStorage.getItem("session_token"); } catch {}
+    if (!loggedIn) { window.history.replaceState({}, "", "/"); return undefined; }
+    const t = setTimeout(() => window.history.replaceState({}, "", "/" + window.location.search + window.location.hash), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
   // Back from Stripe Checkout (?paid=1 or ?paid=0). The pass is granted by
   // the webhook, a moment after the redirect, so wait for the end date to
   // move (up to ~20s) before saying so. The flag leaves the URL either way.
@@ -441,6 +453,10 @@ export default function App() {
     setSessionToken(data.session_token);
     // New signups are never founders and hold no badges — grants are operator-CLI only.
     setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null, badges: [] });
+    // A real page load at /welcome, so an ad tag sees a signup as its own
+    // page (Google Ads "page URL" conversion). Only new accounts get here;
+    // the session is already saved, so the app comes back logged in.
+    window.location.assign("/welcome");
   }
   // §6b — the toast copy matches what the endpoint actually does: it always
   // returns 200, so the UI must not claim an inbox we can't confirm exists.
