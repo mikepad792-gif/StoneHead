@@ -1,6 +1,6 @@
 -- 023_promo_codes.sql
--- Promo codes (v2.1.4). First code: STONEHEAD14, 14 free days, for the
--- sticker run. Redeemed through api/promo-redeem.js with the service key.
+-- Promo codes (v2.1.4). First codes: STONEHEAD14 (sticker run) and
+-- STONERSDAILY14 (Stoner's Daily), 14 free days each. Redeemed through api/promo-redeem.js with the service key.
 --
 -- A promo grant goes through grant_pass (migration 019), the same function
 -- the Stripe webhook calls, and is recorded in pass_purchases as pass
@@ -118,9 +118,10 @@ $$;
 revoke all on function public.redeem_promo(uuid, text) from public, anon, authenticated;
 grant execute on function public.redeem_promo(uuid, text) to service_role;
 
--- The first code. Re-running this file leaves an existing row alone.
+-- The first codes. Re-running this file leaves existing rows alone.
 insert into public.promo_codes (code, days, max_uses, expires_at, note)
-values ('STONEHEAD14', 14, 100, '2027-04-30 23:59:59-07', 'Sticker run 1, Zugmonster, Oct 2026')
+values ('STONEHEAD14', 14, 100, '2027-04-30 23:59:59-07', 'Sticker run 1, Zugmonster, Oct 2026'),
+       ('STONERSDAILY14', 14, 100, '2027-04-30 23:59:59-07', 'Stoner''s Daily, Oct 2026')
 on conflict (code) do nothing;
 
 -- Shut a code off early:  update public.promo_codes set active = false where code = '...';
