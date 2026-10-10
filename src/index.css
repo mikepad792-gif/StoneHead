@@ -739,6 +739,19 @@ button.sh-profile-avatar .sh-avatar-face { border-radius: 50%; }
 .sh-delete-account strong { color: var(--text-primary); }
 .sh-delete-account-warn { color: #e0a060 !important; }
 
+/* Promo codes (v2.1.4): the "Got a code?" sheet and the signed-out banner. */
+.sh-promo { display: flex; flex-direction: column; gap: 12px; }
+.sh-promo h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.sh-promo-input { font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.sh-promo-result { font-size: 14px; line-height: 1.5; color: #e0a060; margin: 0; }
+.sh-promo-result--ok { color: var(--green-glow, #9be37a); }
+.sh-promo .sh-profile-actions { margin-top: 4px; }
+.sh-promo-banner {
+  margin: 0 0 4px; padding: 10px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-green, #3d5a2e); background: rgba(110, 160, 80, 0.12);
+  color: var(--text-primary); font-size: 14px; line-height: 1.45; text-align: center;
+}
+
 /* Support form (profile → contact support). */
 .sh-support { display: flex; flex-direction: column; gap: 10px; }
 .sh-support h2 { font-size: 18px; color: var(--text-primary); margin: 0; }

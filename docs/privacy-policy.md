@@ -1,6 +1,6 @@
 # StoneHead AI — Privacy Policy
 
-**Last updated:** September 27, 2026
+**Last updated:** October 10, 2026
 
 StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.
 
@@ -74,6 +74,9 @@ On Talk the Plant you can send a photo of your plant. Here's everything that hap
 
 **Support requests**
 If you use **contact support** in your profile, I save what you send: the email you want a reply at, your message, and which version of StoneHead you were on. Your account ID, username, and account email are attached automatically so I can find your account. It's emailed to me through [Resend](https://resend.com/legal/privacy-policy), the same service that sends password-reset emails, and deleted with your account.
+
+**Promo codes**
+If you redeem a promo code, I keep a record of which code your account used and when, so each code works once per account. Failed tries are recorded against your account too (just the time), so codes can't be guessed. Deleting your account deletes both. Checking a code before you sign up uses your IP address only to limit how many lookups one connection can make; it isn't stored.
 
 **Passes and payments**
 If you buy a pass, you pay on Stripe's checkout page, and **Stripe handles your card details**. I never see or store your card number. Stripe tells me the purchase went through, and I keep a record of each pass: which pass, when it started and ends, and the amount and currency. Stripe emails you a receipt, so Stripe has your email for that. What Stripe does with payment information is covered by [Stripe's privacy policy](https://stripe.com/privacy), not mine.
@@ -253,6 +256,8 @@ If you find a security problem, please tell me. I'll fix it and I'll credit you.
 ## Changes
 
 If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.
+
+**October 10, 2026.** Added [promo codes](#what-i-collect): if you redeem one, the code and when you used it are kept with your account, so it works once per account. That's a new kind of stored data, so you're being asked to accept the policy again. The Terms of Service changed on the same date to cover promo codes.
 
 **September 27, 2026.** Added [support requests](#what-i-collect): if you contact support from your profile, your message and reply email are saved and emailed to me through Resend. That's a new kind of stored data, so you're being asked to accept the policy again. The Terms of Service changed on the same date, adding a 21-day wait to buy a pass after a refund.
 
