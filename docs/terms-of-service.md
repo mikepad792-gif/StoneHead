@@ -1,6 +1,6 @@
 # StoneHead AI — Terms of Service
 
-**Last updated:** September 27, 2026
+**Last updated:** October 10, 2026
 
 Plain language, because you should be able to read this.
 
@@ -135,6 +135,8 @@ When a pass ends, you're back on the free tier. Nothing else changes.
 
 **Refunds.** If you change your mind, ask within **3 days** of buying and I'll refund the pass in full. After 3 days, email me and I'll review it case by case. Email stoneheadAI@gmail.com with the email address you bought it with. A refunded pass ends when the refund goes through; if you'd stacked another pass after it, that one moves up to start right away. Rollover you've already earned stays. After a refund, you can't buy another pass for **21 days**, so passes can't be bought, used, and refunded over and over.
 
+**Promo codes.** A promo code adds free pass days, the same as a pass: they stack on any time you already have. Each code works once per account, has a use limit and an end date, has **no cash value**, and can be switched off at any time. There's nothing to refund on free days.
+
 **Payments** are handled by Stripe. Your card details go to Stripe, not to me; see the Privacy Policy.
 
 Some early users have been given lifetime access badges. Those are honored, and founders get the pass-level photo allowance and rollover too.
@@ -176,6 +178,8 @@ If any part of these terms turns out to be unenforceable, the rest still stands.
 ## Changes to these terms
 
 If I change these terms meaningfully, I'll say so in the app and in the Discord.
+
+**October 10, 2026.** Added promo codes (the **Money** section).
 
 **September 27, 2026.** Refunds: after a refunded pass, a new one can't be bought for 21 days (the **Money** section).
 

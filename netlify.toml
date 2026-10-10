@@ -122,6 +122,17 @@
   to = "/.netlify/functions/support"
   status = 200
 
+# Promo codes (migration 023). Redeem needs a session; preview doesn't.
+[[redirects]]
+  from = "/api/promo-redeem"
+  to = "/.netlify/functions/promo-redeem"
+  status = 200
+
+[[redirects]]
+  from = "/api/promo-preview"
+  to = "/.netlify/functions/promo-preview"
+  status = 200
+
 # New (Thread 3):
 [[redirects]]
   from = "/api/threads/list"

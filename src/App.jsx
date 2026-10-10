@@ -4,6 +4,27 @@ import { APP_VERSION } from "./version.js";
 import { AVATARS, AVATAR_PATH } from "./avatars.js";
 
 const API_BASE = "";
+
+// ── Promo codes (v2.1.4) ────────────────────────────────────────────
+// A sticker QR lands on ...?code=STONEHEAD14. The code is saved for later
+// and taken out of the address bar before anything else runs, so it isn't
+// left in history or a screenshot. It's only ever redeemed by a tap.
+const PENDING_CODE_KEY = "sh_pending_code";
+const PROMO_CODE_RE = /^[A-Z0-9]{3,32}$/;
+(function capturePromoCodeFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("code");
+    if (raw === null) return;
+    const code = raw.trim().toUpperCase();
+    if (PROMO_CODE_RE.test(code)) { try { localStorage.setItem(PENDING_CODE_KEY, code); } catch {} }
+    params.delete("code");
+    const rest = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+  } catch {}
+})();
+function getPendingCode() { try { return localStorage.getItem(PENDING_CODE_KEY) || ""; } catch { return ""; } }
+function clearPendingCode() { try { localStorage.removeItem(PENDING_CODE_KEY); } catch {} }
 const DISCORD_INVITE_URL = "https://discord.gg/twJuwv6WT";
 // Discord Developer Portal -> the StoneHead bot -> Installation -> Install Link
 // (the Discord Provided Link). Scopes and permissions come from the portal's
@@ -289,7 +310,11 @@ function ToastContainer({ toasts, removeToast }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("session_token") || null);
-  const [authView, setAuthView] = useState("login");
+  // Arriving from a sticker with no account yet: start on sign up.
+  const [authView, setAuthView] = useState(() => (getPendingCode() && !SIGNUP_DISABLED ? "register" : "login"));
+  // The "Got a code?" sheet: null, or { prefill }.
+  const [promoSheet, setPromoSheet] = useState(null);
+  const promoAutoOpened = useRef(false);
   const [activeTab, setActiveTab] = useState("vibe");
   const [view, setView] = useState("chat"); // "chat" | "memory"
   const [threads, setThreads] = useState([]);
@@ -669,7 +694,18 @@ export default function App() {
   }, [bannerEligible]);
   const showInstallBanner = installBanner === "showing" && bannerAllowed;
 
-  const ctx = { photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, openAvatarAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
+  // Signed in with a code from a sticker: open the sheet, filled in, once per
+  // load. Never redeems on its own; the user taps Redeem.
+  useEffect(() => {
+    if (!user || promoAutoOpened.current) return;
+    const code = getPendingCode();
+    if (!code) return;
+    promoAutoOpened.current = true;
+    setPromoSheet({ prefill: code });
+  }, [user]);
+  function openPromo() { setPromoSheet({ prefill: "" }); }
+
+  const ctx = { openPromo, photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, openAvatarAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
 
   // A recovery link can arrive while a session is still in localStorage, so the
   // reset view wins over the logged-in app until the password is set.
@@ -701,6 +737,7 @@ export default function App() {
         {showAgeGate && <AgeGateModal />}
         {showProfile && <ProfilePage />}
         {showSubscription && <SubscriptionPage />}
+        {promoSheet && <PromoSheet prefill={promoSheet.prefill} onClose={() => setPromoSheet(null)} />}
         {rolloverAsk && <RolloverCard ask={rolloverAsk} onClose={() => setRolloverAsk(null)} />}
         {showInstallSheet && <InstallSheet platform={showInstallSheet} onClose={() => setShowInstallSheet(false)} />}
         <div className="sh-layout">
@@ -732,6 +769,28 @@ export default function App() {
   );
 }
 
+// Signed out with a saved sticker code. What it's worth comes from the
+// server, never from the link.
+function PromoBanner() {
+  const [code] = useState(getPendingCode);
+  const [days, setDays] = useState(null); // null loading, 0 unknown, n days
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    fetch(`/api/promo-preview?code=${encodeURIComponent(code)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setDays(d?.valid && d.days ? d.days : 0); })
+      .catch(() => { if (!cancelled) setDays(0); });
+    return () => { cancelled = true; };
+  }, [code]);
+  if (!code || days === null) return null;
+  return (
+    <p className="sh-promo-banner" role="status">
+      {days ? `Sticker code ${code} saved. Sign up to get ${days} days free.` : "Code saved. Sign up to use it."}
+    </p>
+  );
+}
+
 function AuthScreen() {
   const { handleLogin, handleRegister, handleForgotPassword, authView, setAuthView } = useApp();
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
@@ -755,6 +814,7 @@ function AuthScreen() {
         <img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img sh-logo-img--large" />
         <p className="sh-tagline">Your Always Stone-D AI Friend</p>
       </div>
+      {authView !== "reset" && <PromoBanner />}
       {authView === "reset" ? <ResetPasswordForm /> : (
         <>
           <form onSubmit={handleSubmit} className="sh-auth-form">
@@ -1354,7 +1414,7 @@ function TosModal() {
 }
 
 function ProfilePage() {
-  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast, photoQuota, saveSetting } = useApp();
+  const { user, profile, setShowProfile, setShowSubscription, handleLogout, loadProfile, addToast, photoQuota, saveSetting, openPromo } = useApp();
   const passActive = !!profile?.pass_active;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -1452,6 +1512,7 @@ function ProfilePage() {
       </div>
       <div className="sh-profile-actions">
         <button className="sh-btn-primary" onClick={() => { setShowProfile(false); setShowSubscription(true); }}>{passActive ? "get more time" : "get a pass"}</button>
+        <button className="sh-btn-secondary" onClick={openPromo}>promo code</button>
         <button className="sh-btn-secondary" onClick={() => setShowSupport(true)}>contact support</button>
         <button className="sh-btn-danger" onClick={handleLogout}>log out</button>
         <button className="sh-delete-account-link" onClick={() => setConfirmingDelete(true)}>delete my account</button>
@@ -1590,6 +1651,53 @@ function SupportView({ onDone }) {
         </div>
       </div>
     </div></div>
+  );
+}
+
+// "Got a code?" One tap redeems; the server decides everything about the
+// code. A final answer (anything but a network or server error) clears the
+// saved sticker code.
+function PromoSheet({ prefill, onClose }) {
+  const { loadProfile } = useApp();
+  const [code, setCode] = useState(prefill || "");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null); // { ok, text }
+  async function redeem() {
+    if (!code || busy) return;
+    setBusy(true); setResult(null);
+    try {
+      const r = await apiPost("/api/promo-redeem", { code });
+      if (!r || !r.status || r.status === "error") throw new Error("server");
+      clearPendingCode();
+      if (r.status === "ok") {
+        // The date in the user's own time zone, so it's built here.
+        setResult({ ok: true, text: `You're in. ${r.days} free days added. Your pass now runs through ${fmtDay(r.subscription_expires)}.` });
+        loadProfile();
+      } else {
+        setResult({ ok: false, text: r.message });
+      }
+    } catch {
+      setResult({ ok: false, text: "Something went wrong. Try again in a minute." });
+    } finally { setBusy(false); }
+  }
+  const done = result?.ok;
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="sh-modal sh-promo" role="dialog" aria-modal="true" aria-labelledby="sh-promo-title">
+        <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={onClose} disabled={busy}>×</button></div>
+        <h2 id="sh-promo-title">Got a code?</h2>
+        <input className="sh-input sh-promo-input" value={code} placeholder="Enter code" maxLength={32}
+          autoCapitalize="characters" autoCorrect="off" spellCheck={false} disabled={busy || done} aria-label="promo code"
+          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+          onKeyDown={(e) => { if (e.key === "Enter") redeem(); }} />
+        {result && <p className={`sh-promo-result${result.ok ? " sh-promo-result--ok" : ""}`} role="status">{result.text}</p>}
+        <div className="sh-profile-actions">
+          {done
+            ? <button className="sh-btn-primary" onClick={onClose}>nice</button>
+            : <button className="sh-btn-primary" onClick={redeem} disabled={!code || busy}>{busy ? "..." : "Redeem"}</button>}
+        </div>
+      </div>
+    </div>
   );
 }
 
