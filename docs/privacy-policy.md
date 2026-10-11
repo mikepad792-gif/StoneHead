@@ -1,6 +1,6 @@
 # StoneHead AI — Privacy Policy
 
-**Last updated:** October 10, 2026
+**Last updated:** October 11, 2026
 
 StoneHead AI is built and operated by one person. This policy is written plainly, because you deserve to actually understand what happens to what you type. If anything here is unclear, ask me.
 
@@ -17,7 +17,7 @@ StoneHead AI is built and operated by one person. This policy is written plainly
 - StoneHead remembers things about you across sessions — that's a feature, and you can delete it.
 - I don't sell your data. I don't run ads. There is no analytics tracker following you around.
 - You can delete your account and everything in it, at any time, from the app. One exception: memory summaries from chats where you turned the data toggle on are kept, with nothing that links them to you.
-- There's a Discord bot. It gets your Discord user ID and server ID and uses them to count requests and to avoid repeating itself. Nothing else. See [The Discord bot](#the-discord-bot).
+- There's a Discord bot. It gets your Discord user ID and server ID and uses them to count requests and to avoid repeating itself. If you choose to link your Discord to your StoneHead account, or enter the Weekly Moai Drop, it keeps a little more, all spelled out in [The Discord bot](#the-discord-bot).
 
 ---
 
@@ -78,6 +78,9 @@ If you use **contact support** in your profile, I save what you send: the email 
 **Promo codes**
 If you redeem a promo code, I keep a record of which code your account used and when, so each code works once per account. Failed tries are recorded against your account too (just the time), so codes can't be guessed. Deleting your account deletes both. Checking a code before you sign up uses your IP address only to limit how many lookups one connection can make; it isn't stored.
 
+**Active days**
+Which days you used StoneHead: the date (Pacific time) of each day you sent a message, and nothing about what you said. It's what turns into entries in the [Weekly Moai Drop](#the-weekly-moai-drop). Dates older than 120 days are cleared out, and deleting your account deletes all of them.
+
 **Passes and payments**
 If you buy a pass, you pay on Stripe's checkout page, and **Stripe handles your card details**. I never see or store your card number. Stripe tells me the purchase went through, and I keep a record of each pass: which pass, when it started and ends, and the amount and currency. Stripe emails you a receipt, so Stripe has your email for that. What Stripe does with payment information is covered by [Stripe's privacy policy](https://stripe.com/privacy), not mine.
 
@@ -103,7 +106,7 @@ How many photo reads you used each day, and your rollover count. These are count
 
 StoneHead AI runs a bot in Discord. If you've never used it, nothing in this section applies to you.
 
-When you run one of its commands, Discord hands me two numbers: your Discord user ID and the ID of the server you ran it in. Those are the numeric IDs Discord assigns. I don't get your Discord username, your email, or anything else from your profile, and in a DM there's no server ID at all.
+When you run one of its commands, Discord hands me two numbers: your Discord user ID and the ID of the server you ran it in. Those are the numeric IDs Discord assigns. For /strain, that's all: I don't get your Discord username, your email, or anything else from your profile, and in a DM there's no server ID at all. /link and the Moai Drop's Enter button also send your Discord display name, covered below.
 
 I use them for two internal operations, and nothing else:
 
@@ -112,11 +115,17 @@ I use them for two internal operations, and nothing else:
 
 **What the bot does not do.** What you type in a command isn't stored. It goes to the AI provider to generate the reply, and through the same safety layer described below that every message in the app goes through, and then it's gone. The bot's own logs record the server ID, the strain it answered with, and how many characters you typed — not your user ID and not your words. None of this builds a profile, none of it is used for advertising, and none of it is sold or shared.
 
-**Not linked to your account.** Bot activity isn't connected to a StoneHead account, even if you have one. Your Discord ID and your email address never meet.
-
 **Retention, specifically.** The hourly counter resets every hour. The intro flag and the recent-strain list stay on that row until they're removed — email me at stoneheadAI@gmail.com with your Discord user ID and I'll delete it. You don't need an account to ask.
 
-This is here because of the children's-privacy rule on persistent identifiers: collecting one for internal operations like rate limiting is allowed, but only if it's disclosed and only if it isn't used for anything else. The two bullets above are the whole of what it's used for.
+This is here because of the children's-privacy rule on persistent identifiers: collecting one for internal operations like rate limiting is allowed, but only if it's disclosed and only if it isn't used for anything else. For /strain, the two bullets above are the whole of what it's used for. Linking and the Moai Drop, below, only happen if you choose them.
+
+**Not linked to your account, unless you link it.** /strain activity isn't connected to a StoneHead account, even if you have one.
+
+**Linking your Discord (your choice).** If you run /link and confirm it on the site, your StoneHead account stores your Discord user ID and your Discord display name, so the two accounts know each other. That's what lets the Moai Drop count your active days. Unlink anytime in your profile, or delete your account, and both are removed. Each link request (a random link and a 6-digit code, good for 15 minutes) is kept for a day and then deleted.
+
+### The Weekly Moai Drop
+
+If you tap Enter on a Moai Drop post, the bot records that your Discord ID entered that week's round, your display name at the time, when you entered, and whether you left. The bot doesn't read message content for any of this. At the draw, StoneHead counts each linked person's entries (1 for entering, plus 1 for each [active day](#what-i-collect) that week, up to 7), picks a winner at random weighted by those counts, and saves the round's record: who was counted, how many entries each person had, and who won. Those records are kept as the round's audit trail. If you delete your account, your link and active days go with it; a past round's record keeps only an account number that no longer leads to anything. Nobody's entry count is ever posted. The channel sees totals, the winner (by Discord mention), and up to 12 entrants' display names during the draw animation. You can check your own count privately with /entries.
 
 ---
 
@@ -222,7 +231,7 @@ You must be at least 13 to use StoneHead at all. If I learn that someone under 1
 
 As long as you have an account. If you delete your account, your data — conversations, memories, reply ratings, photo reads, everything linked to you — is deleted with it, including your login.
 
-Your pass records, photo usage counts, and support requests are deleted with the account too. Stripe keeps its own record of the payment (it's required to, for tax and fraud reasons), under Stripe's policy.
+Your pass records, photo usage counts, support requests, active days, and Discord link are deleted with the account too. Moai Drop round records are kept, as described in [The Discord bot](#the-discord-bot). Stripe keeps its own record of the payment (it's required to, for tax and fraud reasons), under Stripe's policy.
 
 **One exception:** memory summaries from threads where you turned the data toggle on are copied out first and kept, with no account, email, username, or thread attached, and only the month they were written. Nothing in what's kept links back to you. See [The data toggle](#the-data-toggle) for what a summary can still contain.
 
@@ -256,6 +265,8 @@ If you find a security problem, please tell me. I'll fix it and I'll credit you.
 ## Changes
 
 If I change this policy in a way that matters, I'll say so in the app and in the Discord — not quietly. When a change means something I previously told you was wrong, I'll say that too, rather than editing it out.
+
+**October 11, 2026.** Added Discord linking and the [Weekly Moai Drop](#the-weekly-moai-drop), and [active days](#what-i-collect) (the dates you used StoneHead, nothing else). This corrects two things the policy said before: that bot activity is never connected to a StoneHead account, and that the bot never gets your Discord username. Both are still true for /strain. They're no longer true if you link your Discord or enter the Moai Drop. That's new stored data, so you're being asked to accept the policy again. The Terms of Service changed on the same date to add the Moai Drop rules.
 
 **October 10, 2026.** Added [promo codes](#what-i-collect): if you redeem one, the code and when you used it are kept with your account, so it works once per account. That's a new kind of stored data, so you're being asked to accept the policy again. The Terms of Service changed on the same date to cover promo codes.
 

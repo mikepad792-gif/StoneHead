@@ -128,6 +128,58 @@
   to = "/.netlify/functions/promo-redeem"
   status = 200
 
+# Weekly Moai Drop (v2.2.0): Discord linking for the site, bot-* for the
+# Discord bot (X-Bot-Secret).
+[[redirects]]
+  from = "/api/bot-link-start"
+  to = "/.netlify/functions/bot-link-start"
+  status = 200
+
+[[redirects]]
+  from = "/api/discord-link-preview"
+  to = "/.netlify/functions/discord-link-preview"
+  status = 200
+
+[[redirects]]
+  from = "/api/discord-link"
+  to = "/.netlify/functions/discord-link"
+  status = 200
+
+[[redirects]]
+  from = "/api/discord-unlink"
+  to = "/.netlify/functions/discord-unlink"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-create"
+  to = "/.netlify/functions/bot-round-create"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-message"
+  to = "/.netlify/functions/bot-round-message"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-enter"
+  to = "/.netlify/functions/bot-round-enter"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-draw"
+  to = "/.netlify/functions/bot-round-draw"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-cancel"
+  to = "/.netlify/functions/bot-round-cancel"
+  status = 200
+
+[[redirects]]
+  from = "/api/bot-round-nudge"
+  to = "/.netlify/functions/bot-round-nudge"
+  status = 200
+
 [[redirects]]
   from = "/api/promo-preview"
   to = "/.netlify/functions/promo-preview"

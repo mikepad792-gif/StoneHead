@@ -25,6 +25,42 @@ const PROMO_CODE_RE = /^[A-Z0-9]{3,32}$/;
 })();
 function getPendingCode() { try { return localStorage.getItem(PENDING_CODE_KEY) || ""; } catch { return ""; } }
 function clearPendingCode() { try { localStorage.removeItem(PENDING_CODE_KEY); } catch {} }
+// ── Discord linking (v2.2.0) ────────────────────────────────────────
+// /link in Discord hands out stoneheadai.com/link-discord?t=TOKEN. The token
+// is saved and taken out of the address bar before anything else runs.
+// Already signed in when the link opens: one confirm tap ("Link Discord bob?"),
+// because a forwarded link would otherwise attach the wrong Discord silently.
+// Signed out: the person signs up or logs in for this link, so it finishes on
+// its own afterwards (auto). REQUIRE_LINK_CONFIRM = false drops the tap.
+const REQUIRE_LINK_CONFIRM = true;
+const PENDING_DISCORD_KEY = "sh_pending_discord_link";
+const DISCORD_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+let pendingDiscordMemory = null; // when localStorage is blocked
+function getPendingDiscord() {
+  try {
+    const raw = localStorage.getItem(PENDING_DISCORD_KEY);
+    if (raw) { const p = JSON.parse(raw); if (p && DISCORD_TOKEN_RE.test(p.t)) return p; }
+  } catch {}
+  return pendingDiscordMemory;
+}
+function savePendingDiscord(p) {
+  pendingDiscordMemory = p;
+  try { localStorage.setItem(PENDING_DISCORD_KEY, JSON.stringify(p)); } catch {}
+}
+function clearPendingDiscord() {
+  pendingDiscordMemory = null;
+  try { localStorage.removeItem(PENDING_DISCORD_KEY); } catch {}
+}
+(function captureDiscordLinkFromUrl() {
+  try {
+    if (window.location.pathname !== "/link-discord") return;
+    const t = new URLSearchParams(window.location.search).get("t") || "";
+    let signedIn = false;
+    try { signedIn = !!localStorage.getItem("session_token"); } catch {}
+    if (DISCORD_TOKEN_RE.test(t)) savePendingDiscord({ t, auto: !signedIn || !REQUIRE_LINK_CONFIRM });
+    window.history.replaceState({}, "", "/" + window.location.hash);
+  } catch {}
+})();
 const DISCORD_INVITE_URL = "https://discord.gg/twJuwv6WT";
 // Discord Developer Portal -> the StoneHead bot -> Installation -> Install Link
 // (the Discord Provided Link). Scopes and permissions come from the portal's
@@ -311,10 +347,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("session_token") || null);
   // Arriving from a sticker with no account yet: start on sign up.
-  const [authView, setAuthView] = useState(() => (getPendingCode() && !SIGNUP_DISABLED ? "register" : "login"));
+  const [authView, setAuthView] = useState(() => ((getPendingCode() || getPendingDiscord()) && !SIGNUP_DISABLED ? "register" : "login"));
   // The "Got a code?" sheet: null, or { prefill }.
   const [promoSheet, setPromoSheet] = useState(null);
   const promoAutoOpened = useRef(false);
+  // The Discord link sheet: null, or { token, mode: "confirm" | "auto" }.
+  const [discordSheet, setDiscordSheet] = useState(null);
   const [activeTab, setActiveTab] = useState("vibe");
   const [view, setView] = useState("chat"); // "chat" | "memory"
   const [threads, setThreads] = useState([]);
@@ -475,12 +513,14 @@ export default function App() {
     const data = await apiPost("/api/auth/register", { email, password, username });
     localStorage.setItem("session_token", data.session_token);
     if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
-    setSessionToken(data.session_token);
-    // New signups are never founders and hold no badges — grants are operator-CLI only.
-    setUser({ user_id: data.user_id, username, is_subscribed: false, age_verified: false, is_founder: false, founder_number: null, badges: [] });
     // A real page load at /welcome, so an ad tag sees a signup as its own
     // page (Google Ads "page URL" conversion). Only new accounts get here;
     // the session is already saved, so the app comes back logged in.
+    //
+    // No setSessionToken here: that starts the profile load, the navigation
+    // cancels it mid-flight, and loadProfile reads the cancelled fetch as a
+    // dead session and logs out, so the new account landed on the login
+    // screen. The reload loads the profile itself.
     window.location.assign("/welcome");
   }
   // §6b — the toast copy matches what the endpoint actually does: it always
@@ -696,13 +736,20 @@ export default function App() {
 
   // Signed in with a code from a sticker: open the sheet, filled in, once per
   // load. Never redeems on its own; the user taps Redeem.
+  // Signed in with a pending Discord link: finish it (or ask, if the link was
+  // opened while already signed in). Before the promo sheet, never together.
   useEffect(() => {
-    if (!user || promoAutoOpened.current) return;
+    if (!user || discordSheet) return;
+    const p = getPendingDiscord();
+    if (p) setDiscordSheet({ token: p.t, mode: p.auto ? "auto" : "confirm" });
+  }, [user]);
+  useEffect(() => {
+    if (!user || promoAutoOpened.current || discordSheet || getPendingDiscord()) return;
     const code = getPendingCode();
     if (!code) return;
     promoAutoOpened.current = true;
     setPromoSheet({ prefill: code });
-  }, [user]);
+  }, [user, discordSheet]);
   function openPromo() { setPromoSheet({ prefill: "" }); }
 
   const ctx = { openPromo, photoQuota, askRollover, saveSetting, setProfile, canInstall, handleInstall, showInstallBanner, dismissInstallBanner, user, activeTab, view, setView, threads, activeThreadId, messages, usageRemaining, loading, profile, showProfile, showSubscription, showAgeGate, sidebarOpen, setShowProfile, setShowSubscription, setSidebarOpen, handleLogin, handleRegister, handleLogout, handleAccountDeleted, handleRate, handleSwitchTab, handleAgeVerify, dismissAgeGate, openAvatarAgeGate, handleNewThread, handleSelectThread, handleSendMessage, handleHandoffClick, handleToggleData, handleDeleteThread, handleRenameThread, loadProfile, authView, setAuthView, addToast, setShowAgeGate, handleForgotPassword, handleResetPassword, tosPending, handleAcceptTos, photosRemaining, loadingNote };
@@ -738,6 +785,7 @@ export default function App() {
         {showProfile && <ProfilePage />}
         {showSubscription && <SubscriptionPage />}
         {promoSheet && <PromoSheet prefill={promoSheet.prefill} onClose={() => setPromoSheet(null)} />}
+        {discordSheet && <DiscordLinkSheet token={discordSheet.token} mode={discordSheet.mode} onClose={() => setDiscordSheet(null)} />}
         {rolloverAsk && <RolloverCard ask={rolloverAsk} onClose={() => setRolloverAsk(null)} />}
         {showInstallSheet && <InstallSheet platform={showInstallSheet} onClose={() => setShowInstallSheet(false)} />}
         <div className="sh-layout">
@@ -814,6 +862,7 @@ function AuthScreen() {
         <img src="/images/stonehead-logo-text.png" alt="stonehead ai" className="sh-logo-img sh-logo-img--large" />
         <p className="sh-tagline">Your Always Stone-D AI Friend</p>
       </div>
+      {authView !== "reset" && <DiscordLinkBanner />}
       {authView !== "reset" && <PromoBanner />}
       {authView === "reset" ? <ResetPasswordForm /> : (
         <>
@@ -1498,6 +1547,7 @@ function ProfilePage() {
           {!photoQuota.earns_rollover && <p className="sh-profile-muted">with a pass, each day you don't use all your photos adds 1 rollover photo</p>}
         </div>
       )}
+      <DiscordProfileRow />
       <div className="sh-profile-section sh-profile-settings">
         <label className="sh-setting">
           <span>warn before using a rollover photo</span>
@@ -1697,6 +1747,168 @@ function PromoSheet({ prefill, onClose }) {
             : <button className="sh-btn-primary" onClick={redeem} disabled={!code || busy}>{busy ? "..." : "Redeem"}</button>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Whose Discord a /link link belongs to (and its typed fallback code).
+// { valid: true, discord_username, short_code } | { valid: false } | null on a
+// network error or the per-IP limit, where nothing is known either way.
+async function previewDiscordLink(token) {
+  try {
+    const r = await fetch(`/api/discord-link-preview?t=${encodeURIComponent(token)}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d && typeof d.valid === "boolean" ? d : null;
+  } catch { return null; }
+}
+
+// Signed out with a pending Discord link. Signing up or logging in from here
+// is on purpose for this link, so it's marked to finish on its own.
+function DiscordLinkBanner() {
+  const { setAuthView } = useApp();
+  const [pending] = useState(getPendingDiscord);
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    if (!pending) return undefined;
+    if (!pending.auto) savePendingDiscord({ ...pending, auto: true });
+    let cancelled = false;
+    previewDiscordLink(pending.t).then((d) => {
+      if (cancelled) return;
+      if (d && !d.valid) clearPendingDiscord();
+      setInfo(d || { valid: null });
+    });
+    return () => { cancelled = true; };
+  }, [pending]);
+  if (!pending || !info) return null;
+  if (info.valid === false) {
+    return <p className="sh-promo-banner sh-discord-banner--bad" role="status">This link expired. Run /link in Discord for a fresh one.</p>;
+  }
+  return (
+    <div className="sh-promo-banner sh-discord-banner" role="status">
+      <p>Sign up or log in to finish linking <strong>{info.discord_username || "your Discord"}</strong>.</p>
+      {!SIGNUP_DISABLED && (
+        <div className="sh-discord-banner-btns">
+          <button type="button" className="sh-btn-secondary" onClick={() => setAuthView("register")}>sign up</button>
+          <button type="button" className="sh-btn-secondary" onClick={() => setAuthView("login")}>log in</button>
+        </div>
+      )}
+      {info.short_code && (
+        <p className="sh-discord-banner-alt">Already signed in somewhere else? Enter code <strong>{info.short_code}</strong> in your StoneHead profile under Link Discord.</p>
+      )}
+    </div>
+  );
+}
+
+// Finishing a /link link while signed in. "confirm" asks first (the link was
+// opened while already signed in); "auto" links straight away (they just
+// signed up or logged in for it). The pending link is cleared on any final
+// answer and kept only when the request never got one.
+function DiscordLinkSheet({ token, mode, onClose }) {
+  const { loadProfile } = useApp();
+  const [name, setName] = useState(null);
+  const [state, setState] = useState(mode === "auto" ? "working" : "confirm"); // confirm | working | done | failed | error
+  const [text, setText] = useState("");
+  const started = useRef(false);
+  async function doLink() {
+    setState("working");
+    try {
+      const r = await apiPost("/api/discord-link", { token });
+      if (!r?.status || r.status === "error") throw new Error("server");
+      clearPendingDiscord();
+      setText(r.message);
+      setState(r.status === "ok" ? "done" : "failed");
+      if (r.status === "ok") loadProfile();
+    } catch {
+      setText("Something went wrong. Try again in a minute.");
+      setState("error");
+    }
+  }
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    if (mode === "auto") { doLink(); return; }
+    previewDiscordLink(token).then((d) => {
+      if (d?.valid) setName(d.discord_username);
+      else if (d) { clearPendingDiscord(); setText("This link expired. Run /link in Discord for a fresh one."); setState("failed"); }
+    });
+  }, []);
+  function notMe() { clearPendingDiscord(); onClose(); }
+  const busy = state === "working";
+  const close = state === "confirm" ? notMe : onClose;
+  return (
+    <div className="sh-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !busy) close(); }}>
+      <div className="sh-modal sh-promo sh-discord-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-discord-title">
+        <div className="sh-modal-close-row"><button className="sh-close-btn" onClick={close} disabled={busy}>×</button></div>
+        <h2 id="sh-discord-title">Link Discord</h2>
+        {state === "confirm" && <p className="sh-discord-ask">Link Discord <strong>{name || "this account"}</strong> to your StoneHead account?</p>}
+        {busy && <p className="sh-discord-ask">linking...</p>}
+        {(state === "done" || state === "failed" || state === "error") && (
+          <p className={`sh-promo-result${state === "done" ? " sh-promo-result--ok" : ""}`} role="status">{text}</p>
+        )}
+        <div className="sh-profile-actions">
+          {state === "confirm" && <>
+            <button className="sh-btn-primary" onClick={doLink}>Link</button>
+            <button className="sh-btn-secondary" onClick={notMe}>Not me</button>
+          </>}
+          {state === "done" && <button className="sh-btn-primary" onClick={onClose}>back to the app</button>}
+          {state === "failed" && <button className="sh-btn-primary" onClick={onClose}>ok</button>}
+          {state === "error" && <>
+            <button className="sh-btn-primary" onClick={doLink}>try again</button>
+            <button className="sh-btn-secondary" onClick={onClose}>later</button>
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Profile: the linked Discord with Unlink, or the 6-digit code box for when
+// the /link page opened somewhere this account isn't signed in.
+function DiscordProfileRow() {
+  const { profile, loadProfile, addToast } = useApp();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null); // { ok, text }
+  const linked = profile?.discord_username;
+  async function linkByCode() {
+    if (code.length !== 6 || busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await apiPost("/api/discord-link", { code });
+      if (!r?.status || r.status === "error") throw new Error("server");
+      if (r.status === "ok") { setCode(""); addToast(r.message); await loadProfile(); }
+      else setNote({ ok: false, text: r.message });
+    } catch { setNote({ ok: false, text: "Something went wrong. Try again in a minute." }); }
+    finally { setBusy(false); }
+  }
+  async function unlink() {
+    setBusy(true);
+    try { const r = await apiPost("/api/discord-unlink", {}); addToast(r.message || "Discord unlinked."); await loadProfile(); }
+    catch { addToast("couldn't unlink. try again in a sec"); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="sh-profile-section sh-profile-discord">
+      <h3>DISCORD</h3>
+      {linked ? (
+        <div className="sh-discord-row">
+          <p>Discord: {linked}</p>
+          <button className="sh-username-btn" onClick={unlink} disabled={busy}>{busy ? "..." : "Unlink"}</button>
+        </div>
+      ) : (
+        <>
+          <p className="sh-profile-muted">Run /link in Discord. Opened the link somewhere you're not signed in? Enter its code here.</p>
+          <div className="sh-discord-row">
+            <input className="sh-input sh-discord-code" value={code} placeholder="6-digit code" inputMode="numeric"
+              aria-label="Link Discord code" disabled={busy}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(e) => { if (e.key === "Enter") linkByCode(); }} />
+            <button className="sh-username-btn" onClick={linkByCode} disabled={busy || code.length !== 6}>{busy ? "..." : "Link Discord"}</button>
+          </div>
+          {note && <p className="sh-promo-result" role="status">{note.text}</p>}
+        </>
+      )}
     </div>
   );
 }
