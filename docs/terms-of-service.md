@@ -1,6 +1,6 @@
 # StoneHead AI — Terms of Service
 
-**Last updated:** October 10, 2026
+**Last updated:** October 11, 2026
 
 Plain language, because you should be able to read this.
 
@@ -137,6 +137,8 @@ When a pass ends, you're back on the free tier. Nothing else changes.
 
 **Promo codes.** A promo code adds free pass days, the same as a pass: they stack on any time you already have. Each code works once per account, has a use limit and an end date, has **no cash value**, and can be switched off at any time. There's nothing to refund on free days.
 
+**The Weekly Moai Drop.** A free weekly draw in the StoneHead Discord. Nothing to buy, and buying a pass doesn't add entries. To be counted you need to tap Enter on that week's post before the draw and have your Discord linked to a StoneHead account by draw time; you must be 18 or older. You get 1 entry for entering plus 1 for each day (Monday through Sunday, Pacific time) you used StoneHead that week, up to 8 in all. One entry set per person per week; leaving takes you out. The winner is picked at random, weighted by entries, and announced in the channel. Pass-day prizes and bonus days are added like a promo code: free days with **no cash value**, not transferable. If a founder wins, they get a different prize instead of pass days. Staff and test accounts aren't counted. I can cancel or change a round, and void where prohibited.
+
 **Payments** are handled by Stripe. Your card details go to Stripe, not to me; see the Privacy Policy.
 
 Some early users have been given lifetime access badges. Those are honored, and founders get the pass-level photo allowance and rollover too.
@@ -178,6 +180,8 @@ If any part of these terms turns out to be unenforceable, the rest still stands.
 ## Changes to these terms
 
 If I change these terms meaningfully, I'll say so in the app and in the Discord.
+
+**October 11, 2026.** Added the Weekly Moai Drop (the **Money** section).
 
 **October 10, 2026.** Added promo codes (the **Money** section).
 

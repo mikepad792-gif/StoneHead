@@ -20,6 +20,7 @@
 
 import { authenticateRequest, errorResponse, jsonResponse } from "../lib/auth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { recordActiveDay } from "../lib/giveaway.js";
 import { FREE_DAILY_LIMIT, BLANK_REPLY_FALLBACK } from "../lib/constants.js";
 import { VIBE_MODE, VIBE_HANDOFF_PROMPT, VIBE_SAFETY_SCOPE_NOTE } from "../prompts/vibe.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
@@ -1017,8 +1018,9 @@ export async function handler(event) {
       ? currentCount
       : user.last_message_date !== today ? 1 : currentCount + 1;
 
-    // ── The four post-insert writes run in parallel ───────────────────
-    // Thread timestamp, postwork handshake, usage counter, activity bump.
+    // ── The post-insert writes run in parallel ────────────────────────
+    // Thread timestamp, postwork handshake, usage counter, activity bump,
+    // active day.
     // They used to run one after another while the reply sat finished,
     // four round trips the user waited through before seeing anything.
     // None depends on another: they touch different tables, or different
@@ -1071,6 +1073,10 @@ export async function handler(event) {
             })
             .eq("id", user_id)
         : null,
+
+      // ── Weekly Moai Drop: today (Pacific) counts as a day used ────────
+      // Dates only. Never throws, so it can't hold up the reply.
+      recordActiveDay(supabaseAdmin, user_id),
 
       // ── Retention instrumentation (append-only, per-user per-day) ─────
       // Counts for EVERYONE, founders included — like the counter above, the

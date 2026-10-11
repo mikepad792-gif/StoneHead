@@ -752,6 +752,17 @@ button.sh-profile-avatar .sh-avatar-face { border-radius: 50%; }
   color: var(--text-primary); font-size: 14px; line-height: 1.45; text-align: center;
 }
 
+/* Discord linking (v2.2.0). */
+.sh-discord-banner p { margin: 0; }
+.sh-discord-banner-btns { display: flex; gap: 8px; justify-content: center; margin: 8px 0 4px; }
+.sh-discord-banner-btns .sh-btn-secondary { flex: 1; max-width: 140px; }
+.sh-discord-banner-alt { margin-top: 6px !important; font-size: 12.5px; color: var(--text-secondary); }
+.sh-discord-banner--bad { border-color: #8a5a2e; background: rgba(224, 160, 96, 0.1); }
+.sh-discord-ask { font-size: 15px; line-height: 1.5; color: var(--text-primary); margin: 0; }
+.sh-discord-row { display: flex; align-items: center; gap: 8px; }
+.sh-discord-row p { flex: 1; margin: 0; }
+.sh-discord-code { flex: 1; min-width: 0; font-family: var(--font-mono); letter-spacing: 0.15em; }
+
 /* Support form (profile → contact support). */
 .sh-support { display: flex; flex-direction: column; gap: 10px; }
 .sh-support h2 { font-size: 18px; color: var(--text-primary); margin: 0; }

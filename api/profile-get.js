@@ -95,14 +95,17 @@ export async function handler(event) {
   // --- Photos (migration 019): the quota and the rollover warning toggle ---
   // Both non-blocking for the same reason: a database without 019 still
   // loads the profile, just without photo counts.
-  const [photos, { data: rolloverPrefs, error: rolloverError }, pass_blocked_until, { data: avatarRow, error: avatarError }] = await Promise.all([
+  const [photos, { data: rolloverPrefs, error: rolloverError }, pass_blocked_until, { data: avatarRow, error: avatarError }, { data: discordRow, error: discordError }] = await Promise.all([
     getPhotoQuota(supabaseAdmin, { user_id, ...photoLimits(user) }),
     supabaseAdmin.from("users").select("warn_rollover").eq("id", user_id).maybeSingle(),
     refundCooldownUntil(supabaseAdmin, user_id).catch(() => null),
     // Its own read (migration 022), like the others: without it the profile
     // still loads, with the letter avatar.
     supabaseAdmin.from("users").select("avatar_id, self_reported_age_band").eq("id", user_id).maybeSingle(),
+    // Discord link (migration 024), same: without it, no Discord row.
+    supabaseAdmin.from("users").select("discord_id, discord_username").eq("id", user_id).maybeSingle(),
   ]);
+  if (discordError) console.error("profile/get discord (non-blocking):", discordError.message);
   if (avatarError) console.error("profile/get avatar_id (non-blocking):", avatarError.message);
   if (rolloverError) console.error("profile/get warn_rollover (non-blocking):", rolloverError.message);
 
@@ -127,6 +130,8 @@ export async function handler(event) {
     pass_blocked_until,
     // A 21+ avatar is dropped (letter shown) if the account no longer passes
     // the gate: age detection can flip it after the avatar was picked.
+    // Discord link (v2.2.0). The name only; the id never leaves the server.
+    discord_username: discordRow?.discord_id ? discordRow.discord_username || "linked" : null,
     avatar_id: visibleAvatarId(avatarRow?.avatar_id, { age_verified: user.age_verified, self_reported_age_band: avatarRow?.self_reported_age_band }),
     photos, // quota object or null
     // The two allowances, for the pass picker's copy. From the environment.
