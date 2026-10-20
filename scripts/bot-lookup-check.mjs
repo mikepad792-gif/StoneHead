@@ -24,6 +24,7 @@ const { supabaseAdmin } = await import("../lib/supabase.js");
 const { UNDER_13_REPLY } = await import("../lib/ageDetect.js");
 const { CRISIS_REPLY } = await import("../lib/crisisDetect.js");
 const { handler } = await import("../api/strain-lookup.js");
+const { MISS_TONE, formatLookupState } = await import("../lib/strainSearch.js");
 
 // ── Stubs ───────────────────────────────────────────────────────────
 // ESM gives live bindings to the module's own object, and the endpoint holds
@@ -356,6 +357,25 @@ for (const fake of ["pink thunder", "blue smog", "gorilla glue"]) {
     ),
     `B04c: "${fake}" must carry a note saying the card is not their strain`
   );
+  // 2.2.1: a miss is a gap in the notes, never "that's not a real strain".
+  assert(
+    userPrompt().includes(MISS_TONE),
+    `B04d: "${fake}" must carry the miss tone (not every strain is in the notes; never call it made up)`
+  );
+}
+
+// Talk the Plant uses formatLookupState("miss"), the same tone.
+assert(formatLookupState("miss").includes(MISS_TONE), "B04f: the app's miss block carries the miss tone");
+assert(/never suggest the strain is fake, made up/i.test(MISS_TONE) && !/[—–]|\byo\b/i.test(MISS_TONE), "B04f: tone forbids 'made up', no em dashes, no 'yo'");
+
+// Spacing case: "long bottom leaf" is the spaced form of the real
+// Longbottom-Leaf. Matching is unchanged in 2.2.1, so it must land on the
+// honest miss path (quoted, with the tone), never a reported match.
+{
+  const spaced = ok(await call({ ...LOOKUP, query: "long bottom leaf" }));
+  assert.equal(spaced.matched, false, "B04e: spaced Longbottom must not report a match it didn't make");
+  assert(userPrompt().includes(MISS_TONE), "B04e: spaced Longbottom gets the honest miss tone");
+  assert(userPrompt().includes('"long bottom leaf"'), "B04e: the miss quotes what they typed");
 }
 
 // The actual Pink Thunder mechanism, closed: three Thunder cards sitting in
@@ -790,6 +810,103 @@ if (similarRaw) {
       `${res.strain} (${res.strain_data.type})`,
       `B19c: the ${expectTier} card must be ${res.strain}, got ${cards[0]}`
     );
+  }
+}
+
+
+// ── R: /rec (mode "rec") ────────────────────────────────────────────
+// The database picks; the model only writes about what it was handed.
+{
+  const { CHARACTER_CORE } = await import("../prompts/character.js");
+  const strains = new Set(JSON.parse((await (await import("node:fs/promises")).readFile(new URL("../data/strains.json", import.meta.url), "utf-8"))).map((s) => s.Strain));
+  const REC = (q) => call({ mode: "rec", query: q, discord_user_id: "111", guild_id: "222" });
+  rateLimitResult = { data: true, error: null };
+  modelReply = "Here's a few. Granddaddy Purple, relaxed and sweet.";
+
+  // R1 a normal ask: ONE real strain, like a /strain card, matched on effects.
+  const normal = ok(await REC("something chill for a movie night"));
+  assert.equal(normal.tier, "rec", "R1a: a normal ask is answered with a pick");
+  assert(strains.has(normal.strain), `R1b: ${normal.strain} must be a real strain`);
+  assert.equal(normal.matched, true, "R1c: the card IS that strain");
+  assert(normal.strain_data.effects.includes("Relaxed"), "R1d: the pick must actually be relaxed");
+  assert(normal.strain_data.type && Array.isArray(normal.strain_data.flavor) && "rating" in normal.strain_data, "R1e: same card data as /strain");
+  assert(userPrompt().includes("STRAIN CONTEXT") && userPrompt().includes(normal.strain), "R1f: the model writes from that strain's record");
+  assert(/REC FIT\. It matches what they asked on: relaxed/.test(userPrompt()), "R1g: and is told why it fits");
+  assert(systemPrompt().includes("ONE-SHOT PICK") && systemPrompt().includes(CHARACTER_CORE.slice(0, 60)), "R1h: rec prompt in StoneHead's voice");
+  assert(/Never name another one/.test(systemPrompt()), "R1i: one strain only");
+  assert(/No medical claims/.test(systemPrompt()) && /where to buy/.test(systemPrompt()), "R1j: medical and sourcing rules are always on");
+  assert(/Don't introduce yourself/.test(systemPrompt()) && /No em dashes/.test(systemPrompt()), "R1k: house style in the rec prompt");
+
+  // 🔄: exclude_strains skips what was shown; when they run out, it says so.
+  {
+    const seen = [];
+    let last;
+    for (let i = 0; i < 40; i++) {
+      last = ok(await call({ mode: "rec", query: "sativa that tastes like cheese and coffee", exclude_strains: seen, discord_user_id: "111", guild_id: "222" }));
+      if (last.tier !== "rec") break;
+      assert(!seen.includes(last.strain), `R1l: 🔄 must not repeat ${last.strain}`);
+      seen.push(last.strain);
+    }
+    assert(seen.length >= 2, `R1m: 🔄 gives more than one strain (got ${seen.length})`);
+    assert.equal(last.tier, "rec_all_shown", `R1n: once they've all been shown it says so, got ${last.tier}`);
+    assert(/That's every strain in my notes that fits/.test(last.reply), "R1o: the all-shown line");
+  }
+
+  // Avoids are hard filters.
+  ok(await REC("fruity, not too sleepy"));
+  for (let i = 0; i < 8; i++) {
+    const fruity = ok(await REC("fruity, not too sleepy"));
+    assert(!fruity.strain_data.effects.includes("Sleepy"), `R2: ${fruity.strain} is sleepy, which they ruled out`);
+  }
+
+  // R3 a vague ask: a fixed nudge, no model call, no rate-limit spend.
+  rateLimitResult = { data: false, error: null };
+  const vague = ok(await REC("something good"));
+  assert.equal(vague.tier, "rec_vague", "R3a: 'something good' is too vague to pick from");
+  assert.equal(fetchCalls, 0, "R3b: no model call on a vague ask");
+  assert(!/[—–]|\byo\b/i.test(vague.reply), "R3c: house style");
+
+  // R4 nothing fits: an honest fixed line suggesting they loosen it.
+  const none = ok(await REC("purple unicorn tears"));
+  assert.equal(none.tier, "rec_vague", "R4a: no recognizable ask is the vague nudge");
+  const impossible = ok(await REC("sleepy, not relaxed, not happy, not euphoric, cheese, mint, coffee, lavender, sativa"));
+  assert.equal(impossible.tier, "rec_none", "R4b: an ask nothing in the database fits is rec_none");
+  assert(/loosening/.test(impossible.reply) && fetchCalls === 0, "R4c: says so honestly, suggests loosening, no model call");
+  rateLimitResult = { data: true, error: null };
+
+  // R5 a medical ask: still effect-based picks, with the health note.
+  const med = ok(await REC("something for my anxiety"));
+  assert.equal(med.tier, "rec", "R5a: a health ask still gets effect-based picks");
+  assert(/HEALTH ASK/.test(userPrompt()) && /never as help for it/.test(userPrompt()), "R5b: health note in the prompt");
+  assert(/even if the record's description says so/.test(systemPrompt()), "R5d: the record's own medical claims are ruled out too");
+  assert(/can't speak to treating/.test(userPrompt()), "R5c: it says it can't speak to treatment");
+
+  // R6 a "where can I buy" ask: no sourcing, ever.
+  rateLimitResult = { data: false, error: null };
+  const buyOnly = ok(await REC("where can i buy some weed near me"));
+  assert.equal(buyOnly.tier, "rec_sourcing", "R6a: a sourcing-only ask gets the fixed no-sourcing line");
+  assert(/can't help with where to get/.test(buyOnly.reply) && fetchCalls === 0, "R6b: fixed, no model call");
+  rateLimitResult = { data: true, error: null };
+  ok(await REC("where can i buy something fruity"));
+  assert(/ASKED WHERE TO GET IT/.test(userPrompt()), "R6c: a sourcing ask with a real ask gets a pick plus the no-sourcing note");
+
+  // R7 same limits as /strain: over quota is a 429 on a real pick.
+  rateLimitResult = { data: false, error: null };
+  assert.equal((await REC("something chill")).statusCode, 429, "R7a: /rec shares /strain's hourly limit");
+  rateLimitResult = { data: true, error: null };
+
+  // R8 the safety layers run first.
+  const crisisRec = ok(await REC("i want to kill myself, something to sleep forever"));
+  assert(!crisisRec.strain, "R8a: a crisis turn gets no pick");
+  assert(crisisRec.reply && crisisRec.tier !== "rec", "R8b: a crisis turn is answered as a safety turn");
+
+  // R9 same input rules as /strain.
+  assert.equal((await REC("x".repeat(201))).statusCode, 400, "R9a: >200 chars is a 400");
+  assert.equal((await call({ mode: "rec", query: "", discord_user_id: "111" })).statusCode, 400, "R9b: blank is a 400");
+
+  // R10 the fixed lines.
+  for (const t of [vague.reply, buyOnly.reply, impossible.reply, "That's every strain in my notes that fits that ask."]) {
+    assert(!/[—–]|\byo\b/i.test(t), "R10: no em dashes or 'yo' in /rec's fixed lines");
   }
 }
 

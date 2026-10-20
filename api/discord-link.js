@@ -14,6 +14,7 @@ import { LINK_TRIES_PER_HOUR, SHORT_CODE_RE, TOKEN_RE, linkMessage } from "../li
 const reply = (status, extra = {}) => jsonResponse(200, {
   status, message: linkMessage(status, extra),
   discord_username: extra.discord_username ?? null, entered_round: !!extra.entered_round,
+  bonus_days: extra.bonus_days || 0,
 });
 
 export async function handler(event) {

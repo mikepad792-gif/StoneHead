@@ -176,6 +176,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/bot-round-entries"
+  to = "/.netlify/functions/bot-round-entries"
+  status = 200
+
+[[redirects]]
   from = "/api/bot-round-nudge"
   to = "/.netlify/functions/bot-round-nudge"
   status = 200
