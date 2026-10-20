@@ -93,8 +93,18 @@ export async function handler(event) {
     return say("not_entered", user ? MSG.notEnteredLinked : MSG.notEnteredUnlinked, { round_id: round.id });
   }
   if (user) {
+    // Bonus weeks pay as soon as someone has both entered and linked (here,
+    // or in link_discord when the link comes second). Once per round; a
+    // repeat tap grants nothing and says nothing about it.
+    let bonus = 0;
+    if (action === "enter") {
+      const { data: b, error: bonusError } = await supabaseAdmin.rpc("grant_entry_bonus", { p_discord_id: discord_id });
+      if (bonusError) console.error("bot-round-enter: grant_entry_bonus failed:", bonusError.message);
+      bonus = b?.days || 0;
+    }
     const d = await activeDaysThisWeek(supabaseAdmin, user.id, round.week_start);
-    return say("entered", MSG.entered(d), { round_id: round.id, entries: 1 + d, active_days: d });
+    const message = bonus > 0 ? `${MSG.entered(d)} ${MSG.bonusAdded(bonus)}` : MSG.entered(d);
+    return say("entered", message, { round_id: round.id, entries: 1 + d, active_days: d, bonus_days: bonus });
   }
   // Entered, not linked: hand them a link in the same reply.
   const link = await startLinkRequest(supabaseAdmin, { discord_id, discord_username }, { reuse: true });

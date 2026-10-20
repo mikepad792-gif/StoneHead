@@ -7,6 +7,7 @@
 //
 // Request:  { query, discord_user_id, guild_id }                 mode "lookup"
 //           { mode: "similar", source_strain, discord_user_id, guild_id }
+//           { mode: "rec", query, exclude_strains?, discord_user_id, guild_id }  /rec
 //           Header: X-Bot-Secret: <BOT_SHARED_SECRET>
 // Response: { reply, matched, strain, tier, strain_data }
 //
@@ -45,6 +46,7 @@ import {
   parseConstraints,
   suggestStrainCorrection,
   formatLookupState,
+  MISS_TONE,
 } from "../lib/strainSearch.js";
 import { detectAge, belowFloor, UNDER_13_REPLY } from "../lib/ageDetect.js";
 import { detectCrisis, CRISIS_REPLY } from "../lib/crisisDetect.js";
@@ -58,6 +60,7 @@ import { appendCardFallback } from "../lib/safetyCard.js";
 import { CHARACTER_CORE } from "../prompts/character.js";
 import { buildPlantPrompt } from "../prompts/plant.js";
 import { buildSimilarPrompt } from "../prompts/similar.js";
+import { analyzeAsk, recommendStrains } from "../lib/strainRec.js";
 import { stripModelTags, stripLongDashes } from "../lib/sanitize.js";
 import { openrouterChat } from "../lib/openrouter.js";
 import { AI_MODEL_BOT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
@@ -104,6 +107,27 @@ conversation. You have no memory of this person and there is no earlier turn to
 refer back to. Answer what was asked and stop. A couple of paragraphs, no
 more. Don't ask a follow-up question you won't be around to hear the answer to,
 and don't invite them to tell you more.`;
+
+// /rec. The picks are made in lib/strainRec.js; this tells him how to talk
+// about strains he was handed rather than ones he thought of.
+const DISCORD_REC_NOTE = `
+ONE-SHOT PICK
+You're answering a single /rec command in a Discord channel. Someone told you
+what they're in the mood for, and the database already picked ONE strain for
+it: the record above. Talk about it the way you would for /strain, and say why
+it fits what they asked for. Then stop.
+
+- Talk about this strain only. Never name another one.
+- Only what's in the record. Never state a lineage, THC number, terpene,
+  grower, or anything else that isn't there. If it isn't there, you don't know it.
+- If the [REC FIT] note says it doesn't cover part of what they asked, say so.
+- No medical claims, ever. A strain never treats, helps with, relieves, or is
+  good for any condition, even if the record's description says so. You can
+  say what effects people commonly report.
+- Never say where to buy or get anything: no stores, dispensaries, sites,
+  prices, or delivery.
+- Don't introduce yourself. Don't ask a follow-up question. No em dashes, no
+  "yo". It's StoneHead, one word. A couple of short paragraphs at most.`;
 
 /**
  * Timing-safe shared-secret check.
@@ -662,6 +686,203 @@ async function handleSimilar(body, discordUserId, guildId) {
   });
 }
 
+/**
+ * The safety turns, shared by the lookup and /rec: a crisis or substance
+ * message is answered under the crisis prompt (or, over quota, with its fixed
+ * text and resources). Returns the response to send, or null when the turn is
+ * not a safety turn. The caller handles an ordinary over-quota 429 after this,
+ * so the resources never depend on somebody's hourly budget.
+ */
+async function safetyTurn({ query, crisis, substanceHit, limit, guildId }) {
+  // A remaining safety turn that is over quota still gets its fixed reply
+  // and its resources, just without the generated prose. The resource
+  // disclosure is not allowed to depend on somebody's hourly budget.
+  if (!limit.allowed && (crisis.tier >= 1 || substanceHit.tier >= 1)) {
+    const kind = crisis.tier >= 1 ? "crisis" : "substance";
+    const text =
+      kind === "crisis"
+        ? CRISIS_REPLY
+        : substanceHit.tier === 2
+          ? SUBSTANCE_REPLY_S2
+          : SUBSTANCE_REPLY_S1;
+    const cardKind =
+      kind === "crisis" ? "crisis" : substanceHit.tier === 2 ? "substance_s2" : "substance_s1";
+    console.warn(
+      "[strain-lookup] safety turn served over quota:",
+      JSON.stringify({ mode: kind, reason: limit.reason, guild_id: guildId })
+    );
+    return jsonResponse(200, {
+      reply: appendCardFallback(text, cardKind),
+      matched: false,
+      strain: null,
+    });
+  }
+
+  // ── Safety mode ───────────────────────────────────────────────────
+  // Crisis tier 1 and any firing substance turn answer under the crisis
+  // prompt instead of the plant prompt, with retrieval suppressed — the same
+  // shape as chat-send. A Chemdawg riff one turn after an overdose check-in
+  // is exactly the wrong texture.
+  const safetyMode = crisis.tier >= 1 ? "crisis" : substanceHit.tier >= 1 ? "substance" : null;
+
+  const cardKind =
+    substanceHit.tier === 2 ? "substance_s2"
+      : substanceHit.tier === 1 ? "substance_s1"
+      : null;
+
+  if (safetyMode) {
+    console.warn(
+      "[strain-lookup] safety intercept:",
+      JSON.stringify({
+        mode: safetyMode,
+        crisis_tier: crisis.tier,
+        substance_tier: substanceHit.tier,
+        guild_id: guildId,
+      })
+    );
+
+    // Tier 1 gets the clarify variant: at tier 1 what they meant is not yet
+    // settled, and the unqualified stance answers a sentence it hasn't read.
+    const systemPrompt = buildCrisisPrompt(safetyMode, {
+      clarify: safetyMode === "crisis" && crisis.tier === 1,
+    });
+
+    let reply = await callLookupModel([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: query },
+    ]);
+
+    if (!reply) {
+      // The model returned nothing on a safety turn. A provider outage is
+      // not a reason for the layer to go quiet.
+      reply =
+        safetyMode === "crisis"
+          ? CRISIS_REPLY
+          : substanceHit.tier === 2
+            ? SUBSTANCE_REPLY_S2
+            : SUBSTANCE_REPLY_S1;
+      console.error(
+        "[strain-lookup] safety turn fell back to fixed text:",
+        JSON.stringify({ mode: safetyMode })
+      );
+    }
+
+    // The bot has no card renderer, so the structured safetyCard is useless
+    // to it — the resources go into the text or they don't arrive at all.
+    return jsonResponse(200, {
+      reply: appendCardFallback(reply, safetyMode === "crisis" ? "crisis" : cardKind),
+      matched: false,
+      strain: null,
+    });
+  }
+  return null;
+}
+
+// /rec's fixed lines. No model call behind any of them, so they don't spend
+// the hourly limit.
+const REC_VAGUE = "Give me a little more to go on. Tell me a mood (chill, creative, sleepy, energetic) or a flavor (fruity, earthy, gassy, citrus) and I'll pull a few from my notes.";
+const REC_SOURCING_ONLY = "I can't help with where to get anything. Tell me a mood or a flavor you're after and I'll pull a few picks from my notes.";
+const REC_NO_FIT = "Nothing in my notes lines up with all of that. Try loosening it up: drop one of the asks, or give me just a mood or just a flavor.";
+const REC_ALL_SHOWN = "That's every strain in my notes that fits that ask. Try loosening it up or asking for something different.";
+const MAX_EXCLUDED = 50;
+
+/**
+ * mode: "rec" — /rec looking_for:<text>.
+ *
+ * One strain per card, like /strain. It comes from lib/strainRec.js, out of
+ * strains.json, by effects, flavors and type; the model is handed it and
+ * writes the description, never choosing a strain. exclude_strains (the 🔄
+ * reaction) skips the ones already shown. Too vague to pick from, only a sourcing
+ * question, or nothing that fits: a fixed line, before the rate limiter,
+ * since no model call means no balance to protect.
+ *
+ * Same safety layers as the lookup: the handler has already run the under-13
+ * floor and crisis tier 2, and safetyTurn here takes crisis tier 1 and any
+ * substance turn before anything gets recommended.
+ */
+async function handleRec(query, discordUserId, guildId, { crisis, substanceHit, excludeStrains = [] }) {
+  const safetyFirst = crisis.tier >= 1 || substanceHit.tier >= 1;
+  const ask = analyzeAsk(query);
+  // 🔄 on a /rec card asks again with the strains already shown, so the
+  // next card is a different one.
+  const shown = new Set(excludeStrains);
+  let rec = null;
+
+  if (!safetyFirst) {
+    const fixed = (reply, tier) => {
+      console.log("[strain-lookup]", JSON.stringify({ mode: "rec", tier, guild_id: guildId, query_len: query.length }));
+      return jsonResponse(200, { reply, matched: false, strain: null, tier, strain_data: null });
+    };
+    if (!ask.understood) return fixed(ask.sourcing ? REC_SOURCING_ONLY : REC_VAGUE, ask.sourcing ? "rec_sourcing" : "rec_vague");
+    rec = recommendStrains(ask, { exclude: (name) => shown.has(name) || !safeToVolunteer(name) });
+    if (rec.fit === "none") {
+      // Fits existed but they've all been shown: say that, not "nothing fits".
+      const fitsBefore = shown.size > 0 && recommendStrains(ask, { exclude: (name) => !safeToVolunteer(name) }).fit !== "none";
+      return fitsBefore ? fixed(REC_ALL_SHOWN, "rec_all_shown") : fixed(REC_NO_FIT, "rec_none");
+    }
+  }
+
+  const limit = await checkRateLimits(discordUserId, guildId);
+  const safe = await safetyTurn({ query, crisis, substanceHit, limit, guildId });
+  if (safe) return safe;
+  if (!limit.allowed) {
+    return errorResponse(429, limit.reason === "unavailable" ? "rate limit unavailable" : "rate limited");
+  }
+
+  // One strain per card, like /strain. recommendStrains already shuffled the
+  // shortlist, so the first is a random pick among the best fits.
+  const pick = rec.picks[0];
+  const record = strainRecord(pick.strain);
+  if (!record) {
+    console.error("[strain-lookup] rec picked a strain with no record:", JSON.stringify({ rec: pick.strain }));
+    return errorResponse(500, "Strain lookup failed");
+  }
+
+  const notes = [];
+  notes.push(pick.missing.length
+    ? `[REC FIT. It matches what they asked on: ${pick.matched.join(", ")}. It does NOT cover: ${pick.missing.join(", ")}. Nothing in the database covers all of it; say so plainly.]`
+    : `[REC FIT. It matches what they asked on: ${pick.matched.join(", ")}.]`);
+  if (ask.medical.length) {
+    notes.push(`[HEALTH ASK. They mentioned: ${ask.medical.join(", ")}. Open by saying plainly that you can't speak to treating that, and that a doctor or pharmacist is the one to ask. Then talk about the strain only as the effects people commonly report, never as help for it.]`);
+  }
+  if (ask.sourcing) {
+    notes.push("[THEY ASKED WHERE TO GET IT. Say in one plain line that you don't help with where to get anything, then talk about the strain.]");
+  }
+  const userContent = [
+    `They asked for: "${query}"`,
+    formatStrainContext([cardFromRecord(record)], null),
+    ...notes,
+  ].join("\n\n");
+
+  const [reply] = await Promise.all([
+    callLookupModel([
+      { role: "system", content: CHARACTER_CORE + "\n\n" + DISCORD_REC_NOTE },
+      { role: "user", content: userContent },
+    ]),
+    noteStrainShown(discordUserId, pick.strain),
+  ]);
+  if (!reply) {
+    console.error("[strain-lookup] model returned nothing:", JSON.stringify({ mode: "rec", guild_id: guildId }));
+    return errorResponse(502, "Lookup unavailable");
+  }
+
+  console.log("[strain-lookup]", JSON.stringify({
+    mode: "rec", tier: "rec", fit: rec.fit, strain: pick.strain, already_shown: shown.size,
+    medical: ask.medical.length > 0, sourcing: ask.sourcing, guild_id: guildId, query_len: query.length,
+  }));
+
+  return jsonResponse(200, {
+    reply,
+    // The card IS this strain, the same meaning `matched` has on "similar".
+    // Nobody named it, so `tier` says where it came from.
+    matched: true,
+    strain: pick.strain,
+    tier: "rec",
+    fit: rec.fit,
+    strain_data: buildStrainData(pick.strain),
+  });
+}
+
 /** Model call + sanitize. Mirrors callChatModel in chat-send. */
 async function callLookupModel(messages) {
   const aiData = await openrouterChat(
@@ -732,7 +953,7 @@ export async function handler(event) {
       return errorResponse(500, "Strain lookup failed");
     }
   }
-  if (mode !== "lookup") return errorResponse(400, "Unknown mode");
+  if (mode !== "lookup" && mode !== "rec") return errorResponse(400, "Unknown mode");
 
   if (!query) return errorResponse(400, "Missing query");
   if (query.length > MAX_QUERY_CHARS) return errorResponse(400, "Query too long");
@@ -779,6 +1000,15 @@ export async function handler(event) {
         matched: false,
         strain: null,
       });
+    }
+
+    // /rec branches here: past the two zero-cost intercepts, before the
+    // name retrieval that only the lookup uses.
+    if (mode === "rec") {
+      const excludeStrains = Array.isArray(body.exclude_strains)
+        ? body.exclude_strains.filter((x) => typeof x === "string").slice(0, MAX_EXCLUDED)
+        : [];
+      return await handleRec(query, discordUserId, guildId, { crisis, substanceHit, excludeStrains });
     }
 
     // ── Rate limits ───────────────────────────────────────────────────
@@ -919,29 +1149,8 @@ export async function handler(event) {
     ]);
     const { introClaimed, recent: recentStrains } = opened;
 
-    // A remaining safety turn that is over quota still gets its fixed reply
-    // and its resources, just without the generated prose. The resource
-    // disclosure is not allowed to depend on somebody's hourly budget.
-    if (!limit.allowed && (crisis.tier >= 1 || substanceHit.tier >= 1)) {
-      const kind = crisis.tier >= 1 ? "crisis" : "substance";
-      const text =
-        kind === "crisis"
-          ? CRISIS_REPLY
-          : substanceHit.tier === 2
-            ? SUBSTANCE_REPLY_S2
-            : SUBSTANCE_REPLY_S1;
-      const cardKind =
-        kind === "crisis" ? "crisis" : substanceHit.tier === 2 ? "substance_s2" : "substance_s1";
-      console.warn(
-        "[strain-lookup] safety turn served over quota:",
-        JSON.stringify({ mode: kind, reason: limit.reason, guild_id: guildId })
-      );
-      return jsonResponse(200, {
-        reply: appendCardFallback(text, cardKind),
-        matched: false,
-        strain: null,
-      });
-    }
+    const safe = await safetyTurn({ query, crisis, substanceHit, limit, guildId });
+    if (safe) return safe;
 
     if (!limit.allowed) {
       return errorResponse(
@@ -949,65 +1158,6 @@ export async function handler(event) {
         limit.reason === "unavailable" ? "rate limit unavailable" : "rate limited"
       );
     }
-
-    // ── Safety mode ───────────────────────────────────────────────────
-    // Crisis tier 1 and any firing substance turn answer under the crisis
-    // prompt instead of the plant prompt, with retrieval suppressed — the same
-    // shape as chat-send. A Chemdawg riff one turn after an overdose check-in
-    // is exactly the wrong texture.
-    const safetyMode = crisis.tier >= 1 ? "crisis" : substanceHit.tier >= 1 ? "substance" : null;
-
-    const cardKind =
-      substanceHit.tier === 2 ? "substance_s2"
-        : substanceHit.tier === 1 ? "substance_s1"
-        : null;
-
-    if (safetyMode) {
-      console.warn(
-        "[strain-lookup] safety intercept:",
-        JSON.stringify({
-          mode: safetyMode,
-          crisis_tier: crisis.tier,
-          substance_tier: substanceHit.tier,
-          guild_id: guildId,
-        })
-      );
-
-      // Tier 1 gets the clarify variant: at tier 1 what they meant is not yet
-      // settled, and the unqualified stance answers a sentence it hasn't read.
-      const systemPrompt = buildCrisisPrompt(safetyMode, {
-        clarify: safetyMode === "crisis" && crisis.tier === 1,
-      });
-
-      let reply = await callLookupModel([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: query },
-      ]);
-
-      if (!reply) {
-        // The model returned nothing on a safety turn. A provider outage is
-        // not a reason for the layer to go quiet.
-        reply =
-          safetyMode === "crisis"
-            ? CRISIS_REPLY
-            : substanceHit.tier === 2
-              ? SUBSTANCE_REPLY_S2
-              : SUBSTANCE_REPLY_S1;
-        console.error(
-          "[strain-lookup] safety turn fell back to fixed text:",
-          JSON.stringify({ mode: safetyMode })
-        );
-      }
-
-      // The bot has no card renderer, so the structured safetyCard is useless
-      // to it — the resources go into the text or they don't arrive at all.
-      return jsonResponse(200, {
-        reply: appendCardFallback(reply, safetyMode === "crisis" ? "crisis" : cardKind),
-        matched: false,
-        strain: null,
-      });
-    }
-
 
     // Family tier. Every word they typed is in this name, and it is the ONLY
     // name that fits, so there is nothing to choose between — the two-or-more
@@ -1110,10 +1260,10 @@ export async function handler(event) {
       strainBlock += `\n\n[SPELLING, AND YOU SAY SO. They typed "${correctedFrom}". You are reading that as "${sugg}", and the record above is ${sugg}. Open by naming that, plainly and in your own words, then answer for ${sugg} in full. Do not stop to ask them to confirm, and do not write as though they had typed it correctly — they didn't, and saying so is the honest part.]`;
     } else if (tier === "candidate") {
       const sugg = resolved.replace(/-+/g, " ");
-      strainBlock += `\n\n[NO EXACT MATCH, ONE NEAR THING. They typed "${correction.wrote}". Nothing goes by that name. The record above is ${sugg}, the closest thing in the database, and you are NOT sure it is what they meant.\n\nSay you didn't find what they typed, and QUOTE IT BACK to them so it is on the screen. Then offer ${sugg} as the near thing you do have, name it, and describe it from the record. Offering is not the same as answering: do not write as though ${sugg} is what they asked for.]`;
+      strainBlock += `\n\n[NO EXACT MATCH, ONE NEAR THING. They typed "${correction.wrote}". Nothing goes by that name. The record above is ${sugg}, the closest thing in the database, and you are NOT sure it is what they meant.\n\nSay you didn't find what they typed, and QUOTE IT BACK to them so it is on the screen.${MISS_TONE} Then offer ${sugg} as the near thing you do have, name it, and describe it from the record. Offering is not the same as answering: do not write as though ${sugg} is what they asked for.]`;
     } else if (tier === "unrelated") {
       const sugg = resolved.replace(/-+/g, " ");
-      strainBlock += `\n\n[NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE. They typed "${correction ? correction.wrote : query}". Nothing in the database is close to it and you do not know it. The record above is ${sugg}, picked because it is worth knowing. It has NOTHING to do with what they asked for.\n\nTwo halves, in this order, and the seam between them has to be obvious:\n1. You have never heard of what they typed. Say it plainly, and QUOTE THE WORDS THEY TYPED back at them so the card cannot be screenshotted without the miss being visible. No hedging, no "I think I've heard that one".\n2. Then, as a clearly separate offer, hand them ${sugg} — name it, and say outright that it is a different strain, not theirs.\n\nSomeone skimming sees a card sitting under their query and assumes it answers it. The second half has to make that impossible to believe.]`;
+      strainBlock += `\n\n[NO MATCH AT ALL, AND THE CARD IS SOMETHING ELSE. They typed "${correction ? correction.wrote : query}". Nothing in the database is close to it and you do not know it. The record above is ${sugg}, picked because it is worth knowing. It has NOTHING to do with what they asked for.\n\nTwo halves, in this order, and the seam between them has to be obvious:\n1. You have never heard of what they typed. Say it plainly, and QUOTE THE WORDS THEY TYPED back at them so the card cannot be screenshotted without the miss being visible. No hedging, no "I think I've heard that one".${MISS_TONE}\n2. Then, as a clearly separate offer, hand them ${sugg} — name it, and say outright that it is a different strain, not theirs.\n\nSomeone skimming sees a card sitting under their query and assumes it answers it. The second half has to make that impossible to believe.]`;
     }
 
     // formatLookupState's MISS text forbids describing effects or lineage,

@@ -25,6 +25,7 @@ process.env.OPENROUTER_API_KEY ||= "test-key";
 process.env.BOT_SHARED_SECRET = "s3cret";
 process.env.OWNER_DISCORD_ID = "1520166782013542422";
 process.env.GIVEAWAY_GUILD_IDS = "788166388250443846, 111111111111111111";
+process.env.ADMIN_DISCORD_IDS = "400000000000000001,400000000000000002";
 process.env.URL = "https://stoneheadai.com";
 
 const { supabase, supabaseAdmin } = await import("../lib/supabase.js");
@@ -38,6 +39,7 @@ const { handler: enter } = await import("../api/bot-round-enter.js");
 const { handler: draw } = await import("../api/bot-round-draw.js");
 const { handler: cancel } = await import("../api/bot-round-cancel.js");
 const { handler: nudge } = await import("../api/bot-round-nudge.js");
+const { handler: entriesList } = await import("../api/bot-round-entries.js");
 const { pacificDate, isOwner, giveawayGuilds, cleanDiscordName } = await import("../lib/bot.js");
 const { recordActiveDay, activeDaysThisWeek, MSG, roundPostText } = await import("../lib/giveaway.js");
 const { linkMessage } = await import("../lib/discordLink.js");
@@ -462,6 +464,111 @@ await check("nudge: only rounds with someone unlinked, no tagging", async () => 
   assert.deepEqual(b.nudges, [{ round_id: 7, channel_id: CHANNEL, message: MSG.nudge }]);
   assert.ok(!/<@/.test(MSG.nudge));
   assert.equal((await nudge(botPost({}, "nope"))).statusCode, 401);
+});
+
+
+// ── 2.2.1: bonus at Enter + link ────────────────────────────────────
+await check("enter while linked on a bonus week: grant_entry_bonus runs and the reply says so", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.users = [{ id: USER, discord_id: DISCORD }];
+  rpcResult = (fn) => ({ data: fn === "grant_entry_bonus" ? { days: 14 } : null, error: null });
+  const b = body(await tap("enter"));
+  assert.deepEqual(rpcCalls, [["grant_entry_bonus", { p_discord_id: DISCORD }]]);
+  assert.equal(b.bonus_days, 14);
+  assert.equal(b.message, `${MSG.entered(0)} Bonus week: 14 free days added to your pass.`);
+});
+await check("a repeat tap (bonus already paid) shows the plain count", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.users = [{ id: USER, discord_id: DISCORD }];
+  rpcResult = { data: { days: 0 }, error: null };
+  const b = body(await tap("enter"));
+  assert.equal(b.message, MSG.entered(0));
+});
+await check("a bonus failure never blocks the entry", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.users = [{ id: USER, discord_id: DISCORD }];
+  rpcResult = { data: null, error: { message: "down" } };
+  const b = body(await tap("enter"));
+  assert.equal(b.status, "entered");
+  assert.equal(db.giveaway_entries.length, 1);
+});
+await check("leave and /entries never grant", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.users = [{ id: USER, discord_id: DISCORD }];
+  db.giveaway_entries = [{ round_id: 7, discord_id: DISCORD, left_at: null }];
+  await tap("leave"); await tap("status");
+  assert.equal(rpcCalls.filter(([fn]) => fn === "grant_entry_bonus").length, 0);
+});
+await check("unlinked tap doesn't grant (nobody to pay yet)", async () => {
+  db.giveaway_rounds = [openRound()];
+  await tap("enter");
+  assert.equal(rpcCalls.length, 0);
+});
+await check("linking pays the bonus and the success line says so", async () => {
+  rpcResult = { data: { status: "ok", discord_username: "bob", entered_round: true, bonus_days: 14 }, error: null };
+  const b = body(await link(userPost({ token: TOKEN })));
+  assert.equal(b.message, "Success! Discord linked as bob. You're entered in this week's Moai Drop. 14 free days added to your pass.");
+  assert.equal(b.bonus_days, 14);
+});
+
+// ── 2.2.1: /drop-entries ───────────────────────────────────────────
+const ADMIN = "400000000000000002";
+const pool = [
+  { user_id: "u1", discord_id: "d1", discord_name: "low", username: "lowuser", is_founder: false, link_entry: 1, days: 0, total: 1 },
+  { user_id: "u2", discord_id: "d2", discord_name: "high", username: "highuser", is_founder: false, link_entry: 1, days: 6, total: 7 },
+  { user_id: "u3", discord_id: "d3", discord_name: "mid", username: null, is_founder: true, link_entry: 1, days: 2, total: 3 },
+];
+const list = (invoker, guild = GUILD) => entriesList(botPost({ invoker_discord_id: invoker, guild_id: guild }));
+await check("drop-entries: a non-admin (with the right secret) is refused, nothing read", async () => {
+  for (const who of ["300000000000000001", "", undefined]) {
+    const r = await list(who);
+    assert.equal(r.statusCode, 403);
+  }
+  assert.equal(rpcCalls.length, 0);
+  assert.equal((await entriesList(botPost({ invoker_discord_id: ADMIN, guild_id: GUILD }, "nope"))).statusCode, 401);
+});
+await check("drop-entries: admins and the owner can read", async () => {
+  db.giveaway_rounds = [openRound()];
+  rpcResult = { data: [], error: null };
+  for (const who of [ADMIN, "400000000000000001", OWNER]) assert.equal((await list(who)).statusCode, 200);
+});
+await check("drop-entries: lists the draw pool from giveaway_round_entries, sorted by total", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.giveaway_entries = [
+    { round_id: 7, discord_id: "d1", left_at: null }, { round_id: 7, discord_id: "d2", left_at: null },
+    { round_id: 7, discord_id: "d3", left_at: null }, { round_id: 7, discord_id: "d4", left_at: null },
+    { round_id: 7, discord_id: "d5", left_at: "2026-10-20T00:00:00Z" },
+  ];
+  rpcResult = { data: pool, error: null };
+  const b = body(await list(ADMIN));
+  assert.deepEqual(rpcCalls, [["giveaway_round_entries", { p_round: 7 }]]);
+  assert.deepEqual(b.entrants.map((e) => [e.discord_name, e.total]), [["high", 7], ["mid", 3], ["low", 1]]);
+  assert.deepEqual(b.entrants[0], { discord_name: "high", username: "highuser", link_entry: 1, days: 6, total: 7 });
+  assert.equal(b.total_people, 3);
+  assert.equal(b.total_entries, 11);
+  assert.equal(b.not_counted, 1);
+  assert.equal(b.left, 1);
+  assert.match(b.dates_label, /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+ to [A-Z][a-z]{2}, [A-Z][a-z]{2} \d+$/);
+  assert.match(b.draw_label, /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+, \d+:\d\d [AP]M PT$/);
+});
+await check("drop-entries: read only (no writes, no draw)", async () => {
+  db.giveaway_rounds = [openRound()];
+  db.giveaway_entries = [{ round_id: 7, discord_id: "d1", left_at: null }];
+  const before = JSON.stringify(db);
+  rpcResult = { data: pool, error: null };
+  await list(ADMIN);
+  assert.equal(JSON.stringify(db), before);
+  assert.ok(rpcCalls.every(([fn]) => fn === "giveaway_round_entries"));
+});
+await check("drop-entries: no open round falls back to the latest one; none at all is no_round", async () => {
+  db.giveaway_rounds = [openRound({ id: 5, status: "drawn", created_at: "2026-10-01T00:00:00Z" }), openRound({ id: 6, status: "drawn", created_at: "2026-10-10T00:00:00Z" })];
+  rpcResult = { data: [], error: null };
+  const b = body(await list(ADMIN));
+  assert.equal(b.round.id, 6);
+  db.giveaway_rounds = [];
+  assert.equal(body(await list(ADMIN)).status, "no_round");
+  db.giveaway_rounds = [openRound()];
+  assert.equal(body(await list(ADMIN, "222222222222222222")).status, "no_round");
 });
 
 console.log(`drop check: passed=${passed} failed=${failures.length}`);
