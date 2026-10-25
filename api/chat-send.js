@@ -82,6 +82,7 @@ import {
 import { fGate, canFireRumi } from "../lib/fGate.js";
 import {
   fetchSessionMemories,
+  fetchPinnedMemories,
   formatSessionMemoryBlock,
 } from "../lib/sessionMemory.js";
 import { stripModelTags, stripLongDashes } from "../lib/sanitize.js";
@@ -96,7 +97,7 @@ import {
 import { loadPhotoContext, linkPhotoRead } from "../lib/photoStore.js";
 import { PHOTO_TURN_PROMPT, PHOTO_MEMORY_NOTE, PHOTO_CARRY_NOTE } from "../prompts/photo.js";
 import { openrouterChat } from "../lib/openrouter.js";
-import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS } from "../lib/config.js";
+import { AI_MODEL_CHAT, OPENROUTER_TIMEOUT_CHAT_MS, SAFETY_REPLY_DEADLINE_MS } from "../lib/config.js";
 
 // ─── AI Configuration ───────────────────────────────────────────────
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10) || 700;
@@ -145,6 +146,10 @@ const ANNOUNCE_SUPPRESSION_NOTE =
   "the same thing to the person in front of you. Reply with the message only.";
 
 export async function handler(event) {
+  // The safety-turn deadline (SAFETY_REPLY_DEADLINE_MS) counts from here,
+  // because the function ceiling does too.
+  const startedAt = Date.now();
+
   if (event.httpMethod !== "POST") {
     return errorResponse(405, "Method not allowed");
   }
@@ -204,13 +209,15 @@ export async function handler(event) {
     // user 404, then history 500), so every error response is unchanged.
     // History for a thread this user doesn't own may get read, but it is
     // never used or returned: the ownership check rejects first.
-    // fetchSessionMemories never throws (it logs and returns []), so starting
-    // it early is safe, and on the early-return paths it is simply unused.
+    // fetchSessionMemories and fetchPinnedMemories never throw (they log and
+    // return []), so starting them early is safe, and on the early-return
+    // paths they are simply unused.
     const [
       { data: thread, error: threadError },
       { data: user, error: userError },
       { data: recentHistory, error: historyError },
       memories,
+      pinnedMemories,
     ] = await Promise.all([
       supabaseAdmin
         .from("threads")
@@ -231,6 +238,7 @@ export async function handler(event) {
         .order("created_at", { ascending: false })
         .limit(20),
       fetchSessionMemories(user_id),
+      fetchPinnedMemories(user_id),
     ]);
 
     // ── Verify thread ownership ───────────────────────────────────────
@@ -613,8 +621,17 @@ export async function handler(event) {
     // on crisis turns and that call stands; the C1 failure was an injected
     // memory surfacing at the worst moment, so the count drops to one and it
     // arrives labelled as context rather than as material.
-    // `memories` was fetched in the parallel block at the top of the handler.
-    const memBlock = formatSessionMemoryBlock(memories, { safetyMode: !!safetyMode }); // "" if none
+    //
+    // PINNED MEMORIES ride along on ordinary turns: the person marked them to
+    // keep, so they go in ahead of the recent summaries. Not on a safety turn,
+    // where the one-memory rule above stands (formatSessionMemoryBlock drops
+    // them there).
+    // `memories` and `pinnedMemories` were fetched in the parallel block at
+    // the top of the handler.
+    const memBlock = formatSessionMemoryBlock(memories, {
+      safetyMode: !!safetyMode,
+      pinned: pinnedMemories,
+    }); // "" if none
     systemPrompt = systemPrompt + memBlock;
 
     // Which history entries this thread has already been shown. Computed once
@@ -832,14 +849,31 @@ export async function handler(event) {
     // empty/all-scaffold completion went straight to the costume with no
     // second attempt. Now every blank return is logged raw AND retried once
     // before the fallback ships.
-    let attempt = await callChatModel(aiMessages);
+    //
+    // A SAFETY TURN NEVER ENDS ON AN ERROR SCREEN. When the request fails
+    // outright (both models down, an empty OpenRouter balance, a timeout) an
+    // ordinary turn still gets the 502, but a safety turn falls through to the
+    // same fixed-reply floor a blank return uses below, and the resource card
+    // is attached as usual. The wait is capped too (SAFETY_REPLY_DEADLINE_MS),
+    // so a hanging provider can't run the function past its ceiling first.
+    // Nothing here is model-specific: detection already ran, in code, before
+    // any model call.
+    const safetyDeadline = safetyMode ? startedAt + SAFETY_REPLY_DEADLINE_MS : null;
+    let attempt = await callChatModel(aiMessages, { deadline: safetyDeadline });
+    let requestFailed = false;
     if (!attempt.ok) {
       console.error("AI API error:", attempt.status, attempt.errBody);
-      return errorResponse(502, "AI service unavailable");
+      if (!safetyMode) {
+        return errorResponse(502, "AI service unavailable");
+      }
+      // No blank-retry after a failed request: the retry is for a model that
+      // answered with nothing, and on an outage it only burns the time left.
+      requestFailed = true;
+      attempt = { ok: true, reply: "", rawContent: "", finishReason: null, aiData: {} };
     }
 
     let { reply, rawContent, finishReason, aiData } = attempt;
-    if (!reply) {
+    if (!reply && !requestFailed) {
       console.error(
         "chat blank return (retrying once):",
         JSON.stringify({
@@ -850,7 +884,7 @@ export async function handler(event) {
           raw_preview: rawContent.slice(0, 300),
         })
       );
-      const retry = await callChatModel(aiMessages);
+      const retry = await callChatModel(aiMessages, { deadline: safetyDeadline });
       if (retry.ok && retry.reply) {
         ({ reply, rawContent, finishReason, aiData } = retry);
       } else if (retry.ok) {
@@ -875,16 +909,17 @@ export async function handler(event) {
     if (!reply) {
       // The fixed replies are no longer the normal path (Addendum B1), but
       // they remain the FLOOR for exactly this case: the model returned
-      // nothing on a safety turn. "hey bro... I'm kinda tapped for today" is
-      // not an acceptable answer to someone in crisis, and a provider outage
-      // is not a reason for the layer to go quiet.
+      // nothing on a safety turn, or the request failed outright on one (see
+      // requestFailed above). "hey bro... I'm kinda tapped for today" is not
+      // an acceptable answer to someone in crisis, and a provider outage is
+      // not a reason for the layer to go quiet.
       reply = safetyMode === "crisis" ? CRISIS_REPLY
         : safetyMode === "substance"
           ? (substanceHit.tier === 2 ? SUBSTANCE_REPLY_S2 : SUBSTANCE_REPLY_S1)
           : BLANK_REPLY_FALLBACK;
       if (safetyMode) {
         console.error("safety turn fell back to fixed text:", JSON.stringify({
-          thread_id, mode: safetyMode,
+          thread_id, mode: safetyMode, cause: requestFailed ? "request_failed" : "blank",
         }));
       }
       // Fixed text is never truncated — clear the reason so the check below
@@ -914,7 +949,7 @@ export async function handler(event) {
       const suppressed = await callChatModel([
         ...aiMessages,
         { role: "system", content: ANNOUNCE_SUPPRESSION_NOTE },
-      ]);
+      ], { deadline: safetyDeadline });
       if (suppressed.ok && suppressed.reply) {
         const stillTrips = ANNOUNCE_RE.test(suppressed.reply);
         console.warn("minor announce check retry:", JSON.stringify({
@@ -1143,8 +1178,44 @@ export async function handler(event) {
 // Returns { ok:false, status, errBody } on HTTP failure, else
 // { ok:true, reply, rawContent, finishReason, aiData }. `reply` is the
 // sanitized text — "" when the return was blank/pure scaffold.
-async function callChatModel(aiMessages) {
-  const aiData = await openrouterChat(AI_MODEL_CHAT, aiMessages, {
+//
+// Never throws: a throw inside the client is a failed request like any
+// other, so a safety turn can still reach its fixed reply.
+//
+// `deadline` (epoch ms, safety turns only) caps the wait. Past it the call
+// counts as failed; the request left running is abandoned, not awaited.
+async function callChatModel(aiMessages, { deadline = null } = {}) {
+  if (deadline !== null && deadline - Date.now() <= 0) {
+    return { ok: false, status: 0, errBody: "safety reply deadline passed" };
+  }
+  let aiData;
+  try {
+    const request = requestChatCompletion(aiMessages);
+    aiData = deadline === null ? await request : await raceDeadline(request, deadline);
+  } catch (err) {
+    return { ok: false, status: 0, errBody: `openrouter call threw: ${err?.message || err}` };
+  }
+  if (aiData === DEADLINE_PASSED) {
+    return { ok: false, status: 0, errBody: "safety reply deadline passed" };
+  }
+  return readChatCompletion(aiData);
+}
+
+const DEADLINE_PASSED = Symbol("deadline passed");
+
+function raceDeadline(promise, deadline) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(DEADLINE_PASSED), Math.max(0, deadline - Date.now()));
+  });
+  // The abandoned request may still reject later; that must not surface as
+  // an unhandled rejection.
+  promise.catch(() => {});
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function requestChatCompletion(aiMessages) {
+  return openrouterChat(AI_MODEL_CHAT, aiMessages, {
     temperature: AI_TEMPERATURE,
     max_tokens: MAX_TOKENS,
     // Kill reasoning at the source: the hidden <think>/<ds_safety>
@@ -1164,7 +1235,9 @@ async function callChatModel(aiMessages) {
     // inside that budget. Background callers keep the longer default.
     timeoutMs: OPENROUTER_TIMEOUT_CHAT_MS,
   });
+}
 
+function readChatCompletion(aiData) {
   if (!aiData) {
     return { ok: false, status: 0, errBody: "openrouter request failed" };
   }
